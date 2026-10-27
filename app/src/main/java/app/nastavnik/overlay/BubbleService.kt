@@ -736,10 +736,12 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
             }
             val thumb = grabThumb() ?: continue
             val rects = ourRects()
+            // Строка состояния и панель навигации не двигаются вместе со страницей.
+            val area = OverlayWindows.contentRect(this)
             val mask = thumb.maskOf(rects)
             val ref = trackRef
             if (overlay.isShowing && ref != null) {
-                val motion = withContext(Dispatchers.Default) { ScreenMotion.estimate(ref, thumb, mask, thumb.rowMaskOf(rects)) }
+                val motion = withContext(Dispatchers.Default) { ScreenMotion.estimate(ref, thumb, mask, thumb.rowMaskOf(rects), area.top, area.bottom) }
                 if (BuildConfig.DEBUG) Log.i(TAG, "track: $motion")
                 when (val m = motion) {
                     is Motion.Moved -> {

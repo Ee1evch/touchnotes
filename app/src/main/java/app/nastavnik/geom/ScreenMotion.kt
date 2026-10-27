@@ -130,6 +130,9 @@ object ScreenMotion {
     /** Клетка «изменилась», если её средняя яркость сдвинулась больше чем на столько. */
     const val CELL_DIFF = 8
 
+    /** Строка профиля считается фоном, если отличается от фона полосы не больше чем на столько. */
+    private const val BG_DIFF = 3
+
     /** Сколько клеток изменилось между кадрами (без маски). */
     fun changedCells(a: Thumb, b: Thumb, mask: BooleanArray? = null): Int {
         if (a.cols != b.cols || a.rows != b.rows) return a.cols * a.rows
@@ -163,21 +166,34 @@ object ScreenMotion {
         return Score(if (n == 0) Double.MAX_VALUE else total.toDouble() / n, n)
     }
 
-    /** Средняя разница профилей строк, если содержимое сдвинулось на [dy] пикселей. */
-    private fun profileScore(ref: Thumb, cur: Thumb, mask: BooleanArray?, dy: Int): Score {
+    /** Яркость фона в каждой полосе профиля (медиана по строкам [top]…[bottom]). */
+    private fun bandBackground(t: Thumb, top: Int, bottom: Int): IntArray = IntArray(Thumb.BANDS) { b ->
+        val v = IntArray((bottom - top).coerceAtLeast(1)) { i -> t.rowProfile[(top + i).coerceAtMost(t.screenH - 1) * Thumb.BANDS + b] }
+        v.sort()
+        v[v.size / 2]
+    }
+
+    /**
+     * Средняя разница профилей строк при сдвиге на [dy] пикселей — только по «информативным» местам
+     * (текст, края), где хотя бы в одном кадре не чистый фон. Однотонный фон совпадает при любом
+     * сдвиге и только размывал бы оценку.
+     */
+    private fun profileScore(ref: Thumb, cur: Thumb, mask: BooleanArray?, refMask: BooleanArray?, dy: Int, top: Int, bottom: Int, bgRef: IntArray, bgCur: IntArray): Score {
         val bands = Thumb.BANDS
-        val h = cur.screenH
         var total = 0L
         var n = 0
-        val y0 = maxOf(0, dy)
-        val y1 = minOf(h, h + dy)
+        val y0 = maxOf(top, top + dy)
+        val y1 = minOf(bottom, bottom + dy)
         for (y in y0 until y1) {
-            val ry = y - dy
             val ci = y * bands
-            val ri = ry * bands
+            val ri = (y - dy) * bands
             for (b in 0 until bands) {
                 if (mask != null && mask[ci + b]) continue
-                total += abs(cur.rowProfile[ci + b] - ref.rowProfile[ri + b])
+                if (refMask != null && refMask[ri + b]) continue
+                val c = cur.rowProfile[ci + b]
+                val r = ref.rowProfile[ri + b]
+                if (abs(c - bgCur[b]) <= BG_DIFF && abs(r - bgRef[b]) <= BG_DIFF) continue
+                total += abs(c - r)
                 n++
             }
         }
@@ -187,8 +203,17 @@ object ScreenMotion {
     /**
      * Сравнивает кадр [cur] с опорным [ref] (снят, когда наставник отвечал).
      * [mask] — клетки [cur], закрытые нашими окнами, [rowMask] — то же для профиля строк.
+     * [top]…[bottom] — строки экрана без системных панелей: они не двигаются вместе со страницей.
      */
-    fun estimate(ref: Thumb, cur: Thumb, mask: BooleanArray? = null, rowMask: BooleanArray? = null): Motion {
+    fun estimate(
+        ref: Thumb,
+        cur: Thumb,
+        mask: BooleanArray? = null,
+        rowMask: BooleanArray? = null,
+        top: Int = 0,
+        bottom: Int = cur.screenH,
+        refRowMask: BooleanArray? = null,
+    ): Motion {
         if (ref.cols != cur.cols || ref.rows != cur.rows) return Motion.Replaced
         val total = cur.cols * cur.rows
         val changed0 = changedCells(ref, cur, mask)
@@ -196,21 +221,22 @@ object ScreenMotion {
 
         // 1. Обычная прокрутка — по вертикали, с точностью до пикселя (профиль строк).
         val canProfile = ref.rowProfile.size == ref.screenH * Thumb.BANDS && cur.rowProfile.size == ref.rowProfile.size
-        if (canProfile) {
-            val minCompared = (ref.screenH * Thumb.BANDS * 0.4).toInt()
-            val p0 = profileScore(ref, cur, rowMask, 0).mean
+        val t = top.coerceIn(0, cur.screenH - 1)
+        val bt = bottom.coerceIn(t + 1, cur.screenH)
+        if (canProfile && bt - t > 20) {
+            val bgRef = bandBackground(ref, t, bt)
+            val bgCur = bandBackground(cur, t, bt)
+            val minN = maxOf(30, (bt - t) * Thumb.BANDS / 100)
+            val p0 = profileScore(ref, cur, rowMask, refRowMask, 0, t, bt, bgRef, bgCur).mean
             var bestDy = 0
             var best = p0
-            fun tryDy(dy: Int) {
-                val sc = profileScore(ref, cur, rowMask, dy)
-                if (sc.compared >= minCompared && sc.mean < best - 1e-9) { best = sc.mean; bestDy = dy }
+            val range = (bt - t) / 2
+            for (dy in -range..range) {
+                if (dy == 0) continue
+                val sc = profileScore(ref, cur, rowMask, refRowMask, dy, t, bt, bgRef, bgCur)
+                if (sc.compared >= minN && sc.mean < best) { best = sc.mean; bestDy = dy }
             }
-            val range = cur.screenH / 2
-            var dy = -range
-            while (dy <= range) { tryDy(dy); dy += 3 }
-            val coarse = bestDy
-            for (d in coarse - 3..coarse + 3) tryDy(d)
-            if (bestDy != 0 && best <= p0 * 0.5) return Motion.Moved(0, bestDy)
+            if (bestDy != 0 && best <= p0 * 0.6) return Motion.Moved(0, bestDy)
         }
 
         // 2. Сдвиг ещё и по горизонтали (страницу увеличили и двигают) — по сетке клеток.
