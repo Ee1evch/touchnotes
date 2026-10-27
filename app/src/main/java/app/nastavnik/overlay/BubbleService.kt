@@ -20,6 +20,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.IntentCompat
 import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.lifecycleScope
+import app.nastavnik.BuildConfig
 import app.nastavnik.NastavnikApp
 import app.nastavnik.R
 import app.nastavnik.app
@@ -41,6 +42,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -469,6 +471,8 @@ class BubbleService : LifecycleService(), PanelController.Actions, BubbleView.Li
                     OverlayWindows.contentRect(this)
                 }
                 val jpeg = withContext(Dispatchers.Default) { ImageUtils.prepare(full, rect) }
+                // В отладочной сборке последний снимок лежит в кэше — удобно проверить, что ушло в Claude.
+                if (BuildConfig.DEBUG) runCatching { File(cacheDir, "last_shot.jpg").writeBytes(jpeg) }
                 return ShotResult.Ok(jpeg)
             } finally {
                 full.recycle()
