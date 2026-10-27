@@ -116,6 +116,8 @@ class MentorFlowTest {
             }
         }
         server.start()
+        device.executeShellCommand("settings put global hide_error_dialogs 1")
+        dismissSystemAnr()
         device.executeShellCommand("appops set $pkg SYSTEM_ALERT_WINDOW allow")
         device.executeShellCommand("appops set $pkg PROJECT_MEDIA allow")
         val s = ctx.app.settings

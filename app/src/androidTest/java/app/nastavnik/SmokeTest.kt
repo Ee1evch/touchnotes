@@ -126,6 +126,8 @@ class SmokeTest {
 
     @Test
     fun bubbleMenuCaptureAndApiError() {
+        shell("settings put global hide_error_dialogs 1")
+        dismissSystemAnr()
         shell("appops set $pkg SYSTEM_ALERT_WINDOW allow")
         shell("appops set $pkg PROJECT_MEDIA allow")
         shell("pm grant $pkg android.permission.POST_NOTIFICATIONS")
