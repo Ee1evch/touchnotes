@@ -80,6 +80,7 @@ class MentorFlowTest {
         return "@@ ok $spec\n" +
             "Верно! Производная \$f'(x) = 3x^2 - 3\$ найдена правильно, и точки \$x = \\pm 1\$ тоже.\n\n" +
             "\$\$f(-1) = 2,\\quad f(1) = -2\$\$\n[[ГОТОВО]]"
+    }
 
     private fun sse(text: String): String = buildString {
         append("event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"m\"}}\n\n")
