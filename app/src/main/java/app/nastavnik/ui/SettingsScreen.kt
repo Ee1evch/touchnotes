@@ -28,9 +28,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.nastavnik.app
-import app.nastavnik.claude.ClaudeModel
-import app.nastavnik.claude.KeyCheck
-import app.nastavnik.claude.Strictness
+import app.nastavnik.ai.ModelPresets
+import app.nastavnik.ai.Strictness
 import app.nastavnik.data.BubbleSide
 import app.nastavnik.data.SettingsRepo
 import app.nastavnik.notes.TouchnotesSender
@@ -44,30 +43,20 @@ fun SettingsScreen(onBack: () -> Unit) {
     val s by remember { repo.flow() }.collectAsStateWithLifecycle(initialValue = repo.load())
 
     ScreenScaffold(title = "Настройки", onBack = onBack) {
-        SectionCard("API-ключ Anthropic") {
+        SectionCard("Нейросеть") {
+            ProviderEditor(onChanged = {})
+        }
+
+        SectionCard("Модель наставника (${s.provider.shortTitle})") {
+            ModelPicker(s.provider, ModelPresets.mentor(s.provider), s.model) { repo.setModel(it, s.provider) }
+        }
+
+        SectionCard("Модель для чистовика (${s.provider.shortTitle})") {
             Text(
-                "Ключ создаётся на console.anthropic.com → API keys. Хранится только на этом планшете, в зашифрованном виде.",
+                "Для чистовика нужна модель, которая хорошо читает рукописный текст и формулы.",
                 style = MaterialTheme.typography.bodySmall,
             )
-            ApiKeyEditor(onSaved = {})
-            if (!repo.secureStorageOk) {
-                Text(
-                    "Зашифрованное хранилище недоступно: ключ сохранится только до перезапуска приложения.",
-                    color = MaterialTheme.colorScheme.error,
-                )
-            }
-        }
-
-        SectionCard("Модель наставника") {
-            ClaudeModel.entries.forEach { m ->
-                RadioRow(s.model == m, "${m.label} — ${m.hint}", m.id) { repo.setModel(m) }
-            }
-        }
-
-        SectionCard("Модель для чистовика") {
-            ClaudeModel.entries.forEach { m ->
-                RadioRow(s.cleanModel == m, "${m.label} — ${m.hint}", m.id) { repo.setCleanModel(m) }
-            }
+            ModelPicker(s.provider, ModelPresets.mentor(s.provider), s.cleanModel) { repo.setCleanModel(it, s.provider) }
         }
 
         SectionCard("Строгость наставника") {
@@ -153,52 +142,4 @@ fun SettingsScreen(onBack: () -> Unit) {
             }
         }
     }
-}
-
-/** Поле ключа со скрытием и кнопкой «Проверить ключ». */
-@Composable
-fun ApiKeyEditor(onSaved: () -> Unit) {
-    val context = LocalContext.current
-    val repo = context.app.settings
-    val scope = rememberCoroutineScope()
-    var key by remember { mutableStateOf(repo.apiKey()) }
-    var visible by remember { mutableStateOf(false) }
-    var status by remember { mutableStateOf<String?>(null) }
-    var checking by remember { mutableStateOf(false) }
-
-    OutlinedTextField(
-        value = key,
-        onValueChange = { key = it.trim() },
-        label = { Text("sk-ant-…") },
-        singleLine = true,
-        visualTransformation = if (visible) VisualTransformation.None else PasswordVisualTransformation(),
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-        modifier = Modifier.fillMaxWidth(),
-        trailingIcon = {
-            TextButton(onClick = { visible = !visible }) { Text(if (visible) "Скрыть" else "Показать") }
-        },
-    )
-    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        Button(onClick = {
-            repo.setApiKey(key)
-            status = if (key.isBlank()) "Ключ удалён" else "Ключ сохранён"
-            onSaved()
-        }) { Text("Сохранить") }
-        OutlinedButton(enabled = !checking && key.isNotBlank(), onClick = {
-            repo.setApiKey(key)
-            onSaved()
-            checking = true
-            status = "Проверяю…"
-            scope.launch {
-                val model = repo.load().model.id
-                status = when (val r = context.app.claude.checkKey(key, model)) {
-                    KeyCheck.Ok -> "✓ Ключ работает, модель $model доступна"
-                    is KeyCheck.ModelMissing -> "Ключ работает, но модель ${r.modelId} недоступна — выбери другую"
-                    is KeyCheck.Failed -> r.message
-                }
-                checking = false
-            }
-        }) { Text("Проверить ключ") }
-    }
-    status?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
 }

@@ -1,4 +1,4 @@
-package app.nastavnik.claude
+package app.nastavnik.ai
 
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -18,7 +18,7 @@ class RequestBuilderTest {
     private val jpeg = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 1, 2, 3)
 
     private fun request(model: ClaudeModel = ClaudeModel.SONNET, stream: Boolean = true) = MessageRequest(
-        model = model,
+        model = model.id,
         system = Prompts.mentorSystem("Линейная алгебра", Strictness.HINTS),
         turns = listOf(
             ChatTurn(Role.USER, "Подскажи следующий шаг", hadImage = true),

@@ -87,8 +87,8 @@ fun OnboardingScreen(resumeTick: Int, onDone: () -> Unit, onSkip: () -> Unit) {
             optional = true,
         ),
         Step(
-            "API-ключ Anthropic",
-            "Чтобы наставник мог думать: ключ создаётся на console.anthropic.com и хранится на планшете в зашифрованном виде.",
+            "Нейросеть и API-ключ",
+            "Выбери, кто будет думать: Claude, Gemini или любой OpenAI-совместимый сервис. Ключ хранится только на планшете, в зашифрованном виде.",
             done = hasKey, actionLabel = null, action = null,
         ),
         Step(
@@ -108,11 +108,8 @@ fun OnboardingScreen(resumeTick: Int, onDone: () -> Unit, onSkip: () -> Unit) {
             if (index in 1 until steps.lastIndex && step.done && step.actionLabel != "Понятно") {
                 Text("✓ Готово", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
             }
-            if (step.title.startsWith("API")) {
-                ApiKeyEditor(onSaved = { permTick++ })
-                TextButton(onClick = {
-                    runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(Permissions.CONSOLE_KEYS_URL))) }
-                }) { Text("Открыть console.anthropic.com") }
+            if (step.title.startsWith("Нейросеть")) {
+                ProviderEditor(onChanged = { permTick++ })
             }
             if (step.actionLabel != null && !step.done) {
                 Button(onClick = { step.action?.invoke() }) { Text(step.actionLabel) }
@@ -131,7 +128,7 @@ fun OnboardingScreen(resumeTick: Int, onDone: () -> Unit, onSkip: () -> Unit) {
             if (index > 0) OutlinedButton(onClick = { index-- }) { Text("Назад") }
             Spacer(Modifier.weight(1f))
             if (index < steps.lastIndex) {
-                val canSkip = step.done || step.optional || index == 0 || step.title.startsWith("API") || step.title == "Уведомления"
+                val canSkip = step.done || step.optional || index == 0 || step.title.startsWith("Нейросеть") || step.title == "Уведомления"
                 Button(enabled = canSkip, onClick = { index++ }) {
                     Text(if (step.done || index == 0) "Далее" else "Пропустить")
                 }

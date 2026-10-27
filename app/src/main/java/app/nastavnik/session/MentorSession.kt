@@ -1,15 +1,15 @@
 package app.nastavnik.session
 
 import app.nastavnik.NastavnikApp
-import app.nastavnik.claude.ChatTurn
-import app.nastavnik.claude.ClaudeErrors
-import app.nastavnik.claude.ClaudeException
-import app.nastavnik.claude.DoneMarker
-import app.nastavnik.claude.ImagePart
-import app.nastavnik.claude.MessageRequest
-import app.nastavnik.claude.Prompts
-import app.nastavnik.claude.Role
-import app.nastavnik.claude.StreamUpdate
+import app.nastavnik.ai.ChatTurn
+import app.nastavnik.ai.AiErrors
+import app.nastavnik.ai.AiException
+import app.nastavnik.ai.DoneMarker
+import app.nastavnik.ai.ImagePart
+import app.nastavnik.ai.ChatRequest
+import app.nastavnik.ai.Prompts
+import app.nastavnik.ai.Role
+import app.nastavnik.ai.StreamUpdate
 import app.nastavnik.data.Conversation
 import app.nastavnik.data.Message
 import kotlinx.coroutines.CancellationException
@@ -44,7 +44,7 @@ data class ChatUiState(
     /** Наставник сказал, что решение верное: показываем плашку «Сделать чистовик?». */
     val solved: Boolean = false,
     /** Последняя ошибка — для кнопки «Открыть настройки» и т.п. */
-    val lastError: ClaudeException? = null,
+    val lastError: AiException? = null,
 )
 
 /**
@@ -163,15 +163,14 @@ class MentorSession(private val app: NastavnikApp, private val scope: CoroutineS
             }
         }
         try {
-            val request = MessageRequest(
-                model = settings.model,
+            val request = ChatRequest(
+                modelId = settings.model,
                 system = Prompts.mentorSystem(settings.subject, settings.strictness),
                 turns = history,
                 images = listOfNotNull(image?.let { ImagePart(it) }),
                 maxTokens = MAX_TOKENS,
-                stream = true,
             )
-            val stop = app.claude.stream(app.settings.apiKey(), request) { update ->
+            val stop = app.ai(settings).stream(app.settings.apiKey(settings.provider), request) { update ->
                 when (update) {
                     is StreamUpdate.Text -> {
                         raw.append(update.delta)
@@ -190,7 +189,7 @@ class MentorSession(private val app: NastavnikApp, private val scope: CoroutineS
                 }
             }
             var final = DoneMarker.process(raw.toString())
-            if (final.text.isBlank()) throw ClaudeErrors.badResponse("пустой ответ")
+            if (final.text.isBlank()) throw AiErrors.badResponse("пустой ответ")
             if (stop == "max_tokens") final = final.copy(text = final.text + "\n\n_(ответ обрезан)_")
             db.messages().update(botId, final.text, false)
             db.conversations().touch(convId, System.currentTimeMillis())
@@ -212,14 +211,14 @@ class MentorSession(private val app: NastavnikApp, private val scope: CoroutineS
                 })
             }
             throw e
-        } catch (e: ClaudeException) {
+        } catch (e: AiException) {
             fail(botId, e)
         } catch (e: Exception) {
-            fail(botId, ClaudeErrors.badResponse(e.message))
+            fail(botId, AiErrors.badResponse(e.message))
         }
     }
 
-    private suspend fun fail(botId: Long, e: ClaudeException) {
+    private suspend fun fail(botId: Long, e: AiException) {
         db.messages().update(botId, e.userMessage, true)
         _state.update { s ->
             s.copy(

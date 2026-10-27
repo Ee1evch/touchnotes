@@ -1,4 +1,4 @@
-package app.nastavnik.claude
+package app.nastavnik.ai
 
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject

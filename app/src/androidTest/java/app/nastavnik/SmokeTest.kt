@@ -130,6 +130,7 @@ class SmokeTest {
         shell("appops set $pkg PROJECT_MEDIA allow")
         shell("pm grant $pkg android.permission.POST_NOTIFICATIONS")
         val settings = ctx.app.settings
+        settings.setProvider(app.nastavnik.ai.AiProvider.ANTHROPIC)
         settings.setOnboardingDone(true)
         settings.setProjectionExplained(true)
         settings.setApiKey("sk-ant-test-invalid-key")
@@ -222,7 +223,16 @@ class SmokeTest {
         device.findObject(By.text("Отмена"))?.click()
         SystemClock.sleep(500)
 
-        // 7. Свернуть панель → кнопка вернулась.
+        // 7. Переключение на Gemini без ключа → понятная подсказка, запрос не уходит.
+        settings.setProvider(app.nastavnik.ai.AiProvider.GEMINI)
+        settings.setApiKey("", app.nastavnik.ai.AiProvider.GEMINI)
+        assertNotNull("заголовок не показал Gemini", device.wait(Until.findObject(By.text("Наставник · Gemini")), 4000))
+        device.findObject(By.text("Подскажи следующий шаг")).click()
+        assertNotNull("нет подсказки про ключ Gemini", device.wait(Until.findObject(By.textContains("Google Gemini")), 4000))
+        screenshot("gemini_no_key")
+        settings.setProvider(app.nastavnik.ai.AiProvider.ANTHROPIC)
+
+        // 8. Свернуть панель → кнопка вернулась.
         device.findObject(By.desc("Свернуть"))?.click()
         assertNotNull("кнопка не вернулась после сворачивания", device.wait(Until.findObject(By.desc("Наставник").pkg(pkg)), 4000))
         scenario.close()

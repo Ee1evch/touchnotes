@@ -57,7 +57,7 @@ fun HomeScreen(resumeTick: Int, go: (String) -> Unit) {
                 Button(onClick = { context.startActivity(Permissions.overlaySettingsIntent(context)) }) { Text("Разрешить показ поверх окон") }
             }
             if (!hasKey) {
-                Text("Не задан API-ключ Anthropic — без него наставник не ответит.", color = MaterialTheme.colorScheme.error)
+                Text("Не задан API-ключ (${context.app.settings.provider().title}) — без него наставник не ответит.", color = MaterialTheme.colorScheme.error)
                 OutlinedButton(onClick = { go(MainActivity.SCREEN_SETTINGS) }) { Text("Вставить ключ") }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {

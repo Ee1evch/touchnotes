@@ -1,4 +1,4 @@
-package app.nastavnik.claude
+package app.nastavnik.ai
 
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
@@ -32,7 +32,7 @@ class ClaudeClientTest {
     }
 
     private fun req() = MessageRequest(
-        model = ClaudeModel.SONNET,
+        model = ClaudeModel.SONNET.id,
         system = "s",
         turns = listOf(ChatTurn(Role.USER, "Подскажи", hadImage = true)),
         images = listOf(ImagePart(byteArrayOf(1, 2, 3))),
@@ -76,8 +76,8 @@ class ClaudeClientTest {
         try {
             client.stream("bad", req()) {}
             fail()
-        } catch (e: ClaudeException) {
-            assertEquals(ClaudeException.Kind.AUTH, e.kind)
+        } catch (e: AiException) {
+            assertEquals(AiException.Kind.AUTH, e.kind)
             assertTrue(e.userMessage.contains("Неверный API-ключ"))
             assertFalse(e.userMessage.contains("bad"))
             assertTrue(e.needsSettings)
@@ -101,8 +101,8 @@ class ClaudeClientTest {
         try {
             client.stream("k", req()) {}
             fail()
-        } catch (e: ClaudeException) {
-            assertEquals(ClaudeException.Kind.RATE_LIMIT, e.kind)
+        } catch (e: AiException) {
+            assertEquals(AiException.Kind.RATE_LIMIT, e.kind)
             assertTrue(e.userMessage.contains("20"))
         }
     }
@@ -113,8 +113,8 @@ class ClaudeClientTest {
         try {
             client.stream("k", req()) {}
             fail()
-        } catch (e: ClaudeException) {
-            assertEquals(ClaudeException.Kind.REFUSAL, e.kind)
+        } catch (e: AiException) {
+            assertEquals(AiException.Kind.REFUSAL, e.kind)
         }
     }
 
@@ -148,8 +148,8 @@ class ClaudeClientTest {
         try {
             client.stream("", req()) {}
             fail()
-        } catch (e: ClaudeException) {
-            assertEquals(ClaudeException.Kind.NO_KEY, e.kind)
+        } catch (e: AiException) {
+            assertEquals(AiException.Kind.NO_KEY, e.kind)
         }
         assertEquals(0, server.requestCount)
     }

@@ -1,4 +1,4 @@
-package app.nastavnik.claude
+package app.nastavnik.ai
 
 /** Строгость наставника: подпись в настройках и текст, который подставляется в промт. */
 enum class Strictness(val label: String, val promptText: String) {

@@ -30,7 +30,7 @@ import androidx.core.view.isVisible
 import androidx.core.view.updatePadding
 import app.nastavnik.R
 import app.nastavnik.capture.ImageUtils
-import app.nastavnik.claude.QuickAction
+import app.nastavnik.ai.QuickAction
 import app.nastavnik.notes.CleanView
 import app.nastavnik.notes.NoteStorage
 import app.nastavnik.notes.WebViews
@@ -79,6 +79,7 @@ class PanelController(baseContext: Context, private val wm: WindowManager, priva
     val root: FrameLayout = LayoutInflater.from(ctx).inflate(R.layout.panel_view, null) as FrameLayout
     private val card: LinearLayout = root.findViewById(R.id.panel_card)
     private val header: View = root.findViewById(R.id.header)
+    private val titleView: TextView = root.findViewById(R.id.title)
     private val subjectView: TextView = root.findViewById(R.id.subject)
     private val btnRegion: ImageButton = root.findViewById(R.id.btn_region)
     private val btnCollapse: ImageButton = root.findViewById(R.id.btn_collapse)
@@ -383,7 +384,8 @@ class PanelController(baseContext: Context, private val wm: WindowManager, priva
 
     private var attachShot = true
 
-    fun setOptions(subject: String, allSubjects: List<String>, regionMode: Boolean, attach: Boolean) {
+    fun setOptions(subject: String, allSubjects: List<String>, regionMode: Boolean, attach: Boolean, aiLabel: String) {
+        titleView.text = "Наставник · $aiLabel"
         subjectView.text = subject
         subjects = (allSubjects + subject).distinct()
         btnRegion.isSelected = regionMode
@@ -503,7 +505,7 @@ class PanelController(baseContext: Context, private val wm: WindowManager, priva
             }
             is CleanState.Generating -> {
                 cleanTitle.text = "Собираю чистовик…"
-                cleanMessage.text = "Claude оформляет конспект по снимкам ($n). Обычно это занимает до минуты." +
+                cleanMessage.text = "Нейросеть оформляет конспект по снимкам ($n). Обычно это занимает до минуты." +
                     if (state.retry) "\nПервый ответ не разобрался — пробую ещё раз." else ""
                 buttons()
             }

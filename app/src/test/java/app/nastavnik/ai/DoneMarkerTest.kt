@@ -1,4 +1,4 @@
-package app.nastavnik.claude
+package app.nastavnik.ai
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse

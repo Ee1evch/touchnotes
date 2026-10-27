@@ -2,12 +2,12 @@ package app.nastavnik.session
 
 import android.view.ViewGroup
 import app.nastavnik.NastavnikApp
-import app.nastavnik.claude.ChatTurn
-import app.nastavnik.claude.ClaudeException
-import app.nastavnik.claude.ImagePart
-import app.nastavnik.claude.MessageRequest
-import app.nastavnik.claude.Prompts
-import app.nastavnik.claude.Role
+import app.nastavnik.ai.ChatTurn
+import app.nastavnik.ai.AiException
+import app.nastavnik.ai.ImagePart
+import app.nastavnik.ai.ChatRequest
+import app.nastavnik.ai.Prompts
+import app.nastavnik.ai.Role
 import app.nastavnik.data.CleanNoteEntity
 import app.nastavnik.notes.CleanNote
 import app.nastavnik.notes.CleanNoteParseException
@@ -69,7 +69,7 @@ sealed interface CleanState {
     }
 }
 
-/** Чистовик: снимки → JSON от Claude → предпросмотр → PDF/PNG → Touchnotes. */
+/** Чистовик: снимки → JSON от нейросети → предпросмотр → PDF/PNG → Touchnotes. */
 class CleanSession(private val app: NastavnikApp, private val scope: CoroutineScope) {
     private val _state = MutableStateFlow<CleanState>(CleanState.Idle)
     val state: StateFlow<CleanState> = _state.asStateFlow()
@@ -112,20 +112,21 @@ class CleanSession(private val app: NastavnikApp, private val scope: CoroutineSc
 
     private suspend fun generate(shots: List<ByteArray>) {
         val settings = app.settings.load()
-        val key = app.settings.apiKey()
+        val key = app.settings.apiKey(settings.provider)
+        val backend = app.ai(settings)
         for (attempt in 0..1) {
             val retry = attempt == 1
             _state.value = CleanState.Generating(shots, retry)
-            val request = MessageRequest(
-                model = settings.cleanModel,
+            val request = ChatRequest(
+                modelId = settings.cleanModel,
                 system = Prompts.cleanSystem(settings.subject),
                 turns = listOf(ChatTurn(Role.USER, Prompts.cleanUserText(shots.size, retry), hadImage = true)),
                 images = shots.map { ImagePart(it) },
                 maxTokens = MAX_TOKENS,
-                stream = false,
+                jsonOutput = true,
             )
             try {
-                val completion = app.claude.complete(key, request)
+                val completion = backend.complete(key, request)
                 val parsed = withContext(Dispatchers.Default) { CleanNoteParser.parse(completion.text) }
                 val note = parsed.copy(
                     subject = parsed.subject.ifBlank { settings.subject },
@@ -140,7 +141,7 @@ class CleanSession(private val app: NastavnikApp, private val scope: CoroutineSc
                         "Не получилось разобрать ответ модели (${e.message}). Нажми «Пересобрать».",
                     )
                 }
-            } catch (e: ClaudeException) {
+            } catch (e: AiException) {
                 _state.value = CleanState.Failed(shots, e.userMessage, needsSettings = e.needsSettings)
                 return
             }

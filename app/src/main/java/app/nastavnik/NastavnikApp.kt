@@ -5,17 +5,32 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
 import android.webkit.WebView
-import app.nastavnik.claude.ClaudeClient
+import app.nastavnik.ai.AiBackend
+import app.nastavnik.ai.AiProvider
+import app.nastavnik.ai.ClaudeClient
+import app.nastavnik.ai.GeminiClient
+import app.nastavnik.ai.OpenAiClient
 import app.nastavnik.data.AppDatabase
+import app.nastavnik.data.AppSettings
 import app.nastavnik.data.SettingsRepo
 
 class NastavnikApp : Application() {
     val settings: SettingsRepo by lazy { SettingsRepo(this) }
     val db: AppDatabase by lazy { AppDatabase.create(this) }
+    private val http by lazy { ClaudeClient.defaultHttp() }
+
     val claude: ClaudeClient by lazy {
-        ClaudeClient(ClaudeClient.defaultHttp()).apply {
+        ClaudeClient(http).apply {
             if (BuildConfig.DEBUG) baseUrlOverride = { settings.debugBaseUrl() }
         }
+    }
+    private val gemini: GeminiClient by lazy { GeminiClient(http) }
+
+    /** Клиент выбранного в настройках провайдера. */
+    fun ai(s: AppSettings = settings.load()): AiBackend = when (s.provider) {
+        AiProvider.ANTHROPIC -> claude
+        AiProvider.GEMINI -> gemini
+        AiProvider.OPENAI_COMPAT -> OpenAiClient(http, s.openAiBaseUrl)
     }
 
     override fun onCreate() {

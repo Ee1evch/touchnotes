@@ -91,6 +91,7 @@ class MentorFlowTest {
         device.executeShellCommand("appops set $pkg SYSTEM_ALERT_WINDOW allow")
         device.executeShellCommand("appops set $pkg PROJECT_MEDIA allow")
         val s = ctx.app.settings
+        s.setProvider(app.nastavnik.ai.AiProvider.ANTHROPIC)
         s.setOnboardingDone(true)
         s.setProjectionExplained(true)
         s.setApiKey("sk-ant-test")

@@ -27,7 +27,7 @@ import app.nastavnik.app
 import app.nastavnik.capture.CaptureException
 import app.nastavnik.capture.ImageUtils
 import app.nastavnik.capture.ScreenCapturer
-import app.nastavnik.claude.QuickAction
+import app.nastavnik.ai.QuickAction
 import app.nastavnik.data.AppSettings
 import app.nastavnik.data.BubbleSide
 import app.nastavnik.session.CleanSession
@@ -134,7 +134,7 @@ class BubbleService : LifecycleService(), PanelController.Actions, BubbleView.Li
             napp.settings.flow().collect { s ->
                 val old = settings
                 settings = s
-                panel.setOptions(s.subject, napp.settings.subjects, regionMode, s.attachShotToTyped)
+                panel.setOptions(s.subject, napp.settings.subjects, regionMode, s.attachShotToTyped, s.provider.shortTitle)
                 if (old == null || old.bubbleSizeDp != s.bubbleSizeDp || old.bubbleAlpha != s.bubbleAlpha || old.bubbleSide != s.bubbleSide) {
                     applyBubbleLook(s)
                 }
@@ -471,7 +471,7 @@ class BubbleService : LifecycleService(), PanelController.Actions, BubbleView.Li
                     OverlayWindows.contentRect(this)
                 }
                 val jpeg = withContext(Dispatchers.Default) { ImageUtils.prepare(full, rect) }
-                // В отладочной сборке последний снимок лежит в кэше — удобно проверить, что ушло в Claude.
+                // В отладочной сборке последний снимок лежит в кэше — удобно проверить, что ушло в нейросеть.
                 if (BuildConfig.DEBUG) runCatching { File(cacheDir, "last_shot.jpg").writeBytes(jpeg) }
                 return ShotResult.Ok(jpeg)
             } finally {
@@ -486,7 +486,7 @@ class BubbleService : LifecycleService(), PanelController.Actions, BubbleView.Li
 
     private fun requireKey(): Boolean {
         if (napp.settings.hasApiKey()) return true
-        panel.showStatus("Сначала вставь API-ключ Anthropic в настройках.", "Настройки") { openSettings() }
+        panel.showStatus("Сначала вставь API-ключ (${napp.settings.provider().title}) в настройках.", "Настройки") { openSettings() }
         return false
     }
 
@@ -532,7 +532,7 @@ class BubbleService : LifecycleService(), PanelController.Actions, BubbleView.Li
     override fun toggleRegion() {
         regionMode = !regionMode
         val s = settings ?: return
-        panel.setOptions(s.subject, napp.settings.subjects, regionMode, s.attachShotToTyped)
+        panel.setOptions(s.subject, napp.settings.subjects, regionMode, s.attachShotToTyped, s.provider.shortTitle)
         panel.showStatus(
             if (regionMode) "Режим области: после нажатия кнопки обведи задачу пальцем." else "Снова отправляю весь экран.",
         )

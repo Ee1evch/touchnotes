@@ -1,4 +1,4 @@
-package app.nastavnik.claude
+package app.nastavnik.ai
 
 /** Убирает маркер `[[ГОТОВО]]` из ответа наставника и сообщает, был ли он. */
 object DoneMarker {
