@@ -1,0 +1,154 @@
+/* Чистовик: лист A4 = 794 × 1123 CSS-пикселей (96 dpi). */
+:root {
+  --page-w: 794px;
+  --page-h: 1123px;
+  --pad-top: 64px;
+  --pad-side: 68px;
+  --pad-bottom: 76px;
+  --ink: #1d2233;
+  --muted: #6a7189;
+  --rule: #e3e7f0;
+  --accent: #3047c9;
+  --accent-soft: #eef1ff;
+  --thm: #7a4bd8;
+  --thm-soft: #f6f1ff;
+  --note: #c98a00;
+  --note-soft: #fff7e0;
+  --check: #d23a3a;
+  --check-soft: #fdeeee;
+  --extra: #1d8a7a;
+  --extra-soft: #e7f6f3;
+}
+
+html, body { margin: 0; padding: 0; }
+body {
+  color: var(--ink);
+  font-family: "Noto Serif", "Georgia", serif;
+  font-size: 15.5px;
+  line-height: 1.55;
+  -webkit-text-size-adjust: 100%;
+  -webkit-font-smoothing: antialiased;
+}
+body.preview { background: #e6e9f0; padding: 12px 0 24px; }
+body.export { background: #fff; }
+
+#staging { position: absolute; left: -10000px; top: 0; width: calc(var(--page-w) - 2 * var(--pad-side)); visibility: hidden; }
+#error { margin: 24px; padding: 16px; background: var(--check-soft); color: var(--check); font-family: sans-serif; border-radius: 8px; }
+
+.page {
+  position: relative;
+  width: var(--page-w);
+  height: var(--page-h);
+  background: #fff;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+body.preview .page { margin: 0 auto 14px; box-shadow: 0 2px 10px rgba(20, 30, 60, 0.18); border-radius: 2px; }
+.page .content {
+  position: absolute;
+  top: var(--pad-top);
+  left: var(--pad-side);
+  right: var(--pad-side);
+  bottom: var(--pad-bottom);
+  overflow: hidden;
+}
+.page .footer {
+  position: absolute;
+  left: var(--pad-side);
+  right: var(--pad-side);
+  bottom: 34px;
+  display: flex;
+  justify-content: space-between;
+  font-family: "Roboto", "Noto Sans", sans-serif;
+  font-size: 11px;
+  color: var(--muted);
+  border-top: 1px solid var(--rule);
+  padding-top: 8px;
+}
+
+/* Шапка первого листа */
+.head { margin-bottom: 22px; padding-bottom: 14px; border-bottom: 2px solid var(--ink); }
+.head .subject {
+  font-family: "Roboto", "Noto Sans", sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.head h1 { font-size: 30px; line-height: 1.2; margin: 6px 0 6px; font-weight: 700; }
+.head .date { font-family: "Roboto", "Noto Sans", sans-serif; font-size: 12px; color: var(--muted); }
+
+/* Блоки */
+.blk { margin: 0 0 14px; }
+.blk p { margin: 0 0 6px; }
+.blk p:last-child { margin-bottom: 0; }
+h2.blk {
+  font-family: "Roboto", "Noto Sans", sans-serif;
+  font-size: 19px;
+  font-weight: 700;
+  margin: 20px 0 10px;
+  color: var(--ink);
+}
+h2.blk::before { content: ""; display: inline-block; width: 6px; height: 18px; background: var(--accent); border-radius: 2px; margin-right: 9px; vertical-align: -2px; }
+
+.box { border-radius: 10px; padding: 12px 16px; }
+.box .title { font-family: "Roboto", "Noto Sans", sans-serif; font-weight: 700; font-size: 14.5px; margin-bottom: 4px; }
+.def { background: var(--accent-soft); }
+.def .title { color: var(--accent); }
+.thm { background: var(--thm-soft); border-left: 4px solid var(--thm); border-radius: 0 10px 10px 0; }
+.thm .title { color: var(--thm); }
+.note { background: var(--note-soft); border-left: 4px solid var(--note); border-radius: 0 10px 10px 0; }
+.note.check { background: var(--check-soft); border-left-color: var(--check); }
+.note.extra { background: var(--extra-soft); border-left-color: var(--extra); }
+.note .label { font-family: "Roboto", "Noto Sans", sans-serif; font-weight: 700; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--note); margin-bottom: 2px; }
+.note.check .label { color: var(--check); }
+.note.extra .label { color: var(--extra); }
+
+.formula { text-align: center; padding: 6px 0; overflow: hidden; }
+.formula .katex-display { margin: 0; }
+.math-block .katex-display { margin: 0.35em 0; }
+.katex { font-size: 1.1em; }
+
+.steps .title { font-family: "Roboto", "Noto Sans", sans-serif; font-weight: 700; font-size: 15px; margin-bottom: 6px; }
+.steps ol { list-style: none; margin: 0; padding: 0; counter-reset: step var(--start, 0); }
+.steps li { counter-increment: step; position: relative; padding: 4px 0 6px 38px; border-bottom: 1px dashed var(--rule); }
+.steps li:last-child { border-bottom: none; }
+.steps li::before {
+  content: counter(step);
+  position: absolute;
+  left: 0;
+  top: 4px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-family: "Roboto", "Noto Sans", sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 24px;
+  text-align: center;
+}
+
+table.tbl { border-collapse: collapse; width: 100%; font-size: 14.5px; }
+table.tbl th, table.tbl td { border: 1px solid #d7dcea; padding: 6px 9px; text-align: center; vertical-align: middle; }
+table.tbl th { background: var(--accent-soft); font-family: "Roboto", "Noto Sans", sans-serif; font-weight: 700; color: var(--accent); }
+table.tbl tr:nth-child(even) td { background: #fafbfe; }
+
+figure.plot { margin: 4px 0 16px; text-align: center; }
+figure.plot svg { display: block; margin: 0 auto; }
+figure.plot figcaption { font-family: "Roboto", "Noto Sans", sans-serif; font-size: 12.5px; color: var(--muted); margin-top: 4px; }
+.legend { display: flex; justify-content: center; gap: 18px; flex-wrap: wrap; font-size: 13.5px; margin-top: 2px; }
+.legend .swatch { display: inline-block; width: 18px; height: 3px; margin-right: 6px; vertical-align: middle; border-radius: 2px; }
+
+.summary { background: #f3f5fa; border-radius: 10px; padding: 12px 16px 10px; }
+.summary .title, .questions .title { font-family: "Roboto", "Noto Sans", sans-serif; font-weight: 700; font-size: 16px; margin-bottom: 6px; }
+.summary ul { margin: 0; padding-left: 20px; }
+.summary li { margin: 2px 0; }
+.questions { border: 1.5px solid var(--accent); border-radius: 10px; padding: 12px 16px 10px; }
+.questions .title { color: var(--accent); }
+.questions ol { margin: 0; padding-left: 22px; }
+.questions li { margin: 3px 0; }
+
+.cont { font-family: "Roboto", "Noto Sans", sans-serif; font-size: 12px; color: var(--muted); font-weight: 400; }
