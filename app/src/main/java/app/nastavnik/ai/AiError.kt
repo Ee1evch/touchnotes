@@ -34,6 +34,11 @@ object AiErrors {
         "Не выбрана модель. Открой настройки → «Модель» и выбери её из списка.",
     )
 
+    fun badBaseUrl(url: String) = AiException(
+        AiException.Kind.NOT_FOUND,
+        "Неверный адрес сервера: «$url». Он должен начинаться с http:// или https://.",
+    )
+
     fun refusal() = AiException(
         AiException.Kind.REFUSAL,
         "Модель отказалась отвечать на этот запрос. Попробуй переформулировать вопрос.",

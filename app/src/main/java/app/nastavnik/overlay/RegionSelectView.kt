@@ -54,7 +54,7 @@ class RegionSelector(private val context: Context, private val wm: WindowManager
             setTextColor(Color.WHITE)
             textSize = 17f
             setPadding(dp(16f), dp(10f), dp(16f), dp(10f))
-            background = GradientDrawable().apply { setColor(0xCC1C2033.toInt()); cornerRadius = dp(20f).toFloat() }
+            background = GradientDrawable().apply { setColor(0xCC1F1F1F.toInt()); cornerRadius = dp(20f).toFloat() }
         }
         root.addView(hint, FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT).apply {
             gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
@@ -71,9 +71,9 @@ class RegionSelector(private val context: Context, private val wm: WindowManager
             text = label
             isAllCaps = false
             textSize = 16f
-            setTextColor(if (primary) Color.WHITE else 0xFF1C2033.toInt())
+            setTextColor(if (primary) Color.WHITE else 0xFF1F1F1F.toInt())
             background = GradientDrawable().apply {
-                setColor(if (primary) 0xFF3D5AFE.toInt() else 0xFFE8ECFF.toInt())
+                setColor(if (primary) 0xFF0B57D0.toInt() else 0xFFF0F4F9.toInt())
                 cornerRadius = dp(22f).toFloat()
             }
             setPadding(dp(18f), 0, dp(18f), 0)
@@ -116,7 +116,7 @@ class RegionSelector(private val context: Context, private val wm: WindowManager
             color = Color.WHITE
             strokeWidth = resources.displayMetrics.density * 2.5f
         }
-        private val corner = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF3D5AFE.toInt() }
+        private val corner = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF0B57D0.toInt() }
         private var startX = 0f
         private var startY = 0f
         private var sel: RectF? = null

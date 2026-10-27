@@ -1,16 +1,29 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="accent">#3D5AFE</color>
-    <color name="accent_dark">#2A3EB1</color>
-    <color name="accent_soft">#E8ECFF</color>
-    <color name="panel_bg">#FAFBFF</color>
+    <!-- Фирменные цвета Google: из них собраны радужные градиенты -->
+    <color name="google_blue">#4285F4</color>
+    <color name="google_red">#EA4335</color>
+    <color name="google_yellow">#FBBC04</color>
+    <color name="google_green">#34A853</color>
+    <!-- Градиент «искры» в духе Gemini -->
+    <color name="sparkle_start">#4285F4</color>
+    <color name="sparkle_mid">#9B72CB</color>
+    <color name="sparkle_end">#D96570</color>
+
+    <!-- Material 3 (светлая схема Google) -->
+    <color name="accent">#0B57D0</color>
+    <color name="accent_dark">#041E49</color>
+    <color name="accent_soft">#D3E3FD</color>
+    <color name="panel_bg">#FFFFFF</color>
+    <color name="surface_container">#F0F4F9</color>
+    <color name="surface_container_high">#E9EEF6</color>
     <color name="panel_header">#FFFFFF</color>
-    <color name="panel_border">#DDE2F0</color>
-    <color name="text_main">#1C2033</color>
-    <color name="text_muted">#626A85</color>
-    <color name="done_bg">#E6F6EA</color>
-    <color name="done_text">#1B6B34</color>
-    <color name="error_bg">#FDECEC</color>
-    <color name="error_text">#A12121</color>
-    <color name="ic_launcher_background">#3D5AFE</color>
+    <color name="panel_border">#C4C7C5</color>
+    <color name="text_main">#1F1F1F</color>
+    <color name="text_muted">#444746</color>
+    <color name="done_bg">#E6F4EA</color>
+    <color name="done_text">#146C2E</color>
+    <color name="error_bg">#FCE8E6</color>
+    <color name="error_text">#B3261E</color>
+    <color name="ic_launcher_background">#FFFFFF</color>
 </resources>

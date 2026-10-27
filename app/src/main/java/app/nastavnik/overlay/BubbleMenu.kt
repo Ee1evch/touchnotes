@@ -28,8 +28,8 @@ class BubbleMenu(baseContext: Context, private val wm: WindowManager) {
             setPadding(0, dp(6f), 0, dp(6f))
             background = GradientDrawable().apply {
                 setColor(Color.WHITE)
-                cornerRadius = dp(14f).toFloat()
-                setStroke(dp(1f), 0xFFDDE2F0.toInt())
+                cornerRadius = dp(20f).toFloat()
+                setStroke(dp(1f), 0xFFE3E3E3.toInt())
             }
             elevation = dp(8f).toFloat()
         }
@@ -37,7 +37,7 @@ class BubbleMenu(baseContext: Context, private val wm: WindowManager) {
             val tv = TextView(ctx).apply {
                 text = label
                 textSize = 16f
-                setTextColor(0xFF1C2033.toInt())
+                setTextColor(0xFF1F1F1F.toInt())
                 setPadding(dp(18f), dp(12f), dp(28f), dp(12f))
                 setBackgroundResource(android.R.drawable.list_selector_background)
                 setOnClickListener {

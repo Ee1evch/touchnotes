@@ -43,8 +43,9 @@ import kotlinx.serialization.json.put
 import kotlin.math.abs
 
 /**
- * Панель наставника — отдельное окно поверх Touchnotes. В альбомной ориентации стоит справа
- * (35% ширины), в портретной — снизу (45% высоты). Касания вне панели уходят в Touchnotes.
+ * Окно наставника «как у Google»: плавающая карточка с радужным свечением у нижнего края экрана.
+ * Высота растёт вместе с перепиской. Касания мимо карточки уходят в Touchnotes; пока человек пишет,
+ * карточка не исчезает, а становится полупрозрачной (и, если включено, сворачивается через N минут).
  */
 class PanelController(baseContext: Context, private val wm: WindowManager, private val actions: Actions) {
 
@@ -76,9 +77,12 @@ class PanelController(baseContext: Context, private val wm: WindowManager, priva
     private val imm = ctx.getSystemService(InputMethodManager::class.java)
 
     @SuppressLint("InflateParams")
-    val root: FrameLayout = LayoutInflater.from(ctx).inflate(R.layout.panel_view, null) as FrameLayout
+    val root: TouchAwareFrame = LayoutInflater.from(ctx).inflate(R.layout.panel_view, null) as TouchAwareFrame
     private val card: LinearLayout = root.findViewById(R.id.panel_card)
+    private val glow = GlowCardDrawable(ctx)
     private val header: View = root.findViewById(R.id.header)
+    private val handleArea: View = root.findViewById(R.id.handle_area)
+    private val contentFrame: FrameLayout = root.findViewById(R.id.content_frame)
     private val titleView: TextView = root.findViewById(R.id.title)
     private val subjectView: TextView = root.findViewById(R.id.subject)
     private val btnRegion: ImageButton = root.findViewById(R.id.btn_region)
@@ -116,6 +120,24 @@ class PanelController(baseContext: Context, private val wm: WindowManager, priva
         private set
     private var landscape = true
 
+    // --- поведение, пока человек пишет ---
+    private var writingAlpha = 0.6f
+    private var autoCollapseMin = 0
+    private var bubbleOnLeft = false
+    private var writing = false
+    private val autoCollapse = Runnable {
+        // Пока нейросеть отвечает, не сворачиваем — отложим ещё на минуту.
+        if (busy || lastCleanState is CleanState.Generating || lastCleanState is CleanState.Saving) {
+            restartAutoCollapse(60_000L)
+        } else if (isShowing) {
+            actions.collapse()
+        }
+    }
+
+    // --- размеры ---
+    private var hasMessages = false
+    private var chatContentPx = 0
+
     // --- чат ---
     private val chatWeb = WebView(ctx)
     private var chatReady = false
@@ -134,15 +156,67 @@ class PanelController(baseContext: Context, private val wm: WindowManager, priva
     val exportHost: ViewGroup get() = root
 
     init {
+        card.background = glow
+        val g = glow.glow
+        card.setPadding(g + dp(14), g + dp(2), g + dp(14), g + dp(14))
+        // Значки в пилюлях поменьше, чем 24dp по умолчанию.
+        quickButtons.forEach { b ->
+            val d = b.compoundDrawablesRelative[0]?.mutate() ?: return@forEach
+            d.setBounds(0, 0, dp(18), dp(18))
+            b.setCompoundDrawablesRelative(d, null, null, null)
+        }
         setupChat()
         setupButtons()
         setupHeaderSwipe()
         setupInput()
+        root.onOutsideTouch = { onOutsideTouch() }
+        root.onInsideTouch = { wakeUp() }
         ViewCompat.setOnApplyWindowInsetsListener(root) { v, insets ->
+            // Клавиатура: окно растёт вверх, и поле ввода остаётся над ней.
             val ime = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom
-            v.updatePadding(bottom = OverlayWindows.dp(ctx, 6f) + ime)
+            v.updatePadding(bottom = ime)
             insets
         }
+    }
+
+    private fun dp(v: Int) = OverlayWindows.dp(ctx, v.toFloat())
+
+    /** Настройки поведения окна (из настроек приложения). */
+    fun setWindowPrefs(writingAlpha: Float, autoCollapseMin: Int, bubbleOnLeft: Boolean) {
+        this.writingAlpha = writingAlpha.coerceIn(0.3f, 1f)
+        val changedSide = this.bubbleOnLeft != bubbleOnLeft
+        this.bubbleOnLeft = bubbleOnLeft
+        if (this.autoCollapseMin != autoCollapseMin) {
+            this.autoCollapseMin = autoCollapseMin
+            restartAutoCollapse()
+        }
+        if (writing) card.alpha = this.writingAlpha
+        if (changedSide) onScreenChanged()
+    }
+
+    // ---------------- пишу мимо окна ----------------
+
+    /** Человек коснулся Touchnotes: прячем клавиатуру, карточку делаем полупрозрачной, но не убираем. */
+    private fun onOutsideTouch() {
+        setFocusable(false)
+        if (!writing && writingAlpha < 1f) {
+            writing = true
+            card.animate().alpha(writingAlpha).setDuration(250).start()
+        }
+    }
+
+    /** Касание карточки или новый ответ — снова непрозрачная, таймер сворачивания заново. */
+    private fun wakeUp() {
+        if (writing) {
+            writing = false
+            card.animate().alpha(1f).setDuration(150).start()
+        }
+        restartAutoCollapse()
+    }
+
+    private fun restartAutoCollapse(delayMs: Long = autoCollapseMin * 60_000L) {
+        root.removeCallbacks(autoCollapse)
+        if (isShowing && autoCollapseMin > 0) root.postDelayed(autoCollapse, delayMs)
     }
 
     // ---------------- окно ----------------
@@ -157,13 +231,16 @@ class PanelController(baseContext: Context, private val wm: WindowManager, priva
         } catch (_: Exception) {
             return
         }
-        card.translationX = if (landscape) card.width.toFloat().coerceAtLeast(400f) else 0f
-        card.translationY = if (landscape) 0f else 400f
-        card.animate().translationX(0f).translationY(0f).setDuration(180).start()
+        writing = false
+        card.alpha = 0f
+        card.translationY = dp(60).toFloat()
+        card.animate().alpha(1f).translationY(0f).setDuration(220).start()
+        restartAutoCollapse()
     }
 
     fun hide() {
         if (!isShowing) return
+        root.removeCallbacks(autoCollapse)
         setFocusable(false)
         runCatching { wm.removeView(root) }
         isShowing = false
@@ -182,22 +259,43 @@ class PanelController(baseContext: Context, private val wm: WindowManager, priva
         runCatching { wm.updateViewLayout(root, params) }
     }
 
+    /**
+     * Карточка у нижнего края: в альбомной — у той стороны, где кнопка (чтобы середина листа
+     * оставалась свободной), в портретной — по центру во всю ширину. Высота — по содержимому.
+     */
     private fun layoutForScreen() {
         val size = OverlayWindows.screenSize(ctx)
         landscape = OverlayWindows.isLandscape(ctx)
+        val margin = dp(8)
         if (landscape) {
-            params.width = (size.x * 0.35f).toInt().coerceAtLeast(OverlayWindows.dp(ctx, 320f)).coerceAtMost(size.x)
-            params.height = WindowManager.LayoutParams.MATCH_PARENT
-            params.gravity = Gravity.TOP or Gravity.END
-            btnCollapse.setImageResource(R.drawable.ic_chevron_right)
+            params.width = (size.x * 0.46f).toInt().coerceIn(dp(360), dp(640)).coerceAtMost(size.x)
+            params.gravity = Gravity.BOTTOM or (if (bubbleOnLeft) Gravity.START else Gravity.END)
         } else {
-            params.width = WindowManager.LayoutParams.MATCH_PARENT
-            params.height = (size.y * 0.45f).toInt().coerceAtLeast(OverlayWindows.dp(ctx, 320f)).coerceAtMost(size.y)
-            params.gravity = Gravity.BOTTOM or Gravity.START
-            btnCollapse.setImageResource(R.drawable.ic_expand_more)
+            params.width = (size.x - 2 * margin).coerceAtMost(dp(780))
+            params.gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
         }
-        params.x = 0
-        params.y = 0
+        params.height = WindowManager.LayoutParams.WRAP_CONTENT
+        params.x = if (landscape) margin else 0
+        params.y = margin
+        updateContentSize()
+    }
+
+    /** Высота области переписки/чистовика: по содержимому, но не больше доли экрана. */
+    private fun updateContentSize() {
+        val size = OverlayWindows.screenSize(ctx)
+        val maxChat = (size.y * if (landscape) 0.5f else 0.38f).toInt()
+        val cleanHeight = (size.y * if (landscape) 0.7f else 0.56f).toInt()
+        val h = when {
+            lastCleanState !is CleanState.Idle -> cleanHeight
+            hasMessages -> chatContentPx.coerceIn(dp(90), maxChat)
+            else -> 0
+        }
+        contentFrame.isVisible = h > 0
+        val lp = contentFrame.layoutParams
+        if (lp.height != h) {
+            lp.height = h
+            contentFrame.layoutParams = lp
+        }
     }
 
     /** Поле ввода: на время набора окно получает фокус, чтобы открылась клавиатура. */
@@ -225,7 +323,7 @@ class PanelController(baseContext: Context, private val wm: WindowManager, priva
     @SuppressLint("ClickableViewAccessibility")
     private fun setupChat() {
         WebViews.setupLocal(chatWeb)
-        chatWeb.setBackgroundColor(ContextCompat.getColor(ctx, R.color.panel_bg))
+        chatWeb.setBackgroundColor(android.graphics.Color.WHITE)
         chatWeb.addJavascriptInterface(ChatBridge(), "NativeChat")
         chatHost.addView(chatWeb, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
         chatWeb.loadUrl("file:///android_asset/chat.html")
@@ -238,6 +336,15 @@ class PanelController(baseContext: Context, private val wm: WindowManager, priva
                 chatReady = true
                 renderedConversation = -1L
                 pendingChat?.let { renderChat(it) }
+            }
+        }
+
+        /** Страница сообщает высоту переписки в CSS-пикселях — карточка подстраивается. */
+        @JavascriptInterface
+        fun onHeight(cssPx: Float) {
+            root.post {
+                chatContentPx = (cssPx * ctx.resources.displayMetrics.density).toInt()
+                updateContentSize()
             }
         }
     }
@@ -279,19 +386,15 @@ class PanelController(baseContext: Context, private val wm: WindowManager, priva
                 else -> Unit
             }
         }
-        // Касание мимо панели — убираем клавиатуру, чтобы она не мешала писать в Touchnotes.
-        root.setOnTouchListener { _, e ->
-            if (e.actionMasked == MotionEvent.ACTION_OUTSIDE) setFocusable(false)
-            false
-        }
     }
 
+    /** Смахни карточку вниз за ручку или шапку — свернётся в кнопку. */
     @SuppressLint("ClickableViewAccessibility")
     private fun setupHeaderSwipe() {
         var startX = 0f
         var startY = 0f
-        val threshold = OverlayWindows.dp(ctx, 70f)
-        header.setOnTouchListener { _, e ->
+        val threshold = dp(60)
+        val listener = View.OnTouchListener { _, e ->
             when (e.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
                     startX = e.rawX
@@ -299,27 +402,28 @@ class PanelController(baseContext: Context, private val wm: WindowManager, priva
                     true
                 }
                 MotionEvent.ACTION_MOVE -> {
-                    val d = if (landscape) e.rawX - startX else e.rawY - startY
-                    val offset = d.coerceAtLeast(0f)
-                    if (landscape) card.translationX = offset else card.translationY = offset
+                    card.translationY = (e.rawY - startY).coerceAtLeast(0f)
                     true
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                     val dx = e.rawX - startX
                     val dy = e.rawY - startY
-                    val swiped = if (landscape) dx > threshold && abs(dx) > abs(dy) else dy > threshold && abs(dy) > abs(dx)
-                    if (swiped && e.actionMasked == MotionEvent.ACTION_UP) {
-                        card.translationX = 0f
-                        card.translationY = 0f
-                        actions.collapse()
+                    if (e.actionMasked == MotionEvent.ACTION_UP && dy > threshold && abs(dy) > abs(dx)) {
+                        card.animate().translationY(card.height.toFloat()).alpha(0f).setDuration(150).withEndAction {
+                            card.translationY = 0f
+                            card.alpha = 1f
+                            actions.collapse()
+                        }.start()
                     } else {
-                        card.animate().translationX(0f).translationY(0f).setDuration(150).start()
+                        card.animate().translationY(0f).setDuration(150).start()
                     }
                     true
                 }
                 else -> false
             }
         }
+        handleArea.setOnTouchListener(listener)
+        header.setOnTouchListener(listener)
     }
 
     @SuppressLint("ClickableViewAccessibility")
@@ -398,7 +502,7 @@ class PanelController(baseContext: Context, private val wm: WindowManager, priva
 
     fun setListening(listening: Boolean) {
         btnMic.setColorFilter(ContextCompat.getColor(ctx, if (listening) R.color.error_text else R.color.text_muted))
-        input.hint = if (listening) "Говори, я слушаю…" else "Спросить своими словами…"
+        input.hint = if (listening) "Говори, я слушаю…" else "Спросить наставника"
     }
 
     fun setInputText(text: String) {
@@ -422,7 +526,16 @@ class PanelController(baseContext: Context, private val wm: WindowManager, priva
     }
 
     fun renderChat(state: ChatUiState) {
+        // Ответ дописан — карточка снова непрозрачная, чтобы его было удобно читать.
+        if (busy && !state.busy) wakeUp()
         busy = state.busy
+        glow.thinking = state.busy || lastCleanState is CleanState.Generating || lastCleanState is CleanState.Saving
+        val nowHasMessages = state.messages.isNotEmpty()
+        if (nowHasMessages != hasMessages) {
+            hasMessages = nowHasMessages
+            if (!hasMessages) chatContentPx = 0
+            updateContentSize()
+        }
         doneBanner.isVisible = state.solved && lastCleanState is CleanState.Idle
         quickButtons.forEach { it.isEnabled = !state.busy && lastCleanState !is CleanState.Generating && lastCleanState !is CleanState.Saving }
         btnSend.isEnabled = !state.busy
@@ -466,7 +579,10 @@ class PanelController(baseContext: Context, private val wm: WindowManager, priva
     private fun js(code: String) = chatWeb.evaluateJavascript(code, null)
 
     fun renderClean(state: CleanState) {
+        val wasIdle = lastCleanState is CleanState.Idle
         lastCleanState = state
+        glow.thinking = busy || state is CleanState.Generating || state is CleanState.Saving
+        if (wasIdle != (state is CleanState.Idle)) updateContentSize()
         val active = state !is CleanState.Idle
         cleanBox.isVisible = active
         chatHost.isVisible = !active
@@ -584,6 +700,7 @@ class PanelController(baseContext: Context, private val wm: WindowManager, priva
     }
 
     fun destroy() {
+        glow.thinking = false
         hide()
         chatWeb.destroy()
         previewView?.webView?.destroy()

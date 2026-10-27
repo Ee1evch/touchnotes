@@ -13,12 +13,17 @@ import java.util.concurrent.TimeUnit
 
 /**
  * Клиент Anthropic Messages API поверх OkHttp. Ключ передаётся в каждый вызов и нигде не логируется.
+ * С [provider] = ANTHROPIC_COMPAT работает с Claude-совместимыми прокси (Claudex, CLIProxyAPI…):
+ * свой адрес, ключ в выбранном заголовке и только стандартные поля запроса.
  */
 class ClaudeClient(
     private val http: OkHttpClient,
-    private val baseUrl: String = DEFAULT_BASE_URL,
+    baseUrl: String = DEFAULT_BASE_URL,
+    override val provider: AiProvider = AiProvider.ANTHROPIC,
+    private val authMode: AuthMode = if (provider == AiProvider.ANTHROPIC) AuthMode.X_API_KEY else AuthMode.BOTH,
 ) : AiBackend {
-    override val provider = AiProvider.ANTHROPIC
+    private val compat = provider == AiProvider.ANTHROPIC_COMPAT
+    private val baseUrl = normalizeBaseUrl(baseUrl)
 
     /** Подмена адреса API (только для тестов отладочной сборки). */
     var baseUrlOverride: () -> String? = { null }
@@ -42,6 +47,7 @@ class ClaudeClient(
         images = images,
         maxTokens = maxTokens,
         stream = stream,
+        compat = compat,
     )
 
     /** Потоковый запрос. Каждое обновление уходит в [onUpdate] (в фоновом потоке). Возвращает stop_reason. */
@@ -82,7 +88,16 @@ class ClaudeClient(
 
     /** Бесплатная проверка: GET /v1/models/{id} проверяет и ключ, и доступность модели. */
     override suspend fun checkKey(apiKey: String, modelId: String): KeyCheck = withContext(Dispatchers.IO) {
-        if (apiKey.isBlank()) return@withContext KeyCheck.Failed(AiErrors.noKey(provider).userMessage)
+        if (apiKey.isBlank() && !compat) return@withContext KeyCheck.Failed(AiErrors.noKey(provider).userMessage)
+        if (compat) {
+            // Прокси не всегда умеют /v1/models/{id}: проверяем по общему списку.
+            return@withContext try {
+                val models = listModels(apiKey)
+                if (models.isEmpty() || modelId in models) KeyCheck.Ok else KeyCheck.ModelMissing(modelId)
+            } catch (e: AiException) {
+                KeyCheck.Failed(e.userMessage)
+            }
+        }
         try {
             http.newCall(authGet(apiKey, "$base/v1/models/$modelId")).execute().use { resp ->
                 when {
@@ -97,7 +112,7 @@ class ClaudeClient(
     }
 
     override suspend fun listModels(apiKey: String): List<String> = withContext(Dispatchers.IO) {
-        if (apiKey.isBlank()) throw AiErrors.noKey(provider)
+        if (apiKey.isBlank() && !compat) throw AiErrors.noKey(provider)
         try {
             http.newCall(authGet(apiKey, "$base/v1/models?limit=1000")).execute().use { resp ->
                 if (!resp.isSuccessful) throw HttpCalls.errorFromResponse(resp, provider)
@@ -110,16 +125,22 @@ class ClaudeClient(
         }
     }
 
-    private fun authGet(apiKey: String, url: String) = Request.Builder()
-        .url(url)
-        .header("x-api-key", apiKey)
-        .header("anthropic-version", API_VERSION)
-        .get()
-        .build()
+    private fun authGet(apiKey: String, url: String): Request {
+        val b = try {
+            Request.Builder().url(url)
+        } catch (_: IllegalArgumentException) {
+            throw AiErrors.badBaseUrl(baseUrl)
+        }
+        if (apiKey.isNotBlank()) {
+            if (authMode != AuthMode.BEARER) b.header("x-api-key", apiKey)
+            if (authMode != AuthMode.X_API_KEY) b.header("authorization", "Bearer $apiKey")
+        }
+        return b.header("anthropic-version", API_VERSION).get().build()
+    }
 
     /** Повтор при перегрузке и повтор без `fallbacks`, если сервер не принял этот параметр. */
     private suspend fun <T> withFallbackGuard(apiKey: String, request: MessageRequest, block: suspend (MessageRequest) -> T): T {
-        if (apiKey.isBlank()) throw AiErrors.noKey(provider)
+        if (apiKey.isBlank() && !compat) throw AiErrors.noKey(provider)
         if (request.model.isBlank()) throw AiErrors.noModel()
         val req = if (fallbacksRejected) request.copy(useFallbacks = false) else request
         return try {
@@ -136,8 +157,12 @@ class ClaudeClient(
 
     private fun newRequest(apiKey: String, req: MessageRequest): Request {
         val body = RequestBuilder.build(req).toString().toRequestBody(HttpCalls.JSON_MEDIA)
-        val builder = Request.Builder().url("$base/v1/messages").post(body)
-        RequestBuilder.headers(apiKey, req).forEach { (k, v) -> builder.header(k, v) }
+        val builder = try {
+            Request.Builder().url("$base/v1/messages").post(body)
+        } catch (_: IllegalArgumentException) {
+            throw AiErrors.badBaseUrl(baseUrl)
+        }
+        RequestBuilder.headers(apiKey, req, authMode).forEach { (k, v) -> builder.header(k, v) }
         return builder.build()
     }
 
@@ -159,6 +184,17 @@ class ClaudeClient(
 
     companion object {
         const val DEFAULT_BASE_URL = "https://api.anthropic.com"
+
+        /**
+         * Адрес как в ANTHROPIC_BASE_URL: без «/v1/messages» на конце (клиент сам допишет его).
+         * Вставленный целиком адрес тоже понимаем.
+         */
+        fun normalizeBaseUrl(url: String): String = url.trim()
+            .removeSuffix("/")
+            .removeSuffix("/messages")
+            .removeSuffix("/v1")
+            .removeSuffix("/")
+            .ifBlank { DEFAULT_BASE_URL }
         const val API_VERSION = "2023-06-01"
 
         fun defaultHttp(): OkHttpClient = OkHttpClient.Builder()

@@ -85,6 +85,27 @@ fun SettingsScreen(onBack: () -> Unit) {
             )
         }
 
+        SectionCard("Окно наставника") {
+            Text(
+                "Карточка не исчезает, пока ты пишешь стилусом мимо неё, — только становится полупрозрачной. " +
+                    "Коснись её, и она снова яркая. Когда ответ готов, она тоже становится яркой.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            var wa by remember(s.writingAlpha) { mutableFloatStateOf(s.writingAlpha) }
+            Text("Непрозрачность, пока пишешь: ${(wa * 100).roundToInt()}%" + if (wa >= 0.99f) " (не меняется)" else "")
+            Slider(
+                value = wa,
+                onValueChange = { wa = it },
+                onValueChangeFinished = { repo.setWritingAlpha(wa) },
+                valueRange = 0.3f..1f,
+            )
+            Text("Сворачивать в кнопку само")
+            listOf(0 to "Никогда — окно остаётся, сколько бы я ни писал", 3 to "Через 3 минуты без касаний окна",
+                10 to "Через 10 минут", 30 to "Через 30 минут").forEach { (min, label) ->
+                RadioRow(s.autoCollapseMin == min, label) { repo.setAutoCollapseMin(min) }
+            }
+        }
+
         SectionCard("Плавающая кнопка") {
             var alpha by remember(s.bubbleAlpha) { mutableFloatStateOf(s.bubbleAlpha) }
             Text("Непрозрачность: ${(alpha * 100).roundToInt()}%")

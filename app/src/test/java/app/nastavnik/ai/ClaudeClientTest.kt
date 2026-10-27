@@ -153,4 +153,38 @@ class ClaudeClientTest {
         }
         assertEquals(0, server.requestCount)
     }
+
+    @Test
+    fun anthropicCompatProxyUsesBaseAuthHeadersAndPlainBody() = runTest {
+        val proxy = ClaudeClient(
+            ClaudeClient.defaultHttp(),
+            server.url("/proxy/codex/v1/messages").toString(),
+            AiProvider.ANTHROPIC_COMPAT,
+        )
+        server.enqueue(MockResponse().setBody(sse("ок")))
+        val sb = StringBuilder()
+        proxy.stream(
+            "claudex-passthrough",
+            ChatRequest("gpt-5-codex", "s", listOf(ChatTurn(Role.USER, "Подскажи")), maxTokens = 100),
+        ) { if (it is StreamUpdate.Text) sb.append(it.delta) }
+        assertEquals("ок", sb.toString())
+        val r = server.takeRequest()
+        assertEquals("/proxy/codex/v1/messages", r.path)
+        assertEquals("Bearer claudex-passthrough", r.getHeader("authorization"))
+        assertEquals("claudex-passthrough", r.getHeader("x-api-key"))
+        assertEquals(null, r.getHeader("anthropic-beta"))
+        val body = r.body.readUtf8()
+        assertFalse(body.contains("fallbacks"))
+        assertFalse(body.contains("output_config"))
+    }
+
+    @Test
+    fun anthropicCompatWorksWithoutKey() = runTest {
+        val proxy = ClaudeClient(ClaudeClient.defaultHttp(), server.url("/").toString(), AiProvider.ANTHROPIC_COMPAT, AuthMode.BEARER)
+        server.enqueue(MockResponse().setBody(sse("ок")))
+        proxy.stream("", ChatRequest("m", "s", listOf(ChatTurn(Role.USER, "x")), maxTokens = 10)) {}
+        val r = server.takeRequest()
+        assertEquals(null, r.getHeader("authorization"))
+        assertEquals(null, r.getHeader("x-api-key"))
+    }
 }

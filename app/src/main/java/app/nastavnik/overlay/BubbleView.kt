@@ -4,7 +4,10 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Matrix
 import android.graphics.Paint
+import android.graphics.SweepGradient
+import android.animation.ValueAnimator
 import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.View
@@ -30,17 +33,28 @@ class BubbleView(context: Context, private val listener: Listener) : View(contex
         fun onStylus()
     }
 
-    private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = ContextCompat.getColor(context, R.color.accent) }
+    private val density = resources.displayMetrics.density
+    private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.WHITE
+        setShadowLayer(4 * density, 0f, 1.5f * density, 0x40000000)
+    }
     private val ring = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
-        color = Color.WHITE
-        strokeWidth = resources.displayMetrics.density * 2f
+        strokeWidth = 3.5f * density
     }
-    private val icon = ContextCompat.getDrawable(context, R.drawable.ic_bulb)!!.mutate().apply { setTint(Color.WHITE) }
+    private val icon = ContextCompat.getDrawable(context, R.drawable.ic_sparkle)!!.mutate()
+    private val ringMatrix = Matrix()
+    private var ringShader: SweepGradient? = null
+    private var angle = 0f
+    private var spinner: ValueAnimator? = null
 
+    /** Пока нейросеть думает, радужное кольцо вращается. */
     var busy: Boolean = false
         set(value) {
+            if (field == value) return
             field = value
+            spinner?.cancel()
+            spinner = if (value) Rainbow.spinner(1400) { angle = it; invalidate() }.also { it.start() } else null
             invalidate()
         }
 
@@ -64,14 +78,32 @@ class BubbleView(context: Context, private val listener: Listener) : View(contex
         isHapticFeedbackEnabled = true
     }
 
+    init {
+        // Тень у круга рисуется только программно.
+        setLayerType(LAYER_TYPE_SOFTWARE, null)
+    }
+
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        ringShader = SweepGradient(w / 2f, h / 2f, Rainbow.COLORS, null)
+        ring.shader = ringShader
+    }
+
+    override fun onDetachedFromWindow() {
+        spinner?.cancel()
+        spinner = null
+        super.onDetachedFromWindow()
+    }
+
     override fun onDraw(canvas: Canvas) {
-        val r = width.coerceAtMost(height) / 2f
+        val pad = 5 * density
+        val r = width.coerceAtMost(height) / 2f - pad
         val cx = width / 2f
         val cy = height / 2f
-        fill.color = ContextCompat.getColor(context, if (busy) R.color.accent_dark else R.color.accent)
-        canvas.drawCircle(cx, cy, r - ring.strokeWidth, fill)
-        canvas.drawCircle(cx, cy, r - ring.strokeWidth, ring)
-        val s = (r * 1.05f).toInt()
+        canvas.drawCircle(cx, cy, r, fill)
+        ringMatrix.setRotate(angle, cx, cy)
+        ringShader?.setLocalMatrix(ringMatrix)
+        canvas.drawCircle(cx, cy, r - ring.strokeWidth / 2, ring)
+        val s = (r * 1.15f).toInt()
         icon.setBounds((cx - s / 2).toInt(), (cy - s / 2).toInt(), (cx + s / 2).toInt(), (cy + s / 2).toInt())
         icon.draw(canvas)
     }

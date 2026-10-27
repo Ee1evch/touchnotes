@@ -29,7 +29,9 @@ data class MessageRequest(
     val maxTokens: Int,
     val stream: Boolean,
     val effort: String = "medium",
-    val useFallbacks: Boolean = ClaudeModel.supportsFallbacks(model),
+    /** Прокси/свой сервер: только стандартные поля, без бета-возможностей Anthropic. */
+    val compat: Boolean = false,
+    val useFallbacks: Boolean = !compat && ClaudeModel.supportsFallbacks(model),
 )
 
 /** Тело и заголовки запроса к Anthropic `/v1/messages`. */
@@ -72,14 +74,17 @@ object RequestBuilder {
             put("system", req.system)
             put("messages", messages)
             // effort понимают модели Claude 4.6 и новее; для старых id не отправляем.
-            if (supportsEffort(req.model)) putJsonObject("output_config") { put("effort", req.effort) }
+            if (!req.compat && supportsEffort(req.model)) putJsonObject("output_config") { put("effort", req.effort) }
             if (req.stream) put("stream", true)
             if (req.useFallbacks) put("fallbacks", "default")
         }
     }
 
-    fun headers(apiKey: String, req: MessageRequest): Map<String, String> = buildMap {
-        put("x-api-key", apiKey)
+    fun headers(apiKey: String, req: MessageRequest, auth: AuthMode = AuthMode.X_API_KEY): Map<String, String> = buildMap {
+        if (apiKey.isNotBlank()) {
+            if (auth != AuthMode.BEARER) put("x-api-key", apiKey)
+            if (auth != AuthMode.X_API_KEY) put("authorization", "Bearer $apiKey")
+        }
         put("anthropic-version", "2023-06-01")
         put("content-type", "application/json")
         if (req.useFallbacks) put("anthropic-beta", FALLBACK_BETA)

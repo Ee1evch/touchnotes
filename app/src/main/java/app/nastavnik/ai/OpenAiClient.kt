@@ -83,9 +83,11 @@ class OpenAiClient(
     }
 
     override suspend fun listModels(apiKey: String): List<String> = withContext(Dispatchers.IO) {
-        if (apiKey.isBlank()) throw AiErrors.noKey(provider)
+        if (apiKey.isBlank() && keyRequired) throw AiErrors.noKey(provider)
         try {
-            val req = Request.Builder().url("$base/models").header("authorization", "Bearer $apiKey").get().build()
+            val b = Request.Builder().url("$base/models")
+            if (apiKey.isNotBlank()) b.header("authorization", "Bearer $apiKey")
+            val req = b.get().build()
             http.newCall(req).execute().use { resp ->
                 if (!resp.isSuccessful) throw HttpCalls.errorFromResponse(resp, provider)
                 val obj = HttpCalls.json.parseToJsonElement(resp.body?.string().orEmpty()).jsonObject
@@ -94,12 +96,16 @@ class OpenAiClient(
         } catch (e: IOException) {
             throw AiErrors.fromIo(e)
         } catch (e: IllegalArgumentException) {
-            throw AiException(AiException.Kind.BAD_REQUEST, "Неверный адрес сервера: $base")
+            throw AiErrors.badBaseUrl(base)
         }
     }
 
+    /** Официальным OpenAI и OpenRouter ключ нужен всегда; своему прокси — как настроен. */
+    private val keyRequired: Boolean
+        get() = "api.openai.com" in base || "openrouter.ai" in base
+
     private fun validate(apiKey: String, request: ChatRequest) {
-        if (apiKey.isBlank()) throw AiErrors.noKey(provider)
+        if (apiKey.isBlank() && keyRequired) throw AiErrors.noKey(provider)
         if (request.modelId.isBlank()) throw AiErrors.noModel()
     }
 
@@ -108,10 +114,10 @@ class OpenAiClient(
         val builder = try {
             Request.Builder().url(url)
         } catch (e: IllegalArgumentException) {
-            throw AiException(AiException.Kind.BAD_REQUEST, "Неверный адрес сервера: $base")
+            throw AiErrors.badBaseUrl(base)
         }
+        if (apiKey.isNotBlank()) builder.header("authorization", "Bearer $apiKey")
         return builder
-            .header("authorization", "Bearer $apiKey")
             .header("content-type", "application/json")
             // OpenRouter показывает эти заголовки в статистике; другим сервисам они не мешают.
             .header("x-title", "Nastavnik")

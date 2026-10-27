@@ -5,61 +5,80 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="stylesheet" href="katex/katex.min.css">
 <style>
+  /* Оформление в духе Gemini: ответ без «пузыря», вопрос — в серой пилюле справа. */
   :root {
-    --bg: #fafbff;
-    --text: #1c2033;
-    --muted: #626a85;
-    --accent: #3d5afe;
-    --user-bg: #e8ecff;
-    --bot-bg: #ffffff;
-    --border: #dde2f0;
-    --error-bg: #fdecec;
-    --error-text: #a12121;
+    --text: #1f1f1f;
+    --muted: #444746;
+    --user-bg: #e9eef6;
+    --error-bg: #fce8e6;
+    --error-text: #b3261e;
+    --code-bg: #f0f4f9;
   }
-  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); }
+  html, body { margin: 0; padding: 0; background: #fff; color: var(--text); }
   body {
-    font-family: "Roboto", "Noto Sans", sans-serif;
+    font-family: "Google Sans Text", "Google Sans", "Roboto", "Noto Sans", sans-serif;
     font-size: 16px;
-    line-height: 1.5;
-    padding: 10px 12px 16px;
+    line-height: 1.55;
+    padding: 4px 4px 6px;
     -webkit-text-size-adjust: 100%;
     overflow-wrap: anywhere;
   }
-  #empty { color: var(--muted); text-align: center; margin-top: 24px; font-size: 15px; }
-  #empty b { color: var(--text); }
-  .msg { margin: 8px 0; display: flex; }
+  #list { display: flow-root; }
+  .msg { margin: 10px 0; display: flex; gap: 10px; }
   .msg.user { justify-content: flex-end; }
-  .bubble {
-    max-width: 92%;
-    padding: 8px 12px;
-    border-radius: 14px;
-    background: var(--bot-bg);
-    border: 1px solid var(--border);
+  .avatar { flex: 0 0 22px; height: 22px; margin-top: 2px; }
+  .avatar svg { width: 22px; height: 22px; }
+  .msg.assistant.streaming .avatar svg { animation: spin 1.6s linear infinite; }
+  .bubble { min-width: 0; }
+  .user .bubble {
+    max-width: 85%;
+    background: var(--user-bg);
+    padding: 9px 16px;
+    border-radius: 22px 22px 6px 22px;
   }
-  .user .bubble { background: var(--user-bg); border-color: transparent; border-bottom-right-radius: 4px; }
-  .assistant .bubble { border-bottom-left-radius: 4px; }
-  .error .bubble { background: var(--error-bg); color: var(--error-text); border-color: transparent; }
+  .assistant .bubble { flex: 1; padding-top: 1px; }
+  .error .bubble {
+    flex: 1;
+    background: var(--error-bg);
+    color: var(--error-text);
+    padding: 9px 16px;
+    border-radius: 18px;
+  }
   .shot { font-size: 12px; color: var(--muted); margin-bottom: 2px; }
   .bubble p { margin: 0.35em 0; }
   .bubble p:first-child { margin-top: 0; }
   .bubble p:last-child { margin-bottom: 0; }
   .bubble ul, .bubble ol { margin: 0.3em 0; padding-left: 1.3em; }
-  .bubble code { background: #f1f3f9; padding: 0 3px; border-radius: 3px; font-size: 0.92em; }
-  .bubble pre { background: #f1f3f9; padding: 8px; border-radius: 6px; overflow-x: auto; }
+  .bubble code { background: var(--code-bg); padding: 0 4px; border-radius: 4px; font-size: 0.92em; }
+  .bubble pre { background: var(--code-bg); padding: 10px; border-radius: 12px; overflow-x: auto; }
   .math-block { overflow-x: auto; overflow-y: hidden; margin: 0.4em 0; }
   .katex-display { margin: 0.3em 0; }
   .katex { font-size: 1.08em; }
-  .typing::after {
-    content: "▍";
-    color: var(--accent);
-    animation: blink 1s steps(2, start) infinite;
+  /* «Думаю…» переливается радугой Google */
+  .thinking {
+    font-weight: 500;
+    background: linear-gradient(90deg, #4285f4, #9b72cb, #ea4335, #fbbc04, #34a853, #4285f4);
+    background-size: 300% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: shimmer 2.2s linear infinite;
   }
-  .thinking { color: var(--muted); font-style: italic; }
-  @keyframes blink { to { visibility: hidden; } }
+  .typing::after {
+    content: "";
+    display: inline-block;
+    width: 8px; height: 8px;
+    margin-left: 4px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #4285f4, #d96570);
+    animation: pulse 1s ease-in-out infinite;
+  }
+  @keyframes shimmer { to { background-position: -300% 0; } }
+  @keyframes pulse { 50% { opacity: 0.3; transform: scale(0.7); } }
+  @keyframes spin { to { transform: rotate(360deg); } }
 </style>
 </head>
 <body>
-<div id="empty">Нажми <b>«Подскажи следующий шаг»</b> или задай вопрос.<br>Наставник посмотрит на экран и подскажет, но не решит за тебя.</div>
 <div id="list"></div>
 <script src="katex/katex.min.js"></script>
 <script src="lib/marked.min.js"></script>
@@ -67,28 +86,41 @@
 <script>
 (function () {
   var list = document.getElementById('list');
-  var empty = document.getElementById('empty');
   var nodes = {};
+  var SPARK = '<svg viewBox="0 0 24 24"><defs><linearGradient id="g" x1="0" y1="1" x2="1" y2="0">' +
+    '<stop offset="0" stop-color="#4285F4"/><stop offset="0.55" stop-color="#9B72CB"/><stop offset="1" stop-color="#D96570"/>' +
+    '</linearGradient></defs><path fill="url(#g)" d="M12,1.5C12.7,7.2 16.8,11.3 22.5,12C16.8,12.7 12.7,16.8 12,22.5C11.3,16.8 7.2,12.7 1.5,12C7.2,11.3 11.3,7.2 12,1.5Z"/></svg>';
 
   function nearBottom() {
     return window.innerHeight + window.scrollY >= document.body.scrollHeight - 80;
   }
   function scrollDown() { window.scrollTo(0, document.body.scrollHeight); }
 
+  // Сообщаем приложению высоту переписки — карточка растёт вместе с ней.
+  var lastH = -1;
+  function reportHeight() {
+    var h = Math.ceil(list.getBoundingClientRect().height) + 12;
+    if (h !== lastH && window.NativeChat && NativeChat.onHeight) {
+      lastH = h;
+      NativeChat.onHeight(h);
+    }
+  }
+  if (window.ResizeObserver) new ResizeObserver(reportHeight).observe(list);
+
   function fill(node, m) {
-    node.className = 'msg ' + m.role + (m.error ? ' error' : '');
-    var bubble = node.firstChild;
+    var isBot = m.role === 'assistant';
+    node.className = 'msg ' + m.role + (m.error ? ' error' : '') + (m.streaming ? ' streaming' : '');
     var html = '';
     if (m.role === 'user' && m.hadImage) html += '<div class="shot">📷 со снимком экрана</div>';
-    if (m.role === 'assistant' && m.streaming && !m.text) {
+    if (isBot && m.streaming && !m.text) {
       html += '<span class="thinking">' + (m.status || 'Наставник думает…') + '</span>';
     } else if (m.role === 'user') {
       html += Rich.escape(m.text).replace(/\n/g, '<br>');
     } else {
       html += Rich.render(m.text, false);
     }
-    bubble.innerHTML = html;
-    bubble.classList.toggle('typing', !!(m.streaming && m.text));
+    node.innerHTML = (isBot && !m.error ? '<div class="avatar">' + SPARK + '</div>' : '') +
+      '<div class="bubble' + (m.streaming && m.text ? ' typing' : '') + '">' + html + '</div>';
   }
 
   function upsert(m) {
@@ -96,14 +128,13 @@
     var node = nodes[m.id];
     if (!node) {
       node = document.createElement('div');
-      node.appendChild(document.createElement('div')).className = 'bubble';
       nodes[m.id] = node;
       list.appendChild(node);
       stick = true;
     }
     fill(node, m);
-    empty.style.display = 'none';
     if (stick) scrollDown();
+    reportHeight();
   }
 
   window.Chat = {
@@ -111,14 +142,14 @@
       list.innerHTML = '';
       nodes = {};
       arr.forEach(upsert);
-      empty.style.display = arr.length ? 'none' : 'block';
       scrollDown();
+      reportHeight();
     },
     upsert: upsert,
     remove: function (id) {
       var node = nodes[id];
       if (node) { node.remove(); delete nodes[id]; }
-      empty.style.display = list.children.length ? 'none' : 'block';
+      reportHeight();
     }
   };
   if (window.NativeChat) NativeChat.onReady();

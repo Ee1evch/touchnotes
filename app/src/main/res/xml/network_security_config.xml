@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Прокси вроде Claudex/CLIProxyAPI обычно запущены на компьютере в домашней сети по http://,
+  поэтому обычный http разрешён. Сертификаты, установленные пользователем, тоже принимаются —
+  на случай своего прокси с самоподписанным https.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

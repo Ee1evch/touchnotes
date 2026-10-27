@@ -135,6 +135,7 @@ class BubbleService : LifecycleService(), PanelController.Actions, BubbleView.Li
                 val old = settings
                 settings = s
                 panel.setOptions(s.subject, napp.settings.subjects, regionMode, s.attachShotToTyped, s.provider.shortTitle)
+                panel.setWindowPrefs(s.writingAlpha, s.autoCollapseMin, s.bubbleSide == BubbleSide.LEFT)
                 if (old == null || old.bubbleSizeDp != s.bubbleSizeDp || old.bubbleAlpha != s.bubbleAlpha || old.bubbleSide != s.bubbleSide) {
                     applyBubbleLook(s)
                 }
@@ -485,8 +486,14 @@ class BubbleService : LifecycleService(), PanelController.Actions, BubbleView.Li
     // ---------------- действия панели ----------------
 
     private fun requireKey(): Boolean {
-        if (napp.settings.hasApiKey()) return true
-        panel.showStatus("Сначала вставь API-ключ (${napp.settings.provider().title}) в настройках.", "Настройки") { openSettings() }
+        val reason = napp.settings.notReadyReason() ?: return true
+        // Текст для Gemini/Claude: «Сначала вставь API-ключ (Google Gemini) в настройках.»
+        val text = if (reason.startsWith("Не задан API-ключ")) {
+            "Сначала вставь API-ключ (${napp.settings.provider().title}) в настройках."
+        } else {
+            "$reason. Открой настройки → «Нейросеть»."
+        }
+        panel.showStatus(text, "Настройки") { openSettings() }
         return false
     }
 

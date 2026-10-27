@@ -3,7 +3,13 @@ package app.nastavnik.ui
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.res.painterResource
+import app.nastavnik.R
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.Button
@@ -35,7 +41,6 @@ fun HomeScreen(resumeTick: Int, go: (String) -> Unit) {
     val overlay = remember(resumeTick, tick) { Permissions.overlay(context) }
     val notif = remember(resumeTick, tick) { Permissions.notifications(context) }
     val mic = remember(resumeTick, tick) { Permissions.mic(context) }
-    val hasKey = remember(resumeTick, tick) { context.app.settings.hasApiKey() }
     val running = remember(resumeTick, tick) { BubbleService.running }
     val touchnotes = remember(resumeTick) { TouchnotesSender.findTouchnotes(context) }
 
@@ -45,10 +50,21 @@ fun HomeScreen(resumeTick: Int, go: (String) -> Unit) {
         if (BubbleService.running != running) tick++
     }
 
-    ScreenScaffold(title = "Наставник", onBack = null) {
+    val notReady = remember(resumeTick, tick) { context.app.settings.notReadyReason() }
+
+    ScreenScaffold(title = "", onBack = null) {
+        // Приветствие в стиле Gemini: искра и радужный заголовок.
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Image(painterResource(R.drawable.ic_sparkle), contentDescription = null, modifier = Modifier.size(40.dp))
+            Text(
+                "Привет! Я — Наставник",
+                style = MaterialTheme.typography.headlineMedium.copy(brush = GoogleColors.rainbow, fontWeight = FontWeight.Medium),
+            )
+        }
         Text(
-            "Плавающая кнопка поверх Touchnotes. Нажми её — наставник посмотрит на экран и подскажет следующий шаг, но решать будешь ты.",
+            "Радужная кнопка висит поверх Touchnotes. Нажми её — я посмотрю на экран и подскажу следующий шаг, но решать будешь ты.",
             style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
         SectionCard(if (running) "Наставник включён" else "Наставник выключен") {
@@ -56,49 +72,48 @@ fun HomeScreen(resumeTick: Int, go: (String) -> Unit) {
                 Text("Нужно разрешение «Поверх других окон», иначе кнопку не показать.", color = MaterialTheme.colorScheme.error)
                 Button(onClick = { context.startActivity(Permissions.overlaySettingsIntent(context)) }) { Text("Разрешить показ поверх окон") }
             }
-            if (!hasKey) {
-                Text("Не задан API-ключ (${context.app.settings.provider().title}) — без него наставник не ответит.", color = MaterialTheme.colorScheme.error)
-                OutlinedButton(onClick = { go(MainActivity.SCREEN_SETTINGS) }) { Text("Вставить ключ") }
+            if (notReady != null) {
+                Text("$notReady — без этого наставник не ответит.", color = MaterialTheme.colorScheme.error)
+                OutlinedButton(onClick = { go(MainActivity.SCREEN_SETTINGS) }) { Text("Открыть настройки нейросети") }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                 if (running) {
-                    Button(onClick = { BubbleService.stop(context); tick++ }) { Text("Выключить наставника") }
+                    OutlinedButton(onClick = { BubbleService.stop(context); tick++ }) { Text("Выключить наставника") }
                 } else {
-                    Button(enabled = overlay, onClick = {
+                    RainbowButton("Запустить наставника", enabled = overlay) {
                         BubbleService.start(context)
                         tick++
-                    }) { Text("Запустить наставника") }
+                    }
                 }
                 if (touchnotes != null) {
                     FilledTonalButton(onClick = { openApp(context, touchnotes.packageName) }) { Text("Открыть ${touchnotes.label}") }
                 }
             }
-            Text(
-                listOfNotNull(
-                    "Уведомления: " + if (notif) "есть" else "нет (наставника может выключить система)",
-                    "Микрофон: " + if (mic) "есть" else "нет (голосовой ввод выключен)",
-                    "Touchnotes: " + if (touchnotes != null) "найден — чистовики уйдут прямо в него" else "не найден — будет обычное меню «Поделиться»",
-                ).joinToString("\n"),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.secondary,
-            )
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                StatusPill("Нейросеть: ${context.app.settings.provider().shortTitle}", notReady == null)
+                StatusPill("Уведомления", notif)
+                StatusPill("Микрофон", mic)
+                StatusPill(if (touchnotes != null) "Touchnotes найден" else "Touchnotes не найден", touchnotes != null)
+            }
         }
 
         SectionCard("Как пользоваться") {
             Text(
                 "1. Открой Touchnotes и пиши как обычно — кнопка не мешает: касания стилусом проходят сквозь неё.\n" +
-                    "2. Нажми кнопку пальцем — справа (или снизу) выедет панель. Писать в видимой части можно и с открытой панелью.\n" +
+                    "2. Нажми кнопку пальцем — снизу появится карточка наставника. Пока пишешь мимо неё, она не исчезает, " +
+                    "а становится полупрозрачной; коснись её, и она снова яркая.\n" +
                     "3. «Подскажи следующий шаг», «Проверь, где ошибка», «Объясни теорию» — каждый раз делается свежий снимок экрана.\n" +
-                    "4. Значок рамки в шапке панели — отправлять только выделенную область.\n" +
+                    "4. Значок рамки в шапке карточки — отправлять только выделенную область.\n" +
                     "5. Когда решение готово — «Сделать чистовик»: аккуратный PDF уйдёт в Touchnotes и сохранится в «Документы/Конспекты».\n" +
-                    "6. Долгое нажатие на кнопку — спрятать на 10 минут, настройки, выключить.",
+                    "6. Смахни карточку вниз — она свернётся в кнопку. Долгое нажатие на кнопку — спрятать, настройки, выключить.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
 
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            OutlinedButton(onClick = { go(MainActivity.SCREEN_SETTINGS) }) { Text("Настройки") }
-            OutlinedButton(onClick = { go(MainActivity.SCREEN_HISTORY) }) { Text("История") }
-            OutlinedButton(onClick = { go(MainActivity.SCREEN_CLEAN_TEST) }) { Text("Тест чистовика") }
+            FilledTonalButton(onClick = { go(MainActivity.SCREEN_SETTINGS) }) { Text("Настройки") }
+            FilledTonalButton(onClick = { go(MainActivity.SCREEN_HISTORY) }) { Text("История") }
+            FilledTonalButton(onClick = { go(MainActivity.SCREEN_CLEAN_TEST) }) { Text("Тест чистовика") }
         }
         TextButton(onClick = { go(MainActivity.SCREEN_ONBOARDING) }) {
             Text("Пройти первую настройку заново", fontWeight = FontWeight.Normal)

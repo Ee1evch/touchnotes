@@ -6,6 +6,8 @@ import androidx.core.content.edit
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import app.nastavnik.ai.AiProvider
+import app.nastavnik.ai.AuthMode
+import app.nastavnik.ai.ProxyConfig
 import app.nastavnik.ai.ModelPresets
 import app.nastavnik.ai.OpenAiCompatPresets
 import app.nastavnik.ai.Strictness
@@ -25,6 +27,14 @@ data class AppSettings(
     val cleanModel: String,
     /** Адрес OpenAI-совместимого сервиса (для других провайдеров не используется). */
     val openAiBaseUrl: String,
+    /** Адрес Claude-совместимого прокси (Claudex, CLIProxyAPI…), как ANTHROPIC_BASE_URL. */
+    val anthropicCompatBaseUrl: String,
+    /** Как передавать ключ Claude-совместимому прокси. */
+    val authMode: AuthMode,
+    /** Непрозрачность окна наставника, пока пишешь стилусом мимо него (0.3…1). */
+    val writingAlpha: Float,
+    /** Через сколько минут без касаний окна свернуть его в кнопку (0 — не сворачивать). */
+    val autoCollapseMin: Int,
     val strictness: Strictness,
     val subject: String,
     val bubbleAlpha: Float,
@@ -73,10 +83,14 @@ class SettingsRepo(private val context: Context) {
         model = modelFor(p),
         cleanModel = cleanModelFor(p),
         openAiBaseUrl = prefs.getString(K_OPENAI_BASE, null) ?: OpenAiCompatPresets.OPENAI,
+        anthropicCompatBaseUrl = prefs.getString(K_ANTHROPIC_COMPAT_BASE, null).orEmpty(),
+        authMode = AuthMode.byName(prefs.getString(K_AUTH_MODE, null)),
+        writingAlpha = prefs.getFloat(K_WRITING_ALPHA, 0.6f).coerceIn(0.3f, 1f),
+        autoCollapseMin = prefs.getInt(K_AUTO_COLLAPSE, 0).coerceAtLeast(0),
         strictness = runCatching { Strictness.valueOf(prefs.getString(K_STRICTNESS, null)!!) }.getOrDefault(Strictness.HINTS),
         subject = prefs.getString(K_SUBJECT, null) ?: subjects.first(),
         bubbleAlpha = prefs.getFloat(K_ALPHA, 0.7f).coerceIn(MIN_ALPHA, MAX_ALPHA),
-        bubbleSizeDp = prefs.getInt(K_SIZE, 52).coerceIn(40, 72),
+        bubbleSizeDp = prefs.getInt(K_SIZE, 56).coerceIn(40, 72),
         bubbleSide = if (prefs.getString(K_SIDE, "RIGHT") == "LEFT") BubbleSide.LEFT else BubbleSide.RIGHT,
         bubbleYFraction = prefs.getFloat(K_Y, 0.35f).coerceIn(0f, 1f),
         attachShotToTyped = prefs.getBoolean(K_ATTACH, true),
@@ -98,6 +112,45 @@ class SettingsRepo(private val context: Context) {
     fun setModel(id: String, p: AiProvider = provider()) = prefs.edit { putString("${K_MODEL}_${p.name}", id.trim()) }
     fun setCleanModel(id: String, p: AiProvider = provider()) = prefs.edit { putString("${K_CLEAN_MODEL}_${p.name}", id.trim()) }
     fun setOpenAiBaseUrl(url: String) = prefs.edit { putString(K_OPENAI_BASE, url.trim()) }
+    fun setAnthropicCompatBaseUrl(url: String) = prefs.edit { putString(K_ANTHROPIC_COMPAT_BASE, url.trim()) }
+    fun setAuthMode(m: AuthMode) = prefs.edit { putString(K_AUTH_MODE, m.name) }
+    fun setWritingAlpha(a: Float) = prefs.edit { putFloat(K_WRITING_ALPHA, a.coerceIn(0.3f, 1f)) }
+    fun setAutoCollapseMin(min: Int) = prefs.edit { putInt(K_AUTO_COLLAPSE, min.coerceAtLeast(0)) }
+
+    /** Подставить настройки, вставленные из прокси (Claudex и т.п.). */
+    fun apply(c: ProxyConfig) {
+        setProvider(c.provider)
+        c.baseUrl?.let {
+            when (c.provider) {
+                AiProvider.OPENAI_COMPAT -> setOpenAiBaseUrl(it)
+                AiProvider.ANTHROPIC_COMPAT -> setAnthropicCompatBaseUrl(it)
+                else -> Unit
+            }
+        }
+        c.authMode?.let(::setAuthMode)
+        c.apiKey?.let { setApiKey(it, c.provider) }
+        c.model?.let {
+            setModel(it, c.provider)
+            setCleanModel(it, c.provider)
+        }
+    }
+
+    /**
+     * Готов ли выбранный провайдер к работе. null — готов, иначе текст, что сделать.
+     * Прокси и своим серверам ключ может быть не нужен, зато нужен адрес.
+     */
+    fun notReadyReason(s: AppSettings = load()): String? = when (s.provider) {
+        AiProvider.ANTHROPIC, AiProvider.GEMINI ->
+            if (hasApiKey(s.provider)) null else "Не задан API-ключ (${s.provider.title})"
+        AiProvider.OPENAI_COMPAT -> when {
+            s.openAiBaseUrl.isBlank() -> "Не задан адрес OpenAI-совместимого сервиса"
+            !hasApiKey(s.provider) && ("api.openai.com" in s.openAiBaseUrl || "openrouter.ai" in s.openAiBaseUrl) ->
+                "Не задан API-ключ (${s.provider.title})"
+            else -> null
+        }
+        AiProvider.ANTHROPIC_COMPAT ->
+            if (s.anthropicCompatBaseUrl.isBlank()) "Не задан адрес Claude-совместимого прокси" else null
+    }
     fun setStrictness(s: Strictness) = prefs.edit { putString(K_STRICTNESS, s.name) }
     fun setSubject(s: String) = prefs.edit { putString(K_SUBJECT, s.trim()) }
     fun setBubbleAlpha(a: Float) = prefs.edit { putFloat(K_ALPHA, a.coerceIn(MIN_ALPHA, MAX_ALPHA)) }
@@ -181,6 +234,10 @@ class SettingsRepo(private val context: Context) {
         private const val SECURE_PREFS = "secure_settings"
         private const val K_PROVIDER = "provider"
         private const val K_OPENAI_BASE = "openai_base_url"
+        private const val K_ANTHROPIC_COMPAT_BASE = "anthropic_compat_base_url"
+        private const val K_AUTH_MODE = "anthropic_compat_auth"
+        private const val K_WRITING_ALPHA = "writing_alpha"
+        private const val K_AUTO_COLLAPSE = "auto_collapse_min"
         private const val K_MODEL = "model"
         private const val K_CLEAN_MODEL = "clean_model"
         private const val K_STRICTNESS = "strictness"

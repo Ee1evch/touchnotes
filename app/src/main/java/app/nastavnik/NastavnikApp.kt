@@ -31,6 +31,7 @@ class NastavnikApp : Application() {
         AiProvider.ANTHROPIC -> claude
         AiProvider.GEMINI -> gemini
         AiProvider.OPENAI_COMPAT -> OpenAiClient(http, s.openAiBaseUrl)
+        AiProvider.ANTHROPIC_COMPAT -> ClaudeClient(http, s.anthropicCompatBaseUrl, AiProvider.ANTHROPIC_COMPAT, s.authMode)
     }
 
     override fun onCreate() {

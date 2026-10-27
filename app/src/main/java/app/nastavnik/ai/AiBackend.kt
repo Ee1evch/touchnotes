@@ -24,13 +24,26 @@ enum class AiProvider(
         "AIza…",
     ),
     OPENAI_COMPAT(
-        "OpenAI-совместимый (OpenAI, OpenRouter, свой сервер)",
+        "OpenAI-совместимый (OpenAI, OpenRouter, прокси вроде Claudex/CLIProxyAPI)",
         "OpenAI-совм.",
-        "сайте вашего сервиса",
+        "сайте вашего сервиса или в настройках прокси",
         "https://platform.openai.com/api-keys",
-        "sk-…",
+        "sk-… или ключ прокси",
+    ),
+    ANTHROPIC_COMPAT(
+        "Claude-совместимый прокси (Claudex, CLIProxyAPI, свой сервер)",
+        "Прокси Claude",
+        "настройках вашего прокси",
+        "https://github.com/router-for-me/CLIProxyAPI",
+        "ключ/токен прокси (может быть любым)",
     ),
     ;
+
+    /** У прокси и своих серверов ключ может быть не нужен — главное адрес. */
+    val keyOptional: Boolean get() = this == OPENAI_COMPAT || this == ANTHROPIC_COMPAT
+
+    /** Провайдеру нужен адрес сервера из настроек. */
+    val needsBaseUrl: Boolean get() = this == OPENAI_COMPAT || this == ANTHROPIC_COMPAT
 
     companion object {
         fun byName(name: String?): AiProvider = entries.firstOrNull { it.name == name } ?: ANTHROPIC
@@ -52,11 +65,29 @@ object ModelPresets {
             ModelPreset("gpt-5-mini", "GPT-5 mini", "OpenAI, быстро и недорого"),
             ModelPreset("gpt-5", "GPT-5", "OpenAI, для сложных задач"),
         )
+        // Прокси сам решает, куда отправить модель; эти имена понимают Claudex и CLIProxyAPI.
+        AiProvider.ANTHROPIC_COMPAT -> listOf(
+            ModelPreset("claude-sonnet-4-5", "claude-sonnet-4-5", "частое имя модели в прокси"),
+            ModelPreset("claude-opus-4-1", "claude-opus-4-1", "для сложных задач"),
+            ModelPreset("gpt-5-codex", "gpt-5-codex", "если прокси работает через подписку Codex"),
+        )
     }
 
     fun defaultMentor(provider: AiProvider): String = mentor(provider).first().id
 
     fun defaultClean(provider: AiProvider): String = defaultMentor(provider)
+}
+
+/** Как передавать ключ Claude-совместимому прокси. */
+enum class AuthMode(val label: String) {
+    BOTH("Оба заголовка (подходит почти всем)"),
+    BEARER("Authorization: Bearer (как ANTHROPIC_AUTH_TOKEN)"),
+    X_API_KEY("x-api-key (как ANTHROPIC_API_KEY)"),
+    ;
+
+    companion object {
+        fun byName(name: String?): AuthMode = entries.firstOrNull { it.name == name } ?: BOTH
+    }
 }
 
 /** Готовые адреса OpenAI-совместимых сервисов. */

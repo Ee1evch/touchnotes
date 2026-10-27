@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Четырёхлучевая «искра» с градиентом в духе Gemini -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path android:pathData="M12,1.5C12.7,7.2 16.8,11.3 22.5,12C16.8,12.7 12.7,16.8 12,22.5C11.3,16.8 7.2,12.7 1.5,12C7.2,11.3 11.3,7.2 12,1.5Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="3"
+                android:startY="21"
+                android:endX="21"
+                android:endY="3">
+                <item android:color="#FF4285F4" android:offset="0" />
+                <item android:color="#FF9B72CB" android:offset="0.55" />
+                <item android:color="#FFD96570" android:offset="1" />
+            </gradient>
+        </aapt:attr>
+    </path>
+</vector>

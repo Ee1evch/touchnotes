@@ -53,7 +53,7 @@ fun OnboardingScreen(resumeTick: Int, onDone: () -> Unit, onSkip: () -> Unit) {
     val overlay = remember(resumeTick, permTick) { Permissions.overlay(context) }
     val notif = remember(resumeTick, permTick) { Permissions.notifications(context) }
     val mic = remember(resumeTick, permTick) { Permissions.mic(context) }
-    val hasKey = remember(resumeTick, permTick) { settings.hasApiKey() }
+    val hasKey = remember(resumeTick, permTick) { settings.notReadyReason() == null }
 
     val steps = listOf(
         Step(

@@ -1,18 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ripple xmlns:android="http://schemas.android.com/apk/res/android" android:color="#333D5AFE">
+<ripple xmlns:android="http://schemas.android.com/apk/res/android" android:color="#220B57D0">
     <item>
         <selector>
             <item android:state_selected="true">
                 <shape android:shape="rectangle">
-                    <solid android:color="@color/accent" />
-                    <corners android:radius="14dp" />
+                    <solid android:color="@color/accent_soft" />
+                    <corners android:radius="100dp" />
                 </shape>
             </item>
             <item>
                 <shape android:shape="rectangle">
-                    <solid android:color="#FFFFFF" />
-                    <stroke android:width="1dp" android:color="@color/panel_border" />
-                    <corners android:radius="14dp" />
+                    <solid android:color="@color/surface_container" />
+                    <corners android:radius="100dp" />
                 </shape>
             </item>
         </selector>
