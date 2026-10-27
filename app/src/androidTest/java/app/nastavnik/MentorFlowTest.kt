@@ -204,6 +204,15 @@ class MentorFlowTest {
         assertMarkOn(target!!, got)
         assertTrue("заметка закрыла отмеченное место", !Rect.intersects(note.visibleBounds, got))
 
+        // «Глазик» на заметке прячет выделение и показывает снова.
+        device.findObject(By.desc("Скрыть выделение"))!!.click()
+        SystemClock.sleep(500)
+        assertTrue("выделение не скрылось", AnswerOverlay.shownMarks.isEmpty())
+        screenshot("mark_hidden")
+        device.wait(Until.findObject(By.desc("Показать выделение")), 3000)!!.click()
+        SystemClock.sleep(500)
+        assertEquals("выделение не вернулось", 1, AnswerOverlay.shownMarks.size)
+
         // Первый запрос: стрим, картинка и размер снимка в последнем сообщении, промт с координатами.
         val first = Json.parseToJsonElement(bodies.first()).jsonObject
         val msgs = first["messages"]!!.jsonArray

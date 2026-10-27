@@ -76,6 +76,8 @@ object ImageUtils {
         val screenRect: Rect,
         val gutter: Int = 0,
         val lines: LineMap = LineMap(emptyList(), width, height),
+        /** Яркость пикселей записи — чтобы потом найти отмеченную строку после увеличения страницы. */
+        val luma: IntArray? = null,
     )
 
     /** Ширина поля с номерами строк слева от снимка. */
@@ -108,7 +110,7 @@ object ImageUtils {
             px[i] = (((p shr 16) and 0xFF) * 299 + ((p shr 8) and 0xFF) * 587 + (p and 0xFF) * 114) / 1000
         }
         val lines = InkLines.detect(px, w, h)
-        if (lines.lines.isEmpty()) return Prepared(toJpeg(src), w, h, used, 0, lines)
+        if (lines.lines.isEmpty()) return Prepared(toJpeg(src), w, h, used, 0, lines, px)
         val out = Bitmap.createBitmap(w + GUTTER, h, Bitmap.Config.ARGB_8888)
         val c = Canvas(out)
         c.drawColor(Color.parseColor("#EEF1F6"))
@@ -131,7 +133,30 @@ object ImageUtils {
         }
         val jpeg = toJpeg(out)
         out.recycle()
-        return Prepared(jpeg, w, h, used, GUTTER, lines)
+        return Prepared(jpeg, w, h, used, GUTTER, lines, px)
+    }
+
+    /**
+     * Свежий кадр области экрана [area] → яркость и строки (длинная сторона до 1600 px).
+     * [scale] — во сколько раз уменьшено: пиксель кадра = пиксель экрана × scale.
+     */
+    class Page(val image: app.nastavnik.geom.PageImage, val scale: Float)
+
+    fun page(full: Bitmap, area: Rect): Page {
+        val cropped = crop(full, area)
+        val k = minOf(1f, 1600f / maxOf(cropped.width, cropped.height))
+        val scaled = if (k >= 1f) cropped else Bitmap.createScaledBitmap(cropped, (cropped.width * k).toInt().coerceAtLeast(1), (cropped.height * k).toInt().coerceAtLeast(1), true)
+        val w = scaled.width
+        val h = scaled.height
+        val px = IntArray(w * h)
+        scaled.getPixels(px, 0, w, 0, 0, w, h)
+        for (i in px.indices) {
+            val p = px[i]
+            px[i] = (((p shr 16) and 0xFF) * 299 + ((p shr 8) and 0xFF) * 587 + (p and 0xFF) * 114) / 1000
+        }
+        if (scaled !== cropped && scaled !== full) scaled.recycle()
+        if (cropped !== full) cropped.recycle()
+        return Page(app.nastavnik.geom.PageImage(px, w, h, InkLines.detect(px, w, h)), k)
     }
 
     /** Серая уменьшенная копия всего экрана — для слежения за прокруткой и письмом. */

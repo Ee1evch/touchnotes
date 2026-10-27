@@ -27,7 +27,13 @@ data class PlaceRef(val lines: IntRange? = null, val after: Int? = null, val box
  * Строки записей, найденные на снимке. Приложение подписывает их номерами слева от снимка,
  * модель называет номер, а рамка ложится точно по чернилам — без угадывания координат.
  */
-class LineMap(val lines: List<TextLine>, val width: Int, val height: Int) {
+class LineMap(
+    val lines: List<TextLine>,
+    val width: Int,
+    val height: Int,
+    /** Яркость листа — от неё считается, что такое «чернила». */
+    val background: Int = 255,
+) {
 
     /** Типичная высота строки — от неё зависят отступы. */
     val lineHeight: Int = lines.map { it.height }.sorted().let { if (it.isEmpty()) max(24, height / 30) else it[it.size / 2] }
@@ -101,7 +107,7 @@ class LineMap(val lines: List<TextLine>, val width: Int, val height: Int) {
 /** Поиск строк рукописных записей на снимке по яркости пикселей. */
 object InkLines {
     /** Пиксель — «чернила», если отличается от фона листа сильнее этого. */
-    private const val INK_DIFF = 60
+    const val INK_DIFF = 60
     private const val MAX_LINES = 80
 
     fun detect(luma: IntArray, w: Int, h: Int): LineMap {
@@ -141,7 +147,7 @@ object InkLines {
         }
         // Шум (точки, пылинки) выбрасываем.
         bands.removeAll { b -> b[1] - b[0] < 3 || (b[0] until b[1]).sumOf { rowCount[it] } < 12 }
-        if (bands.isEmpty()) return LineMap(emptyList(), w, h)
+        if (bands.isEmpty()) return LineMap(emptyList(), w, h, bg)
 
         // Склеиваем индексы, степени, дробные черты и точки с соседней строкой.
         val mh = bands.map { it[1] - it[0] }.sorted()[bands.size / 2].coerceAtLeast(4)
@@ -187,7 +193,7 @@ object InkLines {
             lines += TextLine(lines.size + 1, b[0], b[1], segs.first().first, segs.last().last + 1, segs)
             if (lines.size >= MAX_LINES) break
         }
-        return LineMap(lines, w, h)
+        return LineMap(lines, w, h, bg)
     }
 
     /** Яркость листа — самая частая (медиана по выборке). */

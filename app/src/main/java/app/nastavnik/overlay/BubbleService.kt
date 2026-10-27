@@ -35,6 +35,7 @@ import app.nastavnik.capture.ScreenCapturer
 import app.nastavnik.data.AppSettings
 import app.nastavnik.data.BubbleSide
 import app.nastavnik.geom.IRect
+import app.nastavnik.geom.LineMatch
 import app.nastavnik.geom.Motion
 import app.nastavnik.geom.ScreenMotion
 import app.nastavnik.geom.Thumb
@@ -109,6 +110,11 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
     private var dirty = false
     private var lastChangeAt = 0L
     private var lastWatchAt = 0L
+
+    // Перенос выделений после увеличения/уменьшения страницы.
+    private var relocateWanted = false
+    private var prevTrackThumb: Thumb? = null
+    private var lastRelocThumb: Thumb? = null
 
     private val unhide = Runnable {
         hiddenUntil = 0
@@ -200,10 +206,11 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
         menu.dismiss()
         if (barOwner == BarOwner.ACTIONS) bar.dismiss()
         // Повернули планшет — записи легли иначе: отметки прячем, заметки остаются (в пределах экрана).
+        // Повернули планшет — выделения прячем; как только картинка успокоится, найдём строки заново.
         if (overlay.isShowing) {
-            trackRef = null
             overlay.setSuspended(true)
             overlay.onScreenChanged()
+            relocateWanted = true
         }
     }
 
@@ -497,6 +504,11 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
         // Опорный кадр для слежения за прокруткой — тот, по которому отвечал наставник.
         // Кадр появляется не в первом состоянии ответа («Смотрю на экран…»), а после снимка.
         if (a == null || a.seq != trackSeq || (trackRef == null && a.thumb != null)) {
+            if (a?.seq != trackSeq) {
+                relocateWanted = false
+                prevTrackThumb = null
+                lastRelocThumb = null
+            }
             trackSeq = a?.seq ?: -1L
             trackRef = a?.thumb
         }
@@ -701,7 +713,7 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
                 // В отладочной сборке последний снимок лежит в кэше — удобно проверить, что ушло в нейросеть.
                 if (BuildConfig.DEBUG) runCatching { File(cacheDir, "last_shot.jpg").writeBytes(prepared.jpeg) }
                 val r = prepared.screenRect
-                val geometry = ShotGeometry(IRect(r.left, r.top, r.right, r.bottom), prepared.width, prepared.height, prepared.gutter, prepared.lines)
+                val geometry = ShotGeometry(IRect(r.left, r.top, r.right, r.bottom), prepared.width, prepared.height, prepared.gutter, prepared.lines, prepared.luma)
                 if (numberLines) ShotGeometry.last = geometry
                 return ShotResult.Ok(prepared.jpeg, geometry, thumb)
             } finally {
@@ -745,21 +757,88 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
             if (overlay.isShowing && ref != null) {
                 val motion = withContext(Dispatchers.Default) { ScreenMotion.estimate(ref, thumb, mask, thumb.rowMaskOf(rects), area.top, area.bottom) }
                 if (BuildConfig.DEBUG) Log.i(TAG, "track: $motion")
+                val cells = thumb.cols * thumb.rows
                 when (val m = motion) {
                     is Motion.Moved -> {
+                        relocateWanted = false
                         overlay.setSuspended(false)
                         overlay.setOffset(m.dx, m.dy)
                     }
-                    is Motion.Same -> {
+                    // Почти ничего не изменилось (дописали пару слов) — всё на месте.
+                    is Motion.Same -> if (m.changedCells <= cells * RELOCATE_CHANGE) {
+                        relocateWanted = false
                         overlay.setSuspended(false)
                         overlay.setOffset(0, 0)
+                    } else {
+                        relocateWanted = true
                     }
-                    // На экране другое — отметки прячем; заметки остаются, пока их не закроют.
-                    Motion.Replaced -> overlay.setSuspended(true)
+                    // Не просто прокрутка: увеличили, уменьшили, другая страница. Прячем выделения и ищем строки заново.
+                    Motion.Replaced -> {
+                        overlay.setSuspended(true)
+                        relocateWanted = true
+                    }
                 }
+                // Ищем, когда картинка успокоилась (жест увеличения закончился) и с прошлой попытки что-то поменялось.
+                val prevT = prevTrackThumb
+                val stable = prevT != null && ScreenMotion.changedCells(prevT, thumb, mask) <= 2
+                val last = lastRelocThumb
+                val changedSinceTry = last == null || ScreenMotion.changedCells(last, thumb, mask) > cells / 100
+                if (relocateWanted && stable && changedSinceTry) {
+                    lastRelocThumb = thumb
+                    relocateMarks()
+                }
+                prevTrackThumb = thumb
             }
             if (watching) watchTick(thumb, mask, s.watchPauseSec * 1000L)
         }
+    }
+
+    /**
+     * Свежий снимок экрана (без наших окон) → на нём заново ищутся строки, и отмеченные строки узнаются
+     * по «почерку» с учётом масштаба. Выделения встают на новые места; что не нашлось — остаётся скрытым.
+     */
+    private suspend fun relocateMarks() {
+        val a = mentor.state.value.answer ?: return
+        val g = a.geometry ?: return
+        val ref = g.page() ?: return
+        if (!capturer.isActive || capturing) return
+        capturing = true
+        setOverlaysHidden(true)
+        val full: android.graphics.Bitmap? = try {
+            delay(HIDE_DELAY_MS)
+            capturer.capture()
+        } catch (_: CaptureException) {
+            null
+        } finally {
+            setOverlaysHidden(false)
+            capturing = false
+        }
+        if (full == null) return
+        val area = OverlayWindows.contentRect(this)
+        val (rects, thumb) = try {
+            withContext(Dispatchers.Default) {
+                val page = ImageUtils.page(full, area)
+                val k = page.scale
+                val found = a.marks.map { m ->
+                    val nb = m.box ?: return@map null
+                    val box = IRect((nb.left * g.imageW).toInt(), (nb.top * g.imageH).toInt(), (nb.right * g.imageW).toInt(), (nb.bottom * g.imageH).toInt())
+                    LineMatch.relocate(ref, box, page.image)?.let { r ->
+                        IRect(area.left + (r.left / k).toInt(), area.top + (r.top / k).toInt(), area.left + (r.right / k).toInt(), area.top + (r.bottom / k).toInt())
+                    }
+                }
+                found to ImageUtils.thumb(full)
+            }
+        } finally {
+            full.recycle()
+        }
+        if (BuildConfig.DEBUG) Log.i(TAG, "relocate: $rects")
+        // Ответ мог смениться, пока искали.
+        if (mentor.state.value.answer?.seq != a.seq) return
+        relocateWanted = false
+        trackRef = thumb
+        prevTrackThumb = thumb
+        lastRelocThumb = thumb
+        overlay.relocate(rects)
     }
 
     private fun watchTick(thumb: Thumb, mask: BooleanArray, pauseMs: Long) {
@@ -849,6 +928,9 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
         private const val PERMISSION_TIMEOUT_MS = 120_000L
         private const val TICK_MS = 2000L
         private const val MIN_WATCH_GAP_MS = 45_000L
+
+        /** Если изменилось больше этой доли экрана, а сдвига нет — страницу увеличили или сменили. */
+        private const val RELOCATE_CHANGE = 0.04f
 
         @Volatile
         var running = false

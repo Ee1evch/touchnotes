@@ -18,6 +18,7 @@ import app.nastavnik.data.Conversation
 import app.nastavnik.data.Message
 import app.nastavnik.geom.IRect
 import app.nastavnik.geom.LineMap
+import app.nastavnik.geom.PageImage
 import app.nastavnik.geom.PlaceRef
 import app.nastavnik.geom.Thumb
 import kotlinx.coroutines.CancellationException
@@ -44,7 +45,16 @@ data class ShotGeometry(
     val imageH: Int,
     val gutter: Int = 0,
     val lines: LineMap? = null,
+    /** Яркость пикселей записи (без поля) — по ней отмеченная строка находится после увеличения страницы. */
+    val luma: IntArray? = null,
 ) {
+    /** Снимок записи для поиска строк, если он сохранён. */
+    fun page(): PageImage? {
+        val l = luma ?: return null
+        val map = lines ?: return null
+        return if (l.size == imageW * imageH) PageImage(l, imageW, imageH, map) else null
+    }
+
     companion object {
         /** Последний снимок для наставника — по нему тесты узнают номера строк. */
         @Volatile

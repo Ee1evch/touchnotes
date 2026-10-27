@@ -68,13 +68,16 @@ class AnswerOverlay(baseContext: Context, private val wm: WindowManager, private
 
     private fun dp(v: Float) = OverlayWindows.dp(ctx, v)
 
-    private inner class Entry(val mark: Mark, val anchor0: IRect?) {
+    private inner class Entry(val mark: Mark, var anchor0: IRect?) {
         var markView: MarkView? = null
         var markParams: WindowManager.LayoutParams? = null
         val note = NoteWindow(mark.kind)
 
         /** Отмеченное место уехало за край экрана. */
         var offscreen = false
+
+        /** Студент спрятал выделение «глазиком» на заметке. */
+        var userHidden = false
         fun anchor(): IRect? = anchor0?.offset(offX, offY)
     }
 
@@ -177,7 +180,49 @@ class AnswerOverlay(baseContext: Context, private val wm: WindowManager, private
     }
 
     private fun applyMarkVisibility(e: Entry) {
-        e.markView?.visibility = if (!e.offscreen && !marksSuspended) View.VISIBLE else View.INVISIBLE
+        e.markView?.visibility = if (!e.offscreen && !marksSuspended && !e.userHidden) View.VISIBLE else View.INVISIBLE
+    }
+
+    /**
+     * Страницу увеличили или уменьшили: по свежему снимку отмеченные строки нашлись в новых местах.
+     * [anchors] — новые рамки на экране по порядку заметок (null — строку не нашли, выделение прячем).
+     * Сдвиг для слежения отсчитывается заново от этого снимка.
+     */
+    fun relocate(anchors: List<IRect?>) {
+        offX = 0
+        offY = 0
+        marksSuspended = false
+        entries.forEachIndexed { i, e ->
+            if (e.anchor0 == null) return@forEachIndexed
+            val r = anchors.getOrNull(i)
+            if (r == null) {
+                e.offscreen = true
+            } else {
+                e.anchor0 = r
+                e.offscreen = false
+                val mv = e.markView
+                val p = e.markParams
+                if (mv != null && p != null) {
+                    p.x = r.left - mv.pad
+                    p.y = r.top - mv.pad
+                    p.width = r.width + 2 * mv.pad
+                    p.height = r.height + 2 * mv.pad
+                    runCatching { wm.updateViewLayout(mv, p) }
+                }
+                val avoid = entries.filter { it !== e }.flatMap { listOfNotNull(it.note.rect(), it.anchor()) } + listOfNotNull(bubbleRect())
+                e.note.reattach(r, avoid)
+            }
+            applyMarkVisibility(e)
+        }
+        publish()
+    }
+
+    private fun toggleMark(note: NoteWindow): Boolean {
+        val e = entries.firstOrNull { it.note === note } ?: return false
+        e.userHidden = !e.userHidden
+        applyMarkVisibility(e)
+        publish()
+        return e.userHidden
     }
 
     /** Экран повернули или поменялся его размер — заметки возвращаем в его пределы. */
@@ -227,7 +272,7 @@ class AnswerOverlay(baseContext: Context, private val wm: WindowManager, private
 
     /** Обновляет [shownMarks] — по ним тесты проверяют, что отметка легла на место. */
     private fun publish() {
-        shownMarks = entries.filter { !it.offscreen && !marksSuspended }.mapNotNull { e ->
+        shownMarks = entries.filter { !it.offscreen && !marksSuspended && !it.userHidden }.mapNotNull { e ->
             e.markParams?.let { p -> IRect(p.x, p.y, p.x + p.width, p.y + p.height) }
         }
         shownNotes = entries.mapNotNull { it.note.rect() }
@@ -249,6 +294,7 @@ class AnswerOverlay(baseContext: Context, private val wm: WindowManager, private
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
+        private val eye = ImageView(ctx)
         private val primary = pill("", primary = true)
         private val secondary = pill("", primary = false)
         private var params: WindowManager.LayoutParams? = null
@@ -296,7 +342,19 @@ class AnswerOverlay(baseContext: Context, private val wm: WindowManager, private
                 setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
             }
             header.addView(title, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-            header.addView(GripView(ctx), LinearLayout.LayoutParams(dp(28f), dp(36f)))
+            eye.apply {
+                setImageResource(R.drawable.ic_eye)
+                setColorFilter(0xFF5F6368.toInt())
+                setPadding(dp(8f), dp(8f), dp(8f), dp(8f))
+                contentDescription = "Скрыть выделение"
+                setOnClickListener {
+                    val hidden = toggleMark(this@NoteWindow)
+                    setImageResource(if (hidden) R.drawable.ic_eye_off else R.drawable.ic_eye)
+                    contentDescription = if (hidden) "Показать выделение" else "Скрыть выделение"
+                }
+            }
+            header.addView(eye, LinearLayout.LayoutParams(dp(36f), dp(36f)))
+            header.addView(GripView(ctx), LinearLayout.LayoutParams(dp(24f), dp(36f)))
             val close = ImageView(ctx).apply {
                 setImageResource(R.drawable.ic_close)
                 setColorFilter(0xFF5F6368.toInt())
@@ -355,6 +413,8 @@ class AnswerOverlay(baseContext: Context, private val wm: WindowManager, private
 
         fun show(p: Placement, anchor: IRect?, width: Int) {
             this.anchor = anchor
+            // «Глазик» нужен, только если на записи есть выделение.
+            eye.isVisible = anchor != null
             side = if (anchor == null) Side.NONE else p.side
             bg.side = side
             val lp = OverlayWindows.absParams(
@@ -455,6 +515,19 @@ class AnswerOverlay(baseContext: Context, private val wm: WindowManager, private
                 secondary.setOnClickListener { clear(); listener.onAllClosed() }
             }
             if (wasVisible != show) relayout()
+        }
+
+        /** Выделение нашлось в новом месте (страницу увеличили) — заметка встаёт рядом, если её не ставили вручную. */
+        fun reattach(newAnchor: IRect, avoid: List<IRect>) {
+            anchor = newAnchor
+            val p = params ?: return
+            if (!pinned) {
+                val pl = CalloutPlacer.place(contentArea(), newAnchor, p.width, p.height, 0, avoid)
+                p.x = pl.rect.left
+                p.y = pl.rect.top
+                setSide(pl.side)
+            }
+            relayout()
         }
 
         /** Прокрутка страницы: заметка едет за записями, если её не ставили вручную. */
