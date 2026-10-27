@@ -85,24 +85,37 @@ fun SettingsScreen(onBack: () -> Unit) {
             )
         }
 
-        SectionCard("Окно наставника") {
+        SectionCard("Ответы на экране") {
             Text(
-                "Карточка не исчезает, пока ты пишешь стилусом мимо неё, — только становится полупрозрачной. " +
-                    "Коснись её, и она снова яркая. Когда ответ готов, она тоже становится яркой.",
+                "Отдельного окна нет: ответ появляется прямо на записи. Рамка показывает место — красная: ошибка, " +
+                    "синяя пунктирная: где писать дальше, зелёная: верно, фиолетовая: теория, — а рядом заметка. " +
+                    "Прокрутишь страницу — рамки поедут вместе с записями. Заметку можно перетащить пальцем за заголовок или закрыть крестиком.",
                 style = MaterialTheme.typography.bodySmall,
             )
-            var wa by remember(s.writingAlpha) { mutableFloatStateOf(s.writingAlpha) }
-            Text("Непрозрачность, пока пишешь: ${(wa * 100).roundToInt()}%" + if (wa >= 0.99f) " (не меняется)" else "")
+            var fa by remember(s.noteFadeAlpha) { mutableFloatStateOf(s.noteFadeAlpha) }
+            Text("Когда подносишь стилус, заметка становится прозрачной: ${(fa * 100).roundToInt()}%")
             Slider(
-                value = wa,
-                onValueChange = { wa = it },
-                onValueChangeFinished = { repo.setWritingAlpha(wa) },
-                valueRange = 0.3f..1f,
+                value = fa,
+                onValueChange = { fa = it },
+                onValueChangeFinished = { repo.setNoteFadeAlpha(fa) },
+                valueRange = 0.15f..0.8f,
             )
-            Text("Сворачивать в кнопку само")
-            listOf(0 to "Никогда — окно остаётся, сколько бы я ни писал", 3 to "Через 3 минуты без касаний окна",
-                10 to "Через 10 минут", 30 to "Через 30 минут").forEach { (min, label) ->
-                RadioRow(s.autoCollapseMin == min, label) { repo.setAutoCollapseMin(min) }
+        }
+
+        SectionCard("Следить за решением в фоне") {
+            Text(
+                "Наставник раз в пару секунд смотрит на экран — уменьшенный кадр остаётся на планшете. Когда ты перестанешь писать, " +
+                    "он сам проверит решение и отметит ошибку, если найдёт; если всё верно — кнопка мигнёт зелёным. " +
+                    "Каждая проверка — запрос к нейросети (не чаще раза в 45 с). Работает после первого разрешения на снимок экрана.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            listOf(
+                0 to "Выключено — отвечаю, только когда спросишь",
+                5 to "Проверять через 5 с после того, как перестал писать",
+                10 to "Через 10 с",
+                20 to "Через 20 с",
+            ).forEach { (sec, label) ->
+                RadioRow(s.watchPauseSec == sec, label) { repo.setWatchPauseSec(sec) }
             }
         }
 
@@ -132,17 +145,6 @@ fun SettingsScreen(onBack: () -> Unit) {
             Text("Сторона экрана")
             RadioRow(s.bubbleSide == BubbleSide.LEFT, "Слева") { repo.setBubbleSide(BubbleSide.LEFT) }
             RadioRow(s.bubbleSide == BubbleSide.RIGHT, "Справа") { repo.setBubbleSide(BubbleSide.RIGHT) }
-        }
-
-        SectionCard("Вопросы своими словами") {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Прикладывать снимок экрана", modifier = Modifier.weight(1f))
-                Switch(checked = s.attachShotToTyped, onCheckedChange = { repo.setAttachShot(it) })
-            }
-            Text(
-                "Быстрые кнопки всегда делают свежий снимок. Этот переключатель — для вопросов, набранных или сказанных голосом.",
-                style = MaterialTheme.typography.bodySmall,
-            )
         }
 
         SectionCard("Куда отправлять чистовик") {

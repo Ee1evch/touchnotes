@@ -14,11 +14,9 @@
     <color name="accent">#0B57D0</color>
     <color name="accent_dark">#041E49</color>
     <color name="accent_soft">#D3E3FD</color>
-    <color name="panel_bg">#FFFFFF</color>
+    <color name="surface_white">#FFFFFF</color>
     <color name="surface_container">#F0F4F9</color>
     <color name="surface_container_high">#E9EEF6</color>
-    <color name="panel_header">#FFFFFF</color>
-    <color name="panel_border">#C4C7C5</color>
     <color name="text_main">#1F1F1F</color>
     <color name="text_muted">#444746</color>
     <color name="done_bg">#E6F4EA</color>

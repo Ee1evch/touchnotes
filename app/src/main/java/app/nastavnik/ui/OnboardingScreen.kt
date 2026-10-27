@@ -63,7 +63,7 @@ fun OnboardingScreen(resumeTick: Int, onDone: () -> Unit, onSkip: () -> Unit) {
         ),
         Step(
             "Поверх других окон",
-            "Чтобы кнопка и панель висели поверх Touchnotes.",
+            "Чтобы кнопка и ответы наставника появлялись поверх Touchnotes.",
             done = overlay, actionLabel = "Разрешить",
             action = { context.startActivity(Permissions.overlaySettingsIntent(context)) },
         ),

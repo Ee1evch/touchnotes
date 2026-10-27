@@ -25,7 +25,7 @@ object WebViews {
         }
         webView.isVerticalScrollBarEnabled = true
         webView.webViewClient = object : WebViewClient() {
-            // Ссылки из ответа модели никуда не ведут: не открываем чужие страницы внутри панели.
+            // Ссылки из ответа модели никуда не ведут: не открываем чужие страницы внутри приложения.
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean = true
         }
     }
@@ -47,7 +47,7 @@ class CleanView(val webView: WebView, private val mode: String) {
         WebViews.setupLocal(webView)
         webView.setBackgroundColor(if (mode == "export") Color.WHITE else Color.parseColor("#E6E9F0"))
         webView.addJavascriptInterface(Bridge(), "NativeClean")
-        // Ширина WebView меняется (панель показали, повернули экран) — просим страницу вписаться заново.
+        // Ширина WebView меняется (показали предпросмотр, повернули экран) — просим страницу вписаться заново.
         webView.addOnLayoutChangeListener { _, l, _, r, _, ol, _, or, _ ->
             if (r - l != or - ol) fit()
         }

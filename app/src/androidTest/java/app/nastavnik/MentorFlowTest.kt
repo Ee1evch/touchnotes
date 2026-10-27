@@ -1,7 +1,9 @@
 package app.nastavnik
 
 import android.graphics.Bitmap
+import android.content.Intent
 import android.graphics.BitmapFactory
+import android.graphics.Rect
 import android.os.SystemClock
 import android.util.Base64
 import android.util.Log
@@ -11,7 +13,9 @@ import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.Until
+import app.nastavnik.overlay.AnswerOverlay
 import app.nastavnik.overlay.BubbleService
+import app.nastavnik.overlay.OverlayWindows
 import app.nastavnik.ui.MainActivity
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -40,7 +44,8 @@ import java.util.concurrent.CopyOnWriteArrayList
 
 /**
  * Полный сценарий на эмуляторе с мок-сервером вместо api.anthropic.com:
- * вопрос → потоковый ответ с формулами и [[ГОТОВО]] → плашка → чистовик → предпросмотр → сохранение.
+ * вопрос → потоковый ответ с меткой места и [[ГОТОВО]] → рамка и заметка прямо на экране →
+ * «Сделать чистовик» → предпросмотр → сохранение. Отдельно: рамка едет вместе с прокруткой.
  */
 @RunWith(AndroidJUnit4::class)
 class MentorFlowTest {
@@ -50,17 +55,21 @@ class MentorFlowTest {
     private val pkg = ctx.packageName
     private lateinit var server: MockWebServer
     private val bodies = CopyOnWriteArrayList<String>()
+    private val sizeRe = Regex("""\[Снимок экрана: (\d+)×(\d+) пикселей]""")
 
-    private val answer = "Верно! Производная \$f'(x) = 3x^2 - 3\$ найдена правильно, и точки \$x = \\pm 1\$ тоже.\n\n" +
-        "\$\$f(-1) = 2,\\quad f(1) = -2\$\$\n\nРешение доведено до ответа.\n[[ГОТОВО]]"
+    /** Рамка: от 25% до 60% ширины снимка и от 30% до 40% высоты — в пикселях присланного снимка. */
+    private fun answer(w: Int, h: Int): String =
+        "@@ ok ${w / 4} ${h * 3 / 10} ${w * 6 / 10} ${h * 4 / 10}\n" +
+            "Верно! Производная \$f'(x) = 3x^2 - 3\$ найдена правильно, и точки \$x = \\pm 1\$ тоже.\n\n" +
+            "\$\$f(-1) = 2,\\quad f(1) = -2\$\$\n[[ГОТОВО]]"
 
-    private fun sse(): String = buildString {
+    private fun sse(text: String): String = buildString {
         append("event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"m\"}}\n\n")
         append("event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\n")
         // Отдаём ответ кусочками, как настоящий стрим.
-        answer.chunked(12).forEach { part ->
-            val text = JsonPrimitive(part).toString() // уже в кавычках и экранирован
-            append("event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":$text}}\n\n")
+        text.chunked(12).forEach { part ->
+            val t = JsonPrimitive(part).toString() // уже в кавычках и экранирован
+            append("event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":$t}}\n\n")
         }
         append("event: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"}}\n\n")
         append("event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n")
@@ -75,7 +84,10 @@ class MentorFlowTest {
                 val body = request.body.readUtf8()
                 bodies += body
                 return if (body.contains("\"stream\":true")) {
-                    MockResponse().setHeader("content-type", "text/event-stream").setBody(sse())
+                    val m = sizeRe.find(body)
+                    val w = m?.groupValues?.get(1)?.toInt() ?: 1000
+                    val h = m?.groupValues?.get(2)?.toInt() ?: 700
+                    MockResponse().setHeader("content-type", "text/event-stream").setBody(sse(answer(w, h)))
                 } else {
                     // Модель «обернула» JSON в ```json — парсер должен справиться.
                     val text = "Вот чистовик:\n```json\n$note\n```"
@@ -96,6 +108,7 @@ class MentorFlowTest {
         s.setProjectionExplained(true)
         s.setApiKey("sk-ant-test")
         s.setActiveConversation(0)
+        s.setWatchPauseSec(0)
         s.setDebugBaseUrl(server.url("/").toString().trimEnd('/'))
     }
 
@@ -120,30 +133,57 @@ class MentorFlowTest {
         println("IMG-END $name")
     }
 
+    private fun askHint() {
+        device.wait(Until.findObject(By.desc("Наставник").pkg(pkg)), 8000)!!.click()
+        device.wait(Until.findObject(By.text("Подсказка")), 8000)!!.click()
+    }
+
+    /** Где на экране должна быть рамка: снимок — это экран без системных панелей. */
+    private fun expectedMark(): Rect {
+        val cr = OverlayWindows.contentRect(ctx)
+        return Rect(
+            cr.left + cr.width() / 4, cr.top + cr.height() * 3 / 10,
+            cr.left + cr.width() * 6 / 10, cr.top + cr.height() * 4 / 10,
+        )
+    }
+
     @Test
-    fun questionDoneBannerCleanPreviewAndSave() {
+    fun answerIsDrawnOnTheScreenThenCleanCopyIsSaved() {
         val scenario = ActivityScenario.launch(MainActivity::class.java)
         SystemClock.sleep(800)
         scenario.onActivity { BubbleService.start(it) }
-        device.wait(Until.findObject(By.desc("Наставник").pkg(pkg)), 8000)!!.click()
-        device.wait(Until.findObject(By.text("Подскажи следующий шаг").enabled(true)), 8000)!!.click()
+        askHint()
 
-        // Потоковый ответ закончился → маркер спрятан, показана плашка.
-        val banner = device.wait(Until.findObject(By.text("Решение готово. Сделать чистовик?")), 40000)
+        // Ответ пришёл → рамка на месте, рядом заметка с кнопкой «Сделать чистовик».
+        val cleanBtn = device.wait(Until.findObject(By.text("Сделать чистовик")), 40000)
         SystemClock.sleep(1500)
         screenshot("flow_answer")
-        assertNotNull("нет плашки «Решение готово»", banner)
+        assertNotNull("нет кнопки «Сделать чистовик» в заметке", cleanBtn)
+        val mark = AnswerOverlay.shownMarks.singleOrNull()
+        assertNotNull("рамка не нарисована", mark)
+        val note = device.findObject(By.desc("Заметка: Верно"))
+        assertNotNull("заметка не показана", note)
+        val exp = expectedMark()
+        val got = Rect(mark!!.left, mark.top, mark.right, mark.bottom)
+        Log.i("MentorFlowTest", "mark expected=$exp got=$got note=${note.visibleBounds}")
+        val tol = device.displayWidth / 40
+        assertTrue("рамка не на месте: ждали центр (${exp.centerX()}, ${exp.centerY()}), а она $got",
+            kotlin.math.abs(got.centerX() - exp.centerX()) <= tol && kotlin.math.abs(got.centerY() - exp.centerY()) <= tol)
+        assertTrue("заметка закрыла отмеченное место", !Rect.intersects(note.visibleBounds, exp))
 
-        // Первый запрос: стрим, картинка в последнем сообщении, системный промт наставника.
+        // Первый запрос: стрим, картинка и размер снимка в последнем сообщении, промт с координатами.
         val first = Json.parseToJsonElement(bodies.first()).jsonObject
         val msgs = first["messages"]!!.jsonArray
         val lastContent = msgs.last().jsonObject["content"] as JsonArray
         assertEquals("image", (lastContent[0].jsonObject["type"] as JsonPrimitive).content)
-        assertTrue((first["system"] as JsonPrimitive).content.contains("Ты — наставник"))
+        assertTrue(bodies.first().contains("[Снимок экрана:"))
+        val system = (first["system"] as JsonPrimitive).content
+        assertTrue(system.contains("Ты — наставник"))
+        assertTrue(system.contains("в пикселях"))
 
-        // Чистовик: снимок → сборка → предпросмотр.
-        device.findObject(By.res(pkg, "done_clean")).click()
-        device.wait(Until.findObject(By.text("Собрать чистовик").enabled(true)), 15000)!!.click()
+        // Чистовик: снимок → «Собрать» → предпросмотр открывается сам.
+        cleanBtn.click()
+        device.wait(Until.findObject(By.text("Собрать")), 15000)!!.click()
         assertNotNull("нет предпросмотра", device.wait(Until.findObject(By.text("Сохранить")), 40000))
         SystemClock.sleep(4000)
         screenshot("flow_preview")
@@ -167,6 +207,39 @@ class MentorFlowTest {
         assertTrue(File(n.pdfPath!!).length() > 20_000)
         assertNotNull(n.publicPath)
         device.pressBack()
+        scenario.close()
+    }
+
+    @Test
+    fun markFollowsScrolledPage() {
+        // Длинный экран настроек — его можно прокрутить, как страницу в Touchnotes.
+        val scenario = ActivityScenario.launch<MainActivity>(
+            Intent(ctx, MainActivity::class.java).putExtra(MainActivity.EXTRA_SCREEN, MainActivity.SCREEN_SETTINGS),
+        )
+        SystemClock.sleep(1200)
+        scenario.onActivity { BubbleService.start(it) }
+        askHint()
+        assertNotNull("нет заметки", device.wait(Until.findObject(By.desc("Заметка: Верно")), 40000))
+        SystemClock.sleep(5000) // пусть слежение сделает пару кадров
+        val before = AnswerOverlay.shownMarks.singleOrNull()
+        assertNotNull("рамка не нарисована", before)
+        val label = device.findObject(By.text("Строгость наставника"))
+        val labelBefore = label?.visibleBounds
+        val x = device.displayWidth / 8
+        device.swipe(x, device.displayHeight * 3 / 4, x, device.displayHeight * 2 / 4, 60)
+        SystemClock.sleep(7000)
+        screenshot("scroll_follow")
+        val after = AnswerOverlay.shownMarks.singleOrNull()
+        val labelAfter = device.findObject(By.text("Строгость наставника"))?.visibleBounds
+        Log.i("MentorFlowTest", "scroll: mark $before -> $after, label $labelBefore -> $labelAfter")
+        assertNotNull("рамка пропала после прокрутки", after)
+        if (labelBefore != null && labelAfter != null) {
+            val pageDy = labelAfter.top - labelBefore.top
+            val markDy = after!!.top - before!!.top
+            assertTrue("страница не прокрутилась ($pageDy)", kotlin.math.abs(pageDy) > 60)
+            assertTrue("рамка не поехала вместе со страницей: страница $pageDy, рамка $markDy",
+                kotlin.math.abs(markDy - pageDy) <= device.displayHeight / 25)
+        }
         scenario.close()
     }
 }

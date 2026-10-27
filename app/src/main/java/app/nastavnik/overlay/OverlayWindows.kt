@@ -45,6 +45,25 @@ object OverlayWindows {
             layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
         }
 
+    /**
+     * Окно в абсолютных координатах экрана (с учётом строки состояния и выреза) —
+     * для заметок, которые должны лечь точно на место на снимке.
+     */
+    fun absParams(x: Int, y: Int, width: Int, height: Int, flags: Int): WindowManager.LayoutParams =
+        params(width, height, flags or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS).apply {
+            this.x = x
+            this.y = y
+            if (Build.VERSION.SDK_INT >= 30) {
+                fitInsetsTypes = 0
+                layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+            } else {
+                layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+            }
+        }
+
+    /** Android 12+ пропускает касания сквозь чужое окно, только если его непрозрачность не больше 0,8. */
+    const val MAX_PASS_THROUGH_ALPHA = 0.8f
+
     @Suppress("DEPRECATION")
     fun screenSize(context: Context): Point {
         val m = DisplayMetrics()

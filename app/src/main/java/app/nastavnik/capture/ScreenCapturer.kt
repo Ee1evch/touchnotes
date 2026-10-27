@@ -16,6 +16,8 @@ import android.os.Looper
 import android.util.DisplayMetrics
 import android.view.Display
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.resume
@@ -91,8 +93,12 @@ class ScreenCapturer(private val context: Context) {
         }
     }
 
+    private val lock = Mutex()
+
     /** Полный снимок экрана в реальном разрешении (вместе со строкой состояния). */
-    suspend fun capture(): Bitmap {
+    suspend fun capture(): Bitmap = lock.withLock { captureLocked() }
+
+    private suspend fun captureLocked(): Bitmap {
         val vd = virtualDisplay ?: throw CaptureException("Нет разрешения на снимок экрана")
         val m = realMetrics()
         if (m.widthPixels != width || m.heightPixels != height || m.densityDpi != dpi) {

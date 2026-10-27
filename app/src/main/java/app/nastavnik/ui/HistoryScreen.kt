@@ -162,7 +162,7 @@ private fun CleanNoteList() {
     var message by remember { mutableStateOf<String?>(null) }
     message?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
     if (items.isEmpty()) {
-        Text("Чистовиков пока нет. Их делает кнопка «Сделать чистовик» в панели.", color = MaterialTheme.colorScheme.secondary)
+        Text("Чистовиков пока нет. Их делает пункт «Чистовик» в меню кнопки наставника.", color = MaterialTheme.colorScheme.secondary)
     }
     items.forEach { n: CleanNoteEntity ->
         val pdf = n.pdfPath?.let(::File)?.takeIf { it.exists() }

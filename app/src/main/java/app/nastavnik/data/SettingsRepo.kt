@@ -31,17 +31,16 @@ data class AppSettings(
     val anthropicCompatBaseUrl: String,
     /** Как передавать ключ Claude-совместимому прокси. */
     val authMode: AuthMode,
-    /** Непрозрачность окна наставника, пока пишешь стилусом мимо него (0.3…1). */
-    val writingAlpha: Float,
-    /** Через сколько минут без касаний окна свернуть его в кнопку (0 — не сворачивать). */
-    val autoCollapseMin: Int,
+    /** Тихая проверка в фоне: через сколько секунд после того, как перестал писать (0 — выключена). */
+    val watchPauseSec: Int,
+    /** Насколько прозрачными становятся заметки, когда к ним подносят стилус (0.15…0.8). */
+    val noteFadeAlpha: Float,
     val strictness: Strictness,
     val subject: String,
     val bubbleAlpha: Float,
     val bubbleSizeDp: Int,
     val bubbleSide: BubbleSide,
     val bubbleYFraction: Float,
-    val attachShotToTyped: Boolean,
     /** "auto" — Touchnotes, если найден; "chooser" — всегда спрашивать; иначе "pkg/activity|action". */
     val sendTarget: String,
     val onboardingDone: Boolean,
@@ -85,15 +84,14 @@ class SettingsRepo(private val context: Context) {
         openAiBaseUrl = prefs.getString(K_OPENAI_BASE, null) ?: OpenAiCompatPresets.OPENAI,
         anthropicCompatBaseUrl = prefs.getString(K_ANTHROPIC_COMPAT_BASE, null).orEmpty(),
         authMode = AuthMode.byName(prefs.getString(K_AUTH_MODE, null)),
-        writingAlpha = prefs.getFloat(K_WRITING_ALPHA, 0.6f).coerceIn(0.3f, 1f),
-        autoCollapseMin = prefs.getInt(K_AUTO_COLLAPSE, 0).coerceAtLeast(0),
+        watchPauseSec = prefs.getInt(K_WATCH_PAUSE, 0).coerceAtLeast(0),
+        noteFadeAlpha = prefs.getFloat(K_NOTE_FADE, 0.35f).coerceIn(0.15f, 0.8f),
         strictness = runCatching { Strictness.valueOf(prefs.getString(K_STRICTNESS, null)!!) }.getOrDefault(Strictness.HINTS),
         subject = prefs.getString(K_SUBJECT, null) ?: subjects.first(),
         bubbleAlpha = prefs.getFloat(K_ALPHA, 0.7f).coerceIn(MIN_ALPHA, MAX_ALPHA),
         bubbleSizeDp = prefs.getInt(K_SIZE, 56).coerceIn(40, 72),
         bubbleSide = if (prefs.getString(K_SIDE, "RIGHT") == "LEFT") BubbleSide.LEFT else BubbleSide.RIGHT,
         bubbleYFraction = prefs.getFloat(K_Y, 0.35f).coerceIn(0f, 1f),
-        attachShotToTyped = prefs.getBoolean(K_ATTACH, true),
         sendTarget = prefs.getString(K_TARGET, TARGET_AUTO) ?: TARGET_AUTO,
         onboardingDone = prefs.getBoolean(K_ONBOARDING, false),
         projectionExplained = prefs.getBoolean(K_PROJ_EXPLAINED, false),
@@ -114,8 +112,8 @@ class SettingsRepo(private val context: Context) {
     fun setOpenAiBaseUrl(url: String) = prefs.edit { putString(K_OPENAI_BASE, url.trim()) }
     fun setAnthropicCompatBaseUrl(url: String) = prefs.edit { putString(K_ANTHROPIC_COMPAT_BASE, url.trim()) }
     fun setAuthMode(m: AuthMode) = prefs.edit { putString(K_AUTH_MODE, m.name) }
-    fun setWritingAlpha(a: Float) = prefs.edit { putFloat(K_WRITING_ALPHA, a.coerceIn(0.3f, 1f)) }
-    fun setAutoCollapseMin(min: Int) = prefs.edit { putInt(K_AUTO_COLLAPSE, min.coerceAtLeast(0)) }
+    fun setWatchPauseSec(sec: Int) = prefs.edit { putInt(K_WATCH_PAUSE, sec.coerceAtLeast(0)) }
+    fun setNoteFadeAlpha(a: Float) = prefs.edit { putFloat(K_NOTE_FADE, a.coerceIn(0.15f, 0.8f)) }
 
     /** Подставить настройки, вставленные из прокси (Claudex и т.п.). */
     fun apply(c: ProxyConfig) {
@@ -160,7 +158,6 @@ class SettingsRepo(private val context: Context) {
         putString(K_SIDE, side.name)
         putFloat(K_Y, yFraction.coerceIn(0f, 1f))
     }
-    fun setAttachShot(v: Boolean) = prefs.edit { putBoolean(K_ATTACH, v) }
     fun setSendTarget(v: String) = prefs.edit { putString(K_TARGET, v) }
     fun setOnboardingDone(v: Boolean) = prefs.edit { putBoolean(K_ONBOARDING, v) }
     fun setProjectionExplained(v: Boolean) = prefs.edit { putBoolean(K_PROJ_EXPLAINED, v) }
@@ -236,8 +233,8 @@ class SettingsRepo(private val context: Context) {
         private const val K_OPENAI_BASE = "openai_base_url"
         private const val K_ANTHROPIC_COMPAT_BASE = "anthropic_compat_base_url"
         private const val K_AUTH_MODE = "anthropic_compat_auth"
-        private const val K_WRITING_ALPHA = "writing_alpha"
-        private const val K_AUTO_COLLAPSE = "auto_collapse_min"
+        private const val K_WATCH_PAUSE = "watch_pause_sec"
+        private const val K_NOTE_FADE = "note_fade_alpha"
         private const val K_MODEL = "model"
         private const val K_CLEAN_MODEL = "clean_model"
         private const val K_STRICTNESS = "strictness"
@@ -246,7 +243,6 @@ class SettingsRepo(private val context: Context) {
         private const val K_SIZE = "bubble_size"
         private const val K_SIDE = "bubble_side"
         private const val K_Y = "bubble_y"
-        private const val K_ATTACH = "attach_shot"
         private const val K_TARGET = "send_target"
         private const val K_ONBOARDING = "onboarding_done"
         private const val K_PROJ_EXPLAINED = "projection_explained"

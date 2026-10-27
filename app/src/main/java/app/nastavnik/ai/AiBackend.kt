@@ -45,6 +45,18 @@ enum class AiProvider(
     /** Провайдеру нужен адрес сервера из настроек. */
     val needsBaseUrl: Boolean get() = this == OPENAI_COMPAT || this == ANTHROPIC_COMPAT
 
+    /**
+     * В какой системе модель пишет координаты заметок на снимке. Claude — в пикселях снимка
+     * (снимок не больше 1,15 Мп, поэтому API его не уменьшает); Gemini — box_2d на 1000;
+     * остальные — доли от 1000: сервис может сам уменьшить картинку, и пиксели «уедут».
+     */
+    fun coordMode(model: String): CoordMode = when (this) {
+        ANTHROPIC -> CoordMode.PIXELS_XY
+        GEMINI -> CoordMode.NORM_YX
+        ANTHROPIC_COMPAT -> if (model.startsWith("claude")) CoordMode.PIXELS_XY else CoordMode.NORM_XY
+        OPENAI_COMPAT -> if (model.startsWith("gemini")) CoordMode.NORM_YX else CoordMode.NORM_XY
+    }
+
     companion object {
         fun byName(name: String?): AiProvider = entries.firstOrNull { it.name == name } ?: ANTHROPIC
     }

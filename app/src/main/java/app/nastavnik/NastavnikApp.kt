@@ -13,6 +13,9 @@ import app.nastavnik.ai.OpenAiClient
 import app.nastavnik.data.AppDatabase
 import app.nastavnik.data.AppSettings
 import app.nastavnik.data.SettingsRepo
+import app.nastavnik.session.CleanSession
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.MainScope
 
 class NastavnikApp : Application() {
     val settings: SettingsRepo by lazy { SettingsRepo(this) }
@@ -25,6 +28,12 @@ class NastavnikApp : Application() {
         }
     }
     private val gemini: GeminiClient by lazy { GeminiClient(http) }
+
+    /** Живёт, пока живёт процесс: чистовик продолжает сохраняться, даже если экран закрыли. */
+    val appScope: CoroutineScope = MainScope()
+
+    /** Чистовик общий для кнопки поверх Touchnotes и экрана предпросмотра. */
+    val clean: CleanSession by lazy { CleanSession(this, appScope) }
 
     /** Клиент выбранного в настройках провайдера. */
     fun ai(s: AppSettings = settings.load()): AiBackend = when (s.provider) {

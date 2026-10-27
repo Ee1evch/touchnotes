@@ -106,7 +106,7 @@ class RequestBuilderTest {
         val s = Prompts.mentorSystem("Физика", Strictness.QUESTIONS_ONLY)
         assertTrue(s.contains("Предмет: Физика."))
         assertTrue(s.contains("Строгость: только наводящие вопросы"))
-        assertTrue(s.trimEnd().endsWith("[[ГОТОВО]]."))
+        assertTrue(s.contains("последней строкой напиши ровно [[ГОТОВО]]."))
         val clean = Prompts.cleanSystem("Матлогика")
         assertTrue(clean.contains("Предмет: Матлогика."))
         assertTrue(clean.contains("\$формулами\$"))

@@ -125,7 +125,7 @@ class SmokeTest {
     }
 
     @Test
-    fun bubblePanelCaptureAndApiError() {
+    fun bubbleMenuCaptureAndApiError() {
         shell("appops set $pkg SYSTEM_ALERT_WINDOW allow")
         shell("appops set $pkg PROJECT_MEDIA allow")
         shell("pm grant $pkg android.permission.POST_NOTIFICATIONS")
@@ -135,6 +135,7 @@ class SmokeTest {
         settings.setProjectionExplained(true)
         settings.setApiKey("sk-ant-test-invalid-key")
         settings.setActiveConversation(0)
+        settings.setWatchPauseSec(0)
 
         val scenario = ActivityScenario.launch(MainActivity::class.java)
         SystemClock.sleep(800)
@@ -145,35 +146,35 @@ class SmokeTest {
         Log.i(TAG, "bubble bounds=$b display=${device.displayWidth}x${device.displayHeight}")
         screenshot("bubble")
 
-        // 1. Стилус по кнопке не открывает панель.
+        // 1. Стилус по кнопке не открывает меню.
         stylusTap(b.exactCenterX(), b.exactCenterY())
         SystemClock.sleep(1000)
-        assertFalse("стилус открыл панель", device.hasObject(By.text("Подскажи следующий шаг")))
+        assertFalse("стилус открыл меню", device.hasObject(By.text("Подсказка")))
 
-        // 2. Палец открывает панель.
+        // 2. Палец открывает короткое меню у кнопки — никакого окна-панели.
         SystemClock.sleep(1200)
-        device.wait(Until.findObject(By.desc("Наставник").pkg(pkg)), 3000)?.click()
-        val quick = device.wait(Until.findObject(By.text("Подскажи следующий шаг")), 5000)
-        assertNotNull("панель не открылась пальцем", quick)
-        SystemClock.sleep(800)
-        screenshot("panel_open")
+        tapBubble()
+        assertNotNull("меню не открылось пальцем", device.wait(Until.findObject(By.text("Подсказка")), 5000))
+        assertNotNull(device.findObject(By.text("Где ошибка?")))
+        SystemClock.sleep(600)
+        screenshot("menu_open")
 
-        // 3. Касание мимо панели уходит в приложение под ней (кнопка «Настройки» на главном экране).
-        val panelTop = device.findObject(By.res(pkg, "panel_card"))?.visibleBounds
-        Log.i(TAG, "panel bounds=$panelTop")
+        // 3. Касание мимо меню закрывает его и уходит в приложение под ним (кнопка «Настройки» на главном экране).
         val settingsBtn = device.findObject(By.text("Настройки"))
-        if (settingsBtn != null && panelTop != null && !panelTop.contains(settingsBtn.visibleCenter.x, settingsBtn.visibleCenter.y)) {
+        if (settingsBtn != null) {
             settingsBtn.click()
             val opened = device.wait(Until.hasObject(By.textContains("Модель наставника")), 4000)
-            Log.i(TAG, "tap outside panel reached app below: $opened")
-            assertTrue("касание мимо панели не дошло до приложения под ней", opened)
-        } else {
-            Log.i(TAG, "кнопка «Настройки» закрыта панелью — проверка касания мимо пропущена")
+            Log.i(TAG, "tap outside menu reached app below: $opened")
+            assertTrue("касание мимо меню не дошло до приложения под ним", opened)
+            assertFalse("меню не закрылось", device.hasObject(By.text("Где ошибка?")))
+            device.pressBack()
+            SystemClock.sleep(800)
         }
 
-        // 4. Быстрая кнопка: снимок экрана + запрос с неверным ключом → понятная ошибка без падения.
+        // 4. «Где ошибка?»: снимок экрана + запрос с неверным ключом → понятная ошибка у кнопки, без падения.
         File(ctx.cacheDir, "last_shot.jpg").delete()
-        device.findObject(By.text("Подскажи следующий шаг")).click()
+        tapBubble()
+        device.wait(Until.findObject(By.text("Где ошибка?")), 5000)!!.click()
         // Если система всё же показала диалог записи экрана — подтверждаем.
         device.wait(Until.findObject(By.text(Pattern.compile("(?i)(start now|start|начать|next|далее|share screen)"))), 4000)?.let {
             Log.i(TAG, "projection dialog button: ${it.text}")
@@ -182,21 +183,24 @@ class SmokeTest {
         }
         val err = device.wait(Until.findObject(By.textContains("API-ключ")), 30000)
             ?: device.wait(Until.findObject(By.textContains("401")), 2000)
-        SystemClock.sleep(1500)
+        SystemClock.sleep(1200)
         screenshot("after_question")
         val shot = File(ctx.cacheDir, "last_shot.jpg")
         Log.i(TAG, "last_shot exists=${shot.exists()} size=${shot.length()}")
         if (shot.exists()) logImage("last_shot", BitmapFactory.decodeFile(shot.absolutePath))
         assertTrue("снимок экрана не сделан", shot.exists() && shot.length() > 5_000)
         assertNotNull("не показана понятная ошибка про ключ", err)
-
-        // 5. Режим «Выделить область»: обводим прямоугольник — уходит только он.
         val fullOpts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeFile(shot.absolutePath, fullOpts)
-        device.findObject(By.res(pkg, "btn_region")).click()
+        assertTrue("снимок больше 1,15 Мп", fullOpts.outWidth.toLong() * fullOpts.outHeight <= 1_150_000L)
+
+        // 5. Режим «Выделить область» из меню долгого нажатия: обводим прямоугольник — уходит только он.
+        device.findObject(By.desc("Наставник").pkg(pkg)).longClick()
+        device.wait(Until.findObject(By.text("Выделять область перед вопросом")), 4000)!!.click()
         SystemClock.sleep(600)
         shot.delete()
-        device.wait(Until.findObject(By.text("Проверь, где ошибка").enabled(true)), 10000).click()
+        tapBubble()
+        device.wait(Until.findObject(By.text("Где ошибка?")), 5000)!!.click()
         assertNotNull("не появилось затемнение для выбора области", device.wait(Until.findObject(By.textContains("Обведи пальцем")), 8000))
         device.swipe(300, 300, 1100, 900, 30)
         SystemClock.sleep(500)
@@ -209,15 +213,17 @@ class SmokeTest {
         Log.i(TAG, "full shot ${fullOpts.outWidth}x${fullOpts.outHeight}, region shot ${regionOpts.outWidth}x${regionOpts.outHeight}")
         assertTrue("снимок области не меньше полного", shot.exists() && regionOpts.outWidth in 1 until fullOpts.outWidth)
         BitmapFactory.decodeFile(shot.absolutePath)?.let { logImage("region_shot", it) }
-        device.findObject(By.res(pkg, "btn_region")).click()
+        device.findObject(By.desc("Наставник").pkg(pkg)).longClick()
+        device.wait(Until.findObject(By.text("Отправлять весь экран")), 4000)!!.click()
         SystemClock.sleep(600)
 
-        // 6. Чистовик через панель: снимок → «Собрать» → понятная ошибка ключа, без падения.
-        device.wait(Until.findObject(By.text("Сделать чистовик").enabled(true)), 10000).click()
-        assertNotNull("нет кнопки «Собрать чистовик»", device.wait(Until.findObject(By.text("Собрать чистовик").enabled(true)), 15000))
+        // 6. Чистовик из меню: снимок → «Собрать» → понятная ошибка ключа, без падения.
+        tapBubble()
+        device.wait(Until.findObject(By.text("Чистовик")), 5000)!!.click()
+        assertNotNull("нет кнопки «Собрать»", device.wait(Until.findObject(By.text("Собрать")), 15000))
         screenshot("clean_collecting")
-        device.findObject(By.text("Собрать чистовик")).click()
-        assertNotNull("чистовик не показал ошибку", device.wait(Until.findObject(By.text("Не получилось")), 40000))
+        device.findObject(By.text("Собрать")).click()
+        assertNotNull("чистовик не показал ошибку", device.wait(Until.findObject(By.textStartsWith("Не получилось")), 40000))
         SystemClock.sleep(800)
         screenshot("clean_failed")
         device.findObject(By.text("Отмена"))?.click()
@@ -226,16 +232,17 @@ class SmokeTest {
         // 7. Переключение на Gemini без ключа → понятная подсказка, запрос не уходит.
         settings.setProvider(app.nastavnik.ai.AiProvider.GEMINI)
         settings.setApiKey("", app.nastavnik.ai.AiProvider.GEMINI)
-        assertNotNull("заголовок не показал Gemini", device.wait(Until.findObject(By.text("Наставник · Gemini")), 4000))
-        device.findObject(By.text("Подскажи следующий шаг")).click()
+        SystemClock.sleep(500)
+        tapBubble()
+        device.wait(Until.findObject(By.text("Подсказка")), 5000)!!.click()
         assertNotNull("нет подсказки про ключ Gemini", device.wait(Until.findObject(By.textContains("Google Gemini")), 4000))
         screenshot("gemini_no_key")
         settings.setProvider(app.nastavnik.ai.AiProvider.ANTHROPIC)
-
-        // 8. Свернуть панель → кнопка вернулась.
-        device.findObject(By.desc("Свернуть"))?.click()
-        assertNotNull("кнопка не вернулась после сворачивания", device.wait(Until.findObject(By.desc("Наставник").pkg(pkg)), 4000))
         scenario.close()
+    }
+
+    private fun tapBubble() {
+        device.wait(Until.findObject(By.desc("Наставник").pkg(pkg)), 4000)!!.click()
     }
 
     companion object {

@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="katex/katex.min.css">
+<style>
+  /* Текст одной заметки наставника на экране: формулы, списки, без лишних полей. */
+  html, body { margin: 0; padding: 0; background: transparent; color: #1f1f1f; }
+  body {
+    font-family: "Google Sans Text", "Google Sans", "Roboto", "Noto Sans", sans-serif;
+    font-size: 16px;
+    line-height: 1.5;
+    -webkit-text-size-adjust: 100%;
+    overflow-wrap: anywhere;
+  }
+  #t { padding: 0 2px 2px; display: flow-root; }
+  #t p { margin: 0.3em 0; }
+  #t p:first-child { margin-top: 0; }
+  #t p:last-child { margin-bottom: 0; }
+  #t ul, #t ol { margin: 0.25em 0; padding-left: 1.3em; }
+  #t code { background: #f0f4f9; padding: 0 4px; border-radius: 4px; font-size: 0.92em; }
+  .math-block { overflow-x: auto; overflow-y: hidden; margin: 0.35em 0; }
+  .katex-display { margin: 0.25em 0; }
+  .katex { font-size: 1.08em; }
+  .typing::after {
+    content: "";
+    display: inline-block;
+    width: 8px; height: 8px;
+    margin-left: 4px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #4285f4, #d96570);
+    animation: pulse 1s ease-in-out infinite;
+  }
+  @keyframes pulse { 50% { opacity: 0.3; transform: scale(0.7); } }
+</style>
+</head>
+<body>
+<div id="t"></div>
+<script src="katex/katex.min.js"></script>
+<script src="lib/marked.min.js"></script>
+<script src="rich.js"></script>
+<script>
+(function () {
+  var t = document.getElementById('t');
+  var lastH = -1;
+  function report() {
+    var h = Math.ceil(t.getBoundingClientRect().height);
+    if (h !== lastH && window.NativeNote) { lastH = h; NativeNote.onHeight(h); }
+  }
+  if (window.ResizeObserver) new ResizeObserver(report).observe(t);
+  window.Note = {
+    set: function (text, streaming) {
+      t.innerHTML = Rich.render(text || '', false);
+      t.className = streaming ? 'typing' : '';
+      report();
+    }
+  };
+  if (window.NativeNote) NativeNote.onReady();
+})();
+</script>
+</body>
+</html>

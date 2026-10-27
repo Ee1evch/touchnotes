@@ -33,6 +33,11 @@ class MainActivity : ComponentActivity() {
                     SCREEN_SETTINGS -> SettingsScreen(onBack = { screen = SCREEN_HOME })
                     SCREEN_HISTORY -> HistoryScreen(onBack = { screen = SCREEN_HOME })
                     SCREEN_CLEAN_TEST -> CleanTestScreen(onBack = { screen = SCREEN_HOME })
+                    SCREEN_CLEAN -> CleanScreen(
+                        // Закрыли чистовик — возвращаемся туда, где писали (в Touchnotes).
+                        onClose = { screen = SCREEN_HOME; moveTaskToBack(true) },
+                        onSettings = { screen = SCREEN_SETTINGS },
+                    )
                     else -> HomeScreen(resumeTick, go)
                 }
             }
@@ -61,6 +66,7 @@ class MainActivity : ComponentActivity() {
         const val SCREEN_HISTORY = "history"
         const val SCREEN_ONBOARDING = "onboarding"
         const val SCREEN_CLEAN_TEST = "clean_test"
+        const val SCREEN_CLEAN = "clean"
         private const val KEY_SCREEN = "screen"
     }
 }

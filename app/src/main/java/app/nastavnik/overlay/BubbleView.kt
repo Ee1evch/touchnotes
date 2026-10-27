@@ -58,6 +58,30 @@ class BubbleView(context: Context, private val listener: Listener) : View(contex
             invalidate()
         }
 
+    /** Включена фоновая проверка — маленькая зелёная точка на кнопке. */
+    var watching: Boolean = false
+        set(value) {
+            if (field == value) return
+            field = value
+            invalidate()
+        }
+
+    private val dot = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF34A853.toInt() }
+    private val dotBorder = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
+    private val flashRing = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = 4f * density
+    }
+    private var flashUntil = 0L
+
+    /** Короткая вспышка кольца одним цветом: например, зелёным — «проверил, всё верно». */
+    fun flash(color: Int, ms: Long = 1600) {
+        flashRing.color = color
+        flashUntil = System.currentTimeMillis() + ms
+        invalidate()
+        postDelayed({ invalidate() }, ms + 20)
+    }
+
     private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
     private val longPressTimeout = ViewConfiguration.getLongPressTimeout().toLong()
     private var downX = 0f
@@ -100,12 +124,23 @@ class BubbleView(context: Context, private val listener: Listener) : View(contex
         val cx = width / 2f
         val cy = height / 2f
         canvas.drawCircle(cx, cy, r, fill)
-        ringMatrix.setRotate(angle, cx, cy)
-        ringShader?.setLocalMatrix(ringMatrix)
-        canvas.drawCircle(cx, cy, r - ring.strokeWidth / 2, ring)
+        if (System.currentTimeMillis() < flashUntil) {
+            canvas.drawCircle(cx, cy, r - flashRing.strokeWidth / 2, flashRing)
+        } else {
+            ringMatrix.setRotate(angle, cx, cy)
+            ringShader?.setLocalMatrix(ringMatrix)
+            canvas.drawCircle(cx, cy, r - ring.strokeWidth / 2, ring)
+        }
         val s = (r * 1.15f).toInt()
         icon.setBounds((cx - s / 2).toInt(), (cy - s / 2).toInt(), (cx + s / 2).toInt(), (cy + s / 2).toInt())
         icon.draw(canvas)
+        if (watching) {
+            val dr = 4.5f * density
+            val dx = cx + r * 0.68f
+            val dy = cy - r * 0.68f
+            canvas.drawCircle(dx, dy, dr + 1.5f * density, dotBorder)
+            canvas.drawCircle(dx, dy, dr, dot)
+        }
     }
 
     private fun isPen(event: MotionEvent): Boolean {
