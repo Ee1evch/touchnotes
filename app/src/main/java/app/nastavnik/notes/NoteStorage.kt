@@ -79,11 +79,17 @@ class NoteStorage(private val context: Context) {
         fun sanitize(s: String): String = s.replace(ILLEGAL, " ").replace(Regex("\\s+"), " ").trim().trim('.')
 
         /** Тема без разметки LaTeX: «Предел $\frac{1}{x}$» → «Предел 1/x». */
+        // Скобки экранированы явно: регулярки Android (ICU) строже, чем в обычной JVM.
+        private val FRAC = Regex("""\\frac\{([^\{\}]*)\}\{([^\{\}]*)\}""")
+        private val COMMAND = Regex("""\\[a-zA-Z]+""")
+        private val MATH_CHARS = Regex("""[\$\{\}]""")
+        private val SPACES = Regex("""\s+""")
+
         fun plainTitle(title: String): String = title
-            .replace(Regex("""\\frac\{([^{}]*)}\{([^{}]*)}"""), "$1/$2")
-            .replace(Regex("""\\[a-zA-Z]+"""), "")
-            .replace(Regex("[\\$\\{}]"), "")
-            .replace(Regex("\\s+"), " ")
+            .replace(FRAC, "$1/$2")
+            .replace(COMMAND, "")
+            .replace(MATH_CHARS, "")
+            .replace(SPACES, " ")
             .trim()
     }
 }

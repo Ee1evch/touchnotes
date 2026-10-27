@@ -4,7 +4,7 @@ package app.nastavnik.claude
 object DoneMarker {
     data class Result(val text: String, val done: Boolean)
 
-    private val markerRegex = Regex("""\[\[\s*ГОТОВО\s*]]""", RegexOption.IGNORE_CASE)
+    private val markerRegex = Regex("""\[\[\s*ГОТОВО\s*\]\]""", RegexOption.IGNORE_CASE)
     private const val MARKER = Prompts.DONE_MARKER
 
     /**

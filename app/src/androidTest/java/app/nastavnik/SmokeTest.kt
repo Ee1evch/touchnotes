@@ -54,7 +54,7 @@ class SmokeTest {
     private fun shell(cmd: String): String = device.executeShellCommand(cmd).also { Log.i(TAG, "$ $cmd -> ${it.trim()}") }
 
     private fun logImage(name: String, bmp: Bitmap) {
-        val w = 360
+        val w = 760
         val h = (bmp.height * w.toFloat() / bmp.width).toInt().coerceAtLeast(1)
         val small = Bitmap.createScaledBitmap(bmp, w, h, true)
         val out = ByteArrayOutputStream()
@@ -189,7 +189,40 @@ class SmokeTest {
         assertTrue("снимок экрана не сделан", shot.exists() && shot.length() > 5_000)
         assertNotNull("не показана понятная ошибка про ключ", err)
 
-        // 5. Свернуть панель → кнопка вернулась.
+        // 5. Режим «Выделить область»: обводим прямоугольник — уходит только он.
+        val fullOpts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(shot.absolutePath, fullOpts)
+        device.findObject(By.res(pkg, "btn_region")).click()
+        SystemClock.sleep(600)
+        shot.delete()
+        device.wait(Until.findObject(By.text("Проверь, где ошибка").enabled(true)), 10000).click()
+        assertNotNull("не появилось затемнение для выбора области", device.wait(Until.findObject(By.textContains("Обведи пальцем")), 8000))
+        device.swipe(300, 300, 1100, 900, 30)
+        SystemClock.sleep(500)
+        screenshot("region_selected")
+        device.findObject(By.text("Отправить область")).click()
+        device.wait(Until.findObject(By.textContains("API-ключ")), 30000)
+        SystemClock.sleep(1000)
+        val regionOpts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(shot.absolutePath, regionOpts)
+        Log.i(TAG, "full shot ${fullOpts.outWidth}x${fullOpts.outHeight}, region shot ${regionOpts.outWidth}x${regionOpts.outHeight}")
+        assertTrue("снимок области не меньше полного", shot.exists() && regionOpts.outWidth in 1 until fullOpts.outWidth)
+        BitmapFactory.decodeFile(shot.absolutePath)?.let { logImage("region_shot", it) }
+        device.findObject(By.res(pkg, "btn_region")).click()
+        SystemClock.sleep(600)
+
+        // 6. Чистовик через панель: снимок → «Собрать» → понятная ошибка ключа, без падения.
+        device.wait(Until.findObject(By.text("Сделать чистовик").enabled(true)), 10000).click()
+        assertNotNull("нет кнопки «Собрать чистовик»", device.wait(Until.findObject(By.text("Собрать чистовик").enabled(true)), 15000))
+        screenshot("clean_collecting")
+        device.findObject(By.text("Собрать чистовик")).click()
+        assertNotNull("чистовик не показал ошибку", device.wait(Until.findObject(By.text("Не получилось")), 40000))
+        SystemClock.sleep(800)
+        screenshot("clean_failed")
+        device.findObject(By.text("Отмена"))?.click()
+        SystemClock.sleep(500)
+
+        // 7. Свернуть панель → кнопка вернулась.
         device.findObject(By.desc("Свернуть"))?.click()
         assertNotNull("кнопка не вернулась после сворачивания", device.wait(Until.findObject(By.desc("Наставник").pkg(pkg)), 4000))
         scenario.close()
