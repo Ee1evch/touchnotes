@@ -223,16 +223,18 @@ class MentorFlowTest {
         SystemClock.sleep(5000) // пусть слежение сделает пару кадров
         val before = AnswerOverlay.shownMarks.singleOrNull()
         assertNotNull("рамка не нарисована", before)
-        val label = device.findObject(By.text("Строгость наставника"))
+        val label = device.findObject(By.textStartsWith("Модель наставника"))
         val labelBefore = label?.visibleBounds
-        val x = device.displayWidth / 8
-        device.swipe(x, device.displayHeight * 3 / 4, x, device.displayHeight * 2 / 4, 60)
+        screenshot("scroll_before")
+        val x = device.displayWidth / 4
+        device.swipe(x, device.displayHeight * 3 / 4, x, device.displayHeight * 2 / 4, 80)
         SystemClock.sleep(7000)
         screenshot("scroll_follow")
         val after = AnswerOverlay.shownMarks.singleOrNull()
-        val labelAfter = device.findObject(By.text("Строгость наставника"))?.visibleBounds
+        val labelAfter = device.findObject(By.textStartsWith("Модель наставника"))?.visibleBounds
         Log.i("MentorFlowTest", "scroll: mark $before -> $after, label $labelBefore -> $labelAfter")
         assertNotNull("рамка пропала после прокрутки", after)
+        assertNotNull("не найден ориентир на странице", labelBefore)
         if (labelBefore != null && labelAfter != null) {
             val pageDy = labelAfter.top - labelBefore.top
             val markDy = after!!.top - before!!.top

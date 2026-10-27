@@ -15,6 +15,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
 import android.provider.Settings
+import android.util.Log
 import android.view.WindowManager
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
@@ -735,7 +736,9 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
             val mask = thumb.maskOf(ourRects())
             val ref = trackRef
             if (overlay.isShowing && ref != null) {
-                when (val m = withContext(Dispatchers.Default) { ScreenMotion.estimate(ref, thumb, mask) }) {
+                val motion = withContext(Dispatchers.Default) { ScreenMotion.estimate(ref, thumb, mask) }
+                if (BuildConfig.DEBUG) Log.i(TAG, "track: $motion")
+                when (val m = motion) {
                     is Motion.Moved -> {
                         replacedSince = 0L
                         overlay.setSuspended(false)
@@ -838,6 +841,7 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
         const val EXTRA_RESULT_CODE = "result_code"
         const val EXTRA_RESULT_DATA = "result_data"
         const val DEFAULT_WATCH_PAUSE_SEC = 10
+        private const val TAG = "Nastavnik"
         private const val NOTIFICATION_ID = 42
         private const val STYLUS_PASS_MS = 1500L
         private const val HIDE_DELAY_MS = 180L

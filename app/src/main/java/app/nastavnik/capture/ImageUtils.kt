@@ -43,7 +43,8 @@ object ImageUtils {
     fun scaleDown(src: Bitmap, maxSide: Int = MAX_LONG_SIDE, maxPixels: Int = MAX_PIXELS): Bitmap {
         val k = scaleFactor(src.width, src.height, maxSide, maxPixels)
         if (k >= 1f) return src
-        return Bitmap.createScaledBitmap(src, (src.width * k).roundToInt().coerceAtLeast(1), (src.height * k).roundToInt().coerceAtLeast(1), true)
+        // Вниз, а не до ближайшего: иначе площадь может чуть превысить предел.
+        return Bitmap.createScaledBitmap(src, (src.width * k).toInt().coerceAtLeast(1), (src.height * k).toInt().coerceAtLeast(1), true)
     }
 
     fun scaleFactor(w: Int, h: Int, maxSide: Int = MAX_LONG_SIDE, maxPixels: Int = MAX_PIXELS): Float {

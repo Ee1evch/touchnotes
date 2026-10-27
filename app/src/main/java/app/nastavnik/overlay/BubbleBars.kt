@@ -112,9 +112,10 @@ class BubbleBar(baseContext: Context, private val wm: WindowManager) {
             this.text = text
             setTextColor(0xFF1F1F1F.toInt())
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
-            maxWidth = dp(360f)
         }
-        row.addView(tv, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        // Ширину текста считаем сами: так окно сообщения точно вмещает и текст, и кнопки.
+        val natural = text.lines().maxOf { tv.paint.measureText(it) }.toInt() + dp(2f)
+        row.addView(tv, LinearLayout.LayoutParams(minOf(natural, dp(360f)), LinearLayout.LayoutParams.WRAP_CONTENT))
         val close = ImageView(ctx).apply {
             setImageResource(R.drawable.ic_close)
             setColorFilter(0xFF6B6F75.toInt())
