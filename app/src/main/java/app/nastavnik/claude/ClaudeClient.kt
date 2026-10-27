@@ -40,6 +40,11 @@ class ClaudeClient(
 ) {
     private val json = Json { ignoreUnknownKeys = true }
 
+    /** Подмена адреса API (только для тестов отладочной сборки). */
+    var baseUrlOverride: () -> String? = { null }
+
+    private val base: String get() = baseUrlOverride() ?: baseUrl
+
     /** Если сервер однажды отверг параметр `fallbacks`, больше его не шлём. */
     @Volatile
     private var fallbacksRejected = false
@@ -76,7 +81,7 @@ class ClaudeClient(
     suspend fun checkKey(apiKey: String, modelId: String): KeyCheck = withContext(Dispatchers.IO) {
         if (apiKey.isBlank()) return@withContext KeyCheck.Failed(ClaudeErrors.noKey().userMessage)
         val request = Request.Builder()
-            .url("$baseUrl/v1/models/$modelId")
+            .url("$base/v1/models/$modelId")
             .header("x-api-key", apiKey)
             .header("anthropic-version", API_VERSION)
             .get()
@@ -193,7 +198,7 @@ class ClaudeClient(
 
     private fun newCall(apiKey: String, req: MessageRequest, client: OkHttpClient): Call {
         val body = RequestBuilder.build(req).toString().toRequestBody(JSON_MEDIA)
-        val builder = Request.Builder().url("$baseUrl/v1/messages").post(body)
+        val builder = Request.Builder().url("$base/v1/messages").post(body)
         RequestBuilder.headers(apiKey, req).forEach { (k, v) -> builder.header(k, v) }
         return client.newCall(builder.build())
     }

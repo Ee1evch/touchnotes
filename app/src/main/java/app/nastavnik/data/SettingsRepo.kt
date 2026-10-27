@@ -87,6 +87,10 @@ class SettingsRepo(private val context: Context) {
     fun setProjectionExplained(v: Boolean) = prefs.edit { putBoolean(K_PROJ_EXPLAINED, v) }
     fun setActiveConversation(id: Long) = prefs.edit { putLong(K_ACTIVE_CONV, id) }
 
+    /** Только для отладочной сборки: адрес мок-сервера вместо api.anthropic.com (используют тесты). */
+    fun debugBaseUrl(): String? = prefs.getString(K_DEBUG_BASE_URL, null)?.takeIf { it.isNotBlank() }
+    fun setDebugBaseUrl(url: String?) = prefs.edit { putString(K_DEBUG_BASE_URL, url) }
+
     // --- API-ключ ---
 
     /** false, если зашифрованное хранилище не открылось (тогда ключ живёт только до перезапуска). */
@@ -154,5 +158,6 @@ class SettingsRepo(private val context: Context) {
         private const val K_ACTIVE_CONV = "active_conversation"
         private const val K_API_KEY = "api_key"
         private const val K_KEY_STAMP = "api_key_stamp"
+        private const val K_DEBUG_BASE_URL = "debug_base_url"
     }
 }

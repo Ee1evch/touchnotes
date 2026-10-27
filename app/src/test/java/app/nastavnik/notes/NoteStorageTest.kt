@@ -12,7 +12,7 @@ class NoteStorageTest {
 
     @Test
     fun sanitizeRemovesIllegalFileChars() {
-        assertEquals("a b c d", NoteStorage.sanitize("a/b:c?d"))
+        assertEquals("a∕b c d", NoteStorage.sanitize("a/b:c?d"))
         assertEquals("Тема", NoteStorage.sanitize("  Тема.  "))
     }
 }

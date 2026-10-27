@@ -91,7 +91,7 @@ class SmokeTest {
         )
         var host: ViewGroup? = null
         scenario.onActivity { host = it.findViewById(android.R.id.content) }
-        SystemClock.sleep(1500)
+        SystemClock.sleep(5000)
         screenshot("clean_test_screen")
         val result = runBlocking {
             withContext(Dispatchers.Main) { PdfExporter(ctx).export(host!!, json, NoteStorage(ctx).newWorkDir()) }

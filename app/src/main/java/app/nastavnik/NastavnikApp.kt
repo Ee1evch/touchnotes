@@ -12,7 +12,11 @@ import app.nastavnik.data.SettingsRepo
 class NastavnikApp : Application() {
     val settings: SettingsRepo by lazy { SettingsRepo(this) }
     val db: AppDatabase by lazy { AppDatabase.create(this) }
-    val claude: ClaudeClient by lazy { ClaudeClient(ClaudeClient.defaultHttp()) }
+    val claude: ClaudeClient by lazy {
+        ClaudeClient(ClaudeClient.defaultHttp()).apply {
+            if (BuildConfig.DEBUG) baseUrlOverride = { settings.debugBaseUrl() }
+        }
+    }
 
     override fun onCreate() {
         super.onCreate()

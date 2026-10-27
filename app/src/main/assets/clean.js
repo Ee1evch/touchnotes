@@ -195,7 +195,9 @@
 
   function fitPreview() {
     if (!document.body.classList.contains('preview')) return;
-    var k = Math.min(1, (window.innerWidth - 16) / 794);
+    // Пока WebView не разложен, ширина может быть 0 — тогда ждём события resize.
+    if (window.innerWidth < 50) return;
+    var k = Math.min(1, Math.max(0.2, (window.innerWidth - 16) / 794));
     pagesEl.style.zoom = k;
   }
 

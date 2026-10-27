@@ -76,7 +76,9 @@ class NoteStorage(private val context: Context) {
     companion object {
         private val ILLEGAL = Regex("""[\\/:*?"<>|\u0000-\u001F]""")
 
-        fun sanitize(s: String): String = s.replace(ILLEGAL, " ").replace(Regex("\\s+"), " ").trim().trim('.')
+        /** «/» из дробей заменяем похожим знаком деления, остальные запрещённые символы — пробелом. */
+        fun sanitize(s: String): String =
+            s.replace('/', '∕').replace(ILLEGAL, " ").replace(SPACES, " ").trim().trim('.')
 
         /** Тема без разметки LaTeX: «Предел $\frac{1}{x}$» → «Предел 1/x». */
         // Скобки экранированы явно: регулярки Android (ICU) строже, чем в обычной JVM.
