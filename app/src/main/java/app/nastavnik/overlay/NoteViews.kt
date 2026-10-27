@@ -133,6 +133,8 @@ class NoteBackground(context: Context, kind: MarkKind) : Drawable() {
         val half = border.strokeWidth / 2
         card.set(b.left + i[0] + half, b.top + i[1] + half, b.right - i[2] - half, b.bottom - i[3] - half)
         path.reset()
+        // Пока у окна нет размера, рисовать нечего.
+        if (card.width() <= 2 * radius || card.height() <= 2 * radius) return
         path.addRoundRect(card, radius, radius, Path.Direction.CW)
         if (side == Side.NONE) return
         val t = tail.toFloat()
