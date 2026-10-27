@@ -11,6 +11,13 @@ class NoteStorageTest {
     }
 
     @Test
+    fun fileBaseHasTopicAndDate() {
+        val date = java.util.GregorianCalendar(2026, 9, 27).time
+        assertEquals("Предел 1∕x — 27.10.2026", NoteStorage.fileBase("Предел \$\\frac{1}{x}\$", date))
+        assertEquals("Конспект — 27.10.2026", NoteStorage.fileBase("$$", date))
+    }
+
+    @Test
     fun sanitizeRemovesIllegalFileChars() {
         assertEquals("a∕b c d", NoteStorage.sanitize("a/b:c?d"))
         assertEquals("Тема", NoteStorage.sanitize("  Тема.  "))

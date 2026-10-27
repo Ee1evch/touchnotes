@@ -548,6 +548,8 @@ class PanelController(baseContext: Context, private val wm: WindowManager, priva
     }
 
     private fun showPreviewJson(json: String) {
+        // Контейнер видим до отрисовки — иначе страница сверстается под нулевую ширину.
+        cleanPreviewHost.isVisible = true
         val view = previewView ?: CleanView(WebView(ctx), "preview").also { v ->
             cleanPreviewHost.addView(v.webView, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
             previewView = v

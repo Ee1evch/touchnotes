@@ -47,6 +47,10 @@ class CleanView(val webView: WebView, private val mode: String) {
         WebViews.setupLocal(webView)
         webView.setBackgroundColor(if (mode == "export") Color.WHITE else Color.parseColor("#E6E9F0"))
         webView.addJavascriptInterface(Bridge(), "NativeClean")
+        // Ширина WebView меняется (панель показали, повернули экран) — просим страницу вписаться заново.
+        webView.addOnLayoutChangeListener { _, l, _, r, _, ol, _, or, _ ->
+            if (r - l != or - ol && ready) webView.evaluateJavascript("window.dispatchEvent(new Event('resize'));", null)
+        }
         webView.loadUrl(URL)
     }
 

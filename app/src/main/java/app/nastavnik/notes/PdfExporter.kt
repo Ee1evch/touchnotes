@@ -35,7 +35,8 @@ class PdfExporter(private val context: Context) {
 
     data class Result(val pdf: File, val pngs: List<File>, val pageCount: Int)
 
-    suspend fun export(host: ViewGroup, noteJson: String, outDir: File): Result {
+    /** @param baseName имя файлов без расширения — под ним PDF увидит Touchnotes. */
+    suspend fun export(host: ViewGroup, noteJson: String, outDir: File, baseName: String = "Конспект"): Result {
         outDir.mkdirs()
         val density = context.resources.displayMetrics.density
         val widthPx = ceil(CleanView.PAGE_W_CSS * density).toInt()
@@ -74,7 +75,7 @@ class PdfExporter(private val context: Context) {
                     canvas.translate(0f, -i * pageHpx)
                     webView.draw(canvas)
 
-                    val png = File(outDir, "page-${i + 1}.png")
+                    val png = File(outDir, if (pages == 1) "$baseName.png" else "$baseName — стр. ${i + 1}.png")
                     withContext(Dispatchers.IO) {
                         FileOutputStream(png).use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
                     }
@@ -85,7 +86,7 @@ class PdfExporter(private val context: Context) {
                     pdf.finishPage(page)
                     bmp.recycle()
                 }
-                val pdfFile = File(outDir, "note.pdf")
+                val pdfFile = File(outDir, "$baseName.pdf")
                 withContext(Dispatchers.IO) { FileOutputStream(pdfFile).use { pdf.writeTo(it) } }
                 return Result(pdfFile, pngs, pages)
             } finally {

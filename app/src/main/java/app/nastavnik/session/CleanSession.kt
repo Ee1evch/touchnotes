@@ -155,7 +155,7 @@ class CleanSession(private val app: NastavnikApp, private val scope: CoroutineSc
             try {
                 val settings = app.settings.load()
                 val dir = storage.newWorkDir()
-                val result = PdfExporter(app).export(host, s.json, dir)
+                val result = PdfExporter(app).export(host, s.json, dir, NoteStorage.fileBase(s.note.title))
                 val subject = settings.subject.ifBlank { s.note.subject }
                 val published = withContext(Dispatchers.IO) { storage.publish(result.pdf, result.pngs, subject, s.note.title) }
                 withContext(Dispatchers.IO) {

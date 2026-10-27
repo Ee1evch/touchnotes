@@ -26,14 +26,13 @@ class NoteStorage(private val context: Context) {
 
     fun publish(pdf: File, pngs: List<File>, subject: String, title: String): Published {
         val folder = sanitize(subject).ifBlank { "Без предмета" }
-        val date = SimpleDateFormat("dd.MM.yyyy", Locale("ru")).format(Date())
-        val base = sanitize(plainTitle(title)).ifBlank { "Конспект" }.take(80).trim()
+        val base = fileBase(title)
         val relative = "${Environment.DIRECTORY_DOCUMENTS}/Конспекты/$folder"
         return try {
-            val pdfName = "$base — $date.pdf"
+            val pdfName = "$base.pdf"
             val pdfUri = insert(pdf, pdfName, "application/pdf", relative)
             pngs.forEachIndexed { i, png ->
-                val name = if (pngs.size == 1) "$base — $date.png" else "$base — $date — стр. ${i + 1}.png"
+                val name = if (pngs.size == 1) "$base.png" else "$base — стр. ${i + 1}.png"
                 runCatching { insert(png, name, "image/png", relative) }
                     .recoverCatching {
                         // Если в «Документы» картинку не пустили — кладём в «Изображения».
@@ -74,6 +73,13 @@ class NoteStorage(private val context: Context) {
     }
 
     companion object {
+        /** «<Тема> — <дата>» без LaTeX и запрещённых в именах файлов символов. */
+        fun fileBase(title: String, date: Date = Date()): String {
+            val day = SimpleDateFormat("dd.MM.yyyy", Locale.forLanguageTag("ru")).format(date)
+            val topic = sanitize(plainTitle(title)).ifBlank { "Конспект" }.take(80).trim()
+            return "$topic — $day"
+        }
+
         private val ILLEGAL = Regex("""[\\/:*?"<>|\u0000-\u001F]""")
 
         /** «/» из дробей заменяем похожим знаком деления, остальные запрещённые символы — пробелом. */
