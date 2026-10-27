@@ -164,7 +164,7 @@ class SmokeTest {
         val settingsBtn = device.findObject(By.text("Настройки"))
         if (settingsBtn != null && panelTop != null && !panelTop.contains(settingsBtn.visibleCenter.x, settingsBtn.visibleCenter.y)) {
             settingsBtn.click()
-            val opened = device.wait(Until.hasObject(By.text("Модель наставника")), 4000)
+            val opened = device.wait(Until.hasObject(By.textContains("Модель наставника")), 4000)
             Log.i(TAG, "tap outside panel reached app below: $opened")
             assertTrue("касание мимо панели не дошло до приложения под ней", opened)
         } else {
