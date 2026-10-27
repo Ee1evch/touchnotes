@@ -40,11 +40,22 @@ data class BarItem(
     val action: () -> Unit,
 )
 
+/** Светлая карточка (строка вопроса). */
 private fun card(ctx: Context, radius: Float): GradientDrawable = GradientDrawable().apply {
     setColor(Color.WHITE)
     cornerRadius = radius
-    setStroke(OverlayWindows.dp(ctx, 1f), 0xFFE3E7ED.toInt())
+    setStroke(OverlayWindows.dp(ctx, 1f), 0x14000000)
 }
+
+/** Тёмная «графитовая» карточка: меню и сообщения у кнопки хорошо видны на белом листе. */
+private fun darkCard(ctx: Context, radius: Float): GradientDrawable = GradientDrawable().apply {
+    setColor(0xFA16161A.toInt())
+    cornerRadius = radius
+    setStroke(OverlayWindows.dp(ctx, 1f), 0x1AFFFFFF)
+}
+
+private const val ON_DARK = 0xFFF4F4F6.toInt()
+private const val ON_DARK_MUTED = 0xFF8E8D98.toInt()
 
 /**
  * Небольшие всплывающие элементы рядом с кнопкой: список действий («Подсказка», «Где ошибка?»…)
@@ -74,17 +85,17 @@ class BubbleBar(baseContext: Context, private val wm: WindowManager) {
     fun showActions(anchor: BubbleAnchor, items: List<BarItem>) {
         val col = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
-            background = card(ctx, dp(24f).toFloat())
-            elevation = dp(6f).toFloat()
-            setPadding(dp(6f), dp(8f), dp(6f), dp(8f))
+            background = darkCard(ctx, dp(22f).toFloat())
+            elevation = dp(12f).toFloat()
+            setPadding(dp(8f), dp(10f), dp(8f), dp(8f))
         }
         val head = TextView(ctx).apply {
-            text = "Наставник"
-            setTextColor(0xFF5F6368.toInt())
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-            letterSpacing = 0.06f
-            setPadding(dp(14f), dp(2f), dp(14f), dp(6f))
+            text = "НАСТАВНИК"
+            setTextColor(ON_DARK_MUTED)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f)
+            typeface = Fonts.semibold(ctx)
+            letterSpacing = 0.08f
+            setPadding(dp(12f), dp(2f), dp(14f), dp(8f))
         }
         col.addView(head)
         items.forEach { item ->
@@ -92,7 +103,7 @@ class BubbleBar(baseContext: Context, private val wm: WindowManager) {
                 dismiss()
                 item.action()
             }
-            col.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(48f)))
+            col.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(50f)))
         }
         show(anchor, col, outside = true, centerOnBubble = true)
         showingActions = true
@@ -105,9 +116,9 @@ class BubbleBar(baseContext: Context, private val wm: WindowManager) {
     fun showMessage(anchor: BubbleAnchor, text: String, items: List<BarItem> = emptyList(), busy: Boolean = false, autoHideMs: Long = 0, outside: Boolean = false) {
         val box = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
-            background = card(ctx, dp(24f).toFloat())
+            background = darkCard(ctx, dp(22f).toFloat())
             setPadding(dp(18f), dp(14f), dp(12f), dp(14f))
-            elevation = dp(6f).toFloat()
+            elevation = dp(12f).toFloat()
         }
         val row = LinearLayout(ctx).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -116,21 +127,23 @@ class BubbleBar(baseContext: Context, private val wm: WindowManager) {
         if (busy) {
             val pb = ProgressBar(ctx).apply {
                 isIndeterminate = true
-                indeterminateTintList = ColorStateList.valueOf(0xFF4285F4.toInt())
+                indeterminateTintList = ColorStateList.valueOf(0xFFA99BFF.toInt())
             }
             row.addView(pb, LinearLayout.LayoutParams(dp(20f), dp(20f)).apply { marginEnd = dp(10f) })
         }
         val tv = TextView(ctx).apply {
             this.text = text
-            setTextColor(0xFF1F1F1F.toInt())
+            setTextColor(ON_DARK)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
+            typeface = Fonts.regular(ctx)
+            setLineSpacing(0f, 1.12f)
         }
         // Ширину текста считаем сами: так окно сообщения точно вмещает и текст, и кнопки.
         val natural = text.lines().maxOf { tv.paint.measureText(it) }.toInt() + dp(2f)
         row.addView(tv, LinearLayout.LayoutParams(minOf(natural, dp(360f)), LinearLayout.LayoutParams.WRAP_CONTENT))
         val close = ImageView(ctx).apply {
             setImageResource(R.drawable.ic_close)
-            setColorFilter(0xFF6B6F75.toInt())
+            setColorFilter(ON_DARK_MUTED)
             setPadding(dp(5f), dp(5f), dp(5f), dp(5f))
             contentDescription = "Закрыть"
             setOnClickListener { dismiss() }
@@ -145,9 +158,9 @@ class BubbleBar(baseContext: Context, private val wm: WindowManager) {
                     this.text = item.label
                     gravity = Gravity.CENTER
                     setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
-                    typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-                    setTextColor(if (item.primary) Color.WHITE else 0xFF0B57D0.toInt())
-                    setBackgroundResource(if (item.primary) R.drawable.primary_btn_bg else R.drawable.quick_btn_bg)
+                    typeface = Fonts.semibold(ctx)
+                    setTextColor(if (item.primary) 0xFF16161A.toInt() else ON_DARK)
+                    setBackgroundResource(if (item.primary) R.drawable.light_btn_bg else R.drawable.ghost_dark_btn_bg)
                     setPadding(dp(16f), 0, dp(16f), 0)
                     setOnClickListener { item.action() }
                 }
@@ -165,30 +178,30 @@ class BubbleBar(baseContext: Context, private val wm: WindowManager) {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setBackgroundResource(R.drawable.menu_row_bg)
-            setPadding(dp(8f), 0, dp(20f), 0)
+            setPadding(dp(8f), 0, dp(24f), 0)
             isClickable = true
             setOnClickListener { onClick() }
             contentDescription = item.label
         }
         item.icon?.let {
-            val tint = item.tint ?: 0xFF444746.toInt()
+            val tint = item.tint ?: ON_DARK
             val iv = ImageView(ctx).apply {
                 setImageResource(it)
                 imageTintList = ColorStateList.valueOf(tint)
                 setPadding(dp(7f), dp(7f), dp(7f), dp(7f))
-                // Светлый кружок цвета значка.
+                // Скруглённый квадрат цвета значка.
                 background = GradientDrawable().apply {
-                    shape = GradientDrawable.OVAL
-                    setColor(Color.argb(30, Color.red(tint), Color.green(tint), Color.blue(tint)))
+                    cornerRadius = dp(10f).toFloat()
+                    setColor(Color.argb(46, Color.red(tint), Color.green(tint), Color.blue(tint)))
                 }
             }
-            row.addView(iv, LinearLayout.LayoutParams(dp(34f), dp(34f)).apply { marginEnd = dp(12f) })
+            row.addView(iv, LinearLayout.LayoutParams(dp(32f), dp(32f)).apply { marginEnd = dp(12f) })
         }
         val tv = TextView(ctx).apply {
             text = item.label
-            setTextColor(0xFF1F1F1F.toInt())
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
-            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            setTextColor(ON_DARK)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 15.5f)
+            typeface = Fonts.medium(ctx)
         }
         row.addView(tv)
         return row
@@ -198,7 +211,7 @@ class BubbleBar(baseContext: Context, private val wm: WindowManager) {
     private fun show(anchor: BubbleAnchor, content: View, outside: Boolean, centerOnBubble: Boolean) {
         dismiss(notify = false)
         val frame = FrameLayout(ctx)
-        val m = dp(12f) // место под тень
+        val m = dp(16f) // место под тень
         frame.setPadding(m, m, m, m)
         frame.addView(content, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         frame.setOnTouchListener { _, e ->
@@ -282,14 +295,14 @@ class AskBar(baseContext: Context, private val wm: WindowManager, private val ca
         val screen = OverlayWindows.screenSize(ctx)
         val area = OverlayWindows.contentRect(ctx)
         val frame = FrameLayout(ctx)
-        val m = dp(6f)
+        val m = dp(14f) // место под тень
         frame.setPadding(m, m, m, m)
         val row = LinearLayout(ctx).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             background = card(ctx, dp(28f).toFloat())
             setPadding(dp(18f), dp(6f), dp(6f), dp(6f))
-            elevation = dp(3f).toFloat()
+            elevation = dp(10f).toFloat()
         }
         val et = EditText(ctx).apply {
             hint = "Спроси наставника…"
@@ -297,8 +310,9 @@ class AskBar(baseContext: Context, private val wm: WindowManager, private val ca
             setSelection(draft.length)
             background = null
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
-            setTextColor(0xFF1F1F1F.toInt())
-            setHintTextColor(0xFF6B6F75.toInt())
+            setTextColor(0xFF16161A.toInt())
+            setHintTextColor(0xFF8E8D98.toInt())
+            typeface = Fonts.regular(ctx)
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES or InputType.TYPE_TEXT_FLAG_MULTI_LINE
             maxLines = 4
             imeOptions = EditorInfo.IME_ACTION_SEND
@@ -313,7 +327,7 @@ class AskBar(baseContext: Context, private val wm: WindowManager, private val ca
         row.addView(et, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
         val micView = ImageView(ctx).apply {
             setImageResource(R.drawable.ic_mic)
-            imageTintList = ColorStateList.valueOf(0xFF444746.toInt())
+            imageTintList = ColorStateList.valueOf(0xFF5E5D66.toInt())
             setPadding(dp(9f), dp(9f), dp(9f), dp(9f))
             contentDescription = "Сказать голосом"
             setOnClickListener { callbacks.onMic() }
@@ -374,7 +388,7 @@ class AskBar(baseContext: Context, private val wm: WindowManager, private val ca
     }
 
     fun setListening(listening: Boolean) {
-        mic?.imageTintList = ColorStateList.valueOf(if (listening) 0xFFEA4335.toInt() else 0xFF444746.toInt())
+        mic?.imageTintList = ColorStateList.valueOf(if (listening) 0xFFE5484D.toInt() else 0xFF5E5D66.toInt())
     }
 
     fun rect(): IRect? = params?.let { p -> root?.let { IRect(p.x, p.y, p.x + p.width, p.y + it.height) } }

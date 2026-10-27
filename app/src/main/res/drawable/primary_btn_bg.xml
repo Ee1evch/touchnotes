@@ -1,16 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ripple xmlns:android="http://schemas.android.com/apk/res/android" android:color="#55FFFFFF">
+<!-- Главная кнопка: графитовая пилюля -->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android" android:color="#33FFFFFF">
     <item>
         <selector>
             <item android:state_enabled="false">
                 <shape android:shape="rectangle">
-                    <solid android:color="#A8C7FA" />
+                    <solid android:color="#9A9AA2" />
                     <corners android:radius="100dp" />
                 </shape>
             </item>
             <item>
                 <shape android:shape="rectangle">
-                    <solid android:color="@color/accent" />
+                    <solid android:color="@color/ink" />
                     <corners android:radius="100dp" />
                 </shape>
             </item>

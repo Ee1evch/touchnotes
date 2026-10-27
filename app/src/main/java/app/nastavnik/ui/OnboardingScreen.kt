@@ -7,6 +7,21 @@ import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
+import app.nastavnik.R
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -98,45 +113,90 @@ fun OnboardingScreen(resumeTick: Int, onDone: () -> Unit, onSkip: () -> Unit) {
         ),
     )
     val step = steps[index.coerceIn(0, steps.lastIndex)]
+    val icons = listOf(R.drawable.ic_sparkle, R.drawable.ic_open, R.drawable.ic_bulb, R.drawable.ic_search, R.drawable.ic_mic, R.drawable.ic_tune, R.drawable.ic_power)
 
-    ScreenScaffold(title = "Первая настройка", onBack = null) {
-        Text("Шаг ${index + 1} из ${steps.size}", color = MaterialTheme.colorScheme.secondary)
-        LinearProgressIndicator(progress = { (index + 1f) / steps.size }, modifier = Modifier.fillMaxWidth())
+    ScreenScaffold(title = "", onBack = null) {
+        // Прогресс: полоски по числу шагов.
+        Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            steps.indices.forEach { i ->
+                Box(
+                    Modifier
+                        .weight(1f)
+                        .height(5.dp)
+                        .clip(CircleShape)
+                        .background(if (i <= index) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHighest),
+                )
+            }
+        }
+        Text("Шаг ${index + 1} из ${steps.size}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
 
-        SectionCard(step.title) {
-            Text(step.why, style = MaterialTheme.typography.bodyLarge)
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .softCard(RoundedCornerShape(28.dp), color = MaterialTheme.colorScheme.surface)
+                .padding(26.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Box(
+                Modifier
+                    .size(56.dp)
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(Brand.gradient),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(painterResource(icons[index.coerceIn(0, icons.lastIndex)]), contentDescription = null, tint = Color.White, modifier = Modifier.size(26.dp))
+            }
+            Text(step.title, style = MaterialTheme.typography.headlineMedium)
+            Text(step.why, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (index in 1 until steps.lastIndex && step.done && step.actionLabel != "Понятно") {
-                Text("✓ Готово", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                Row(
+                    Modifier
+                        .clip(CircleShape)
+                        .background(Brand.OkSoft)
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("✓", color = Brand.Ok, style = MaterialTheme.typography.titleSmall)
+                    Text("Готово", color = Brand.Ok, style = MaterialTheme.typography.labelLarge)
+                }
             }
             if (step.title.startsWith("Нейросеть")) {
                 ProviderEditor(onChanged = { permTick++ })
             }
             if (step.actionLabel != null && !step.done) {
-                Button(onClick = { step.action?.invoke() }) { Text(step.actionLabel) }
+                InkButton(step.actionLabel) { step.action?.invoke() }
             }
             if (index == steps.lastIndex) {
-                Button(enabled = overlay, onClick = {
+                InkButton("Запустить наставника", enabled = overlay, icon = R.drawable.ic_power) {
                     settings.setOnboardingDone(true)
                     BubbleService.start(context)
                     onDone()
-                }) { Text("Запустить наставника") }
+                }
                 if (!overlay) Text("Сначала разреши показ поверх окон (шаг 2).", color = MaterialTheme.colorScheme.error)
             }
         }
 
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            if (index > 0) OutlinedButton(onClick = { index-- }) { Text("Назад") }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (index > 0) SoftButton("Назад") { index-- }
             Spacer(Modifier.weight(1f))
             if (index < steps.lastIndex) {
                 val canSkip = step.done || step.optional || index == 0 || step.title.startsWith("Нейросеть") || step.title == "Уведомления"
-                Button(enabled = canSkip, onClick = { index++ }) {
-                    Text(if (step.done || index == 0) "Далее" else "Пропустить")
-                }
+                InkButton(if (step.done || index == 0) "Далее" else "Пропустить", enabled = canSkip) { index++ }
             }
         }
-        TextButton(onClick = {
-            settings.setOnboardingDone(true)
-            onSkip()
-        }) { Text("Пропустить настройку") }
+        Text(
+            "Пропустить настройку",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier
+                .align(Alignment.CenterHorizontally)
+                .clip(CircleShape)
+                .clickable {
+                    settings.setOnboardingDone(true)
+                    onSkip()
+                }
+                .padding(horizontal = 16.dp, vertical = 10.dp),
+        )
     }
 }

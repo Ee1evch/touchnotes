@@ -1,27 +1,29 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Фирменные цвета Google: из них собраны радужные градиенты -->
-    <color name="google_blue">#4285F4</color>
-    <color name="google_red">#EA4335</color>
-    <color name="google_yellow">#FBBC04</color>
-    <color name="google_green">#34A853</color>
-    <!-- Градиент «искры» в духе Gemini -->
-    <color name="sparkle_start">#4285F4</color>
-    <color name="sparkle_mid">#9B72CB</color>
-    <color name="sparkle_end">#D96570</color>
+    <!-- «Чернила и бумага»: тёплый фон, графитовый текст, один яркий фиолетово-синий акцент -->
+    <color name="paper">#F4F2EE</color>
+    <color name="surface">#FFFFFF</color>
+    <color name="surface_alt">#F1EFEA</color>
+    <color name="ink">#16161A</color>
+    <color name="ink_soft">#5E5D66</color>
+    <color name="line">#E6E2DB</color>
 
-    <!-- Material 3 (светлая схема Google) -->
-    <color name="accent">#0B57D0</color>
-    <color name="accent_dark">#041E49</color>
-    <color name="accent_soft">#D3E3FD</color>
-    <color name="surface_white">#FFFFFF</color>
-    <color name="surface_container">#F0F4F9</color>
-    <color name="surface_container_high">#E9EEF6</color>
-    <color name="text_main">#1F1F1F</color>
-    <color name="text_muted">#444746</color>
-    <color name="done_bg">#E6F4EA</color>
-    <color name="done_text">#146C2E</color>
-    <color name="error_bg">#FCE8E6</color>
-    <color name="error_text">#B3261E</color>
-    <color name="ic_launcher_background">#FFFFFF</color>
+    <color name="accent">#5B4CF0</color>
+    <color name="accent_2">#8E5CF7</color>
+    <color name="accent_soft">#ECEAFE</color>
+
+    <!-- Виды заметок -->
+    <color name="kind_error">#E5484D</color>
+    <color name="kind_ok">#1F9D60</color>
+    <color name="kind_theory">#D9822B</color>
+    <color name="kind_hint">#5B4CF0</color>
+
+    <!-- Светлые варианты значков в тёмном меню у кнопки -->
+    <color name="menu_hint">#A99BFF</color>
+    <color name="menu_error">#FF8A8F</color>
+    <color name="menu_theory">#F5B26B</color>
+    <color name="menu_ok">#5FD49A</color>
+
+    <color name="text_main">#16161A</color>
+    <color name="ic_launcher_background">#5B4CF0</color>
 </resources>

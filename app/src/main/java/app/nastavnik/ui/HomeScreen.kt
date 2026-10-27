@@ -3,28 +3,25 @@ package app.nastavnik.ui
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -34,11 +31,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.nastavnik.R
 import app.nastavnik.app
@@ -66,23 +64,31 @@ fun HomeScreen(resumeTick: Int, go: (String) -> Unit) {
     val provider = remember(resumeTick, tick) { context.app.settings.provider().shortTitle }
 
     ScreenScaffold(title = "", onBack = null) {
-        // Шапка: искра и радужное название.
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            Image(painterResource(R.drawable.ic_sparkle), contentDescription = null, modifier = Modifier.size(44.dp))
-            Column {
-                Text(
-                    "Наставник",
-                    style = MaterialTheme.typography.headlineMedium.copy(brush = GoogleColors.rainbow),
-                )
-                Text(
-                    "Подсказки прямо на записях в Touchnotes",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+        // Шапка: значок, название и кнопка настроек.
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                Modifier
+                    .size(42.dp)
+                    .softCard(RoundedCornerShape(14.dp), 10.dp)
+                    .background(Brand.gradient),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(painterResource(R.drawable.ic_sparkle), contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
             }
+            Text("Наставник", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(start = 12.dp).weight(1f))
+            RoundIconButton(R.drawable.ic_tune, "Настройки") { go(MainActivity.SCREEN_SETTINGS) }
         }
 
-        StatusHero(
+        Column(Modifier.padding(top = 10.dp, bottom = 4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Решай сам.\nЯ подскажу, где нужно.", style = MaterialTheme.typography.displaySmall)
+            Text(
+                "Пиши в Touchnotes, а когда застрянешь — нажми кнопку. Ответ появится прямо на твоих записях.",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
+        Hero(
             running = running,
             canStart = overlay,
             touchnotesLabel = touchnotes?.label,
@@ -90,52 +96,62 @@ fun HomeScreen(resumeTick: Int, go: (String) -> Unit) {
             onStop = { BubbleService.stop(context); tick++ },
             onOpenTouchnotes = { touchnotes?.let { openApp(context, it.packageName) } },
         ) {
-            StatusPill("Нейросеть: $provider", notReady == null)
-            StatusPill("Уведомления", notif)
-            StatusPill("Микрофон", mic)
-            StatusPill(if (touchnotes != null) "Touchnotes" else "Touchnotes не найден", touchnotes != null)
+            StatusPill(provider, notReady == null, onDark = true)
+            StatusPill("Уведомления", notif, onDark = true)
+            StatusPill("Микрофон", mic, onDark = true)
+            StatusPill(if (touchnotes != null) "Touchnotes" else "Touchnotes не найден", touchnotes != null, onDark = true)
         }
 
         if (!overlay) {
-            AttentionCard(
-                "Нужно разрешение «Поверх других окон»",
-                "Без него кнопка и подсказки не появятся поверх Touchnotes.",
-                "Разрешить",
-            ) { context.startActivity(Permissions.overlaySettingsIntent(context)) }
+            Attention("Нужно разрешение «Поверх других окон»", "Без него кнопка и подсказки не появятся поверх Touchnotes.", "Разрешить") {
+                context.startActivity(Permissions.overlaySettingsIntent(context))
+            }
         }
         if (notReady != null) {
-            AttentionCard("$notReady", "Без этого наставник не сможет ответить.", "Открыть настройки") {
-                go(MainActivity.SCREEN_SETTINGS)
+            Attention(notReady, "Без этого наставник не сможет ответить.", "Настроить") { go(MainActivity.SCREEN_SETTINGS) }
+        }
+
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            Tile(R.drawable.ic_tune, Brand.Accent, "Настройки", "Нейросеть, ключ, кнопка", Modifier.weight(1f)) { go(MainActivity.SCREEN_SETTINGS) }
+            Tile(R.drawable.ic_history, Brand.Theory, "История", "Задачи и чистовики", Modifier.weight(1f)) { go(MainActivity.SCREEN_HISTORY) }
+            Tile(R.drawable.ic_note, Brand.Ok, "Чистовик", "Проверить PDF", Modifier.weight(1f)) { go(MainActivity.SCREEN_CLEAN_TEST) }
+        }
+
+        SectionLabel("Как это работает")
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .softCard(color = MaterialTheme.colorScheme.surface)
+                .padding(horizontal = 20.dp, vertical = 6.dp),
+        ) {
+            val steps = listOf(
+                "Пиши как обычно" to "Стилус проходит сквозь кнопку наставника — она не мешает.",
+                "Нажми кнопку пальцем" to "Подсказка, поиск ошибки, теория, свой вопрос или чистовик.",
+                "Смотри прямо на записи" to "Нужная строка подсвечена, рядом — заметка с формулами. Её можно двигать, а глазик прячет подсветку.",
+                "Готово — сделай чистовик" to "Аккуратный PDF уйдёт в Touchnotes и сохранится в «Документы/Конспекты».",
+            )
+            steps.forEachIndexed { i, (title, text) ->
+                Step(i + 1, title, text)
+                if (i < steps.lastIndex) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             }
         }
 
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Tile(R.drawable.ic_tune, GoogleColors.Blue, "Настройки", "Нейросеть и ключ", Modifier.weight(1f)) { go(MainActivity.SCREEN_SETTINGS) }
-            Tile(R.drawable.ic_history, GoogleColors.Violet, "История", "Задачи и чистовики", Modifier.weight(1f)) { go(MainActivity.SCREEN_HISTORY) }
-            Tile(R.drawable.ic_note, GoogleColors.Green, "Тест чистовика", "PDF без нейросети", Modifier.weight(1f)) { go(MainActivity.SCREEN_CLEAN_TEST) }
-        }
-
-        SectionCard("Как это работает") {
-            Step(1, GoogleColors.Blue, "Пиши в Touchnotes как обычно", "Кнопка наставника не мешает: стилус проходит сквозь неё.")
-            Step(2, GoogleColors.Violet, "Нажми кнопку пальцем", "«Подсказка», «Где ошибка?», «Теория», «Спросить…» или «Чистовик».")
-            Step(3, GoogleColors.Red, "Ответ появится на записи", "Нужная строка подсвечена, рядом — заметка с формулами. Её можно перетащить за заголовок, а при прокрутке она едет вместе со страницей.")
-            Step(4, GoogleColors.Green, "Решение готово — сделай чистовик", "Аккуратный PDF уйдёт в Touchnotes и сохранится в «Документы/Конспекты».")
-            Text(
-                "Долгое нажатие на кнопку: «Следить за решением» — наставник сам проверит, когда ты перестанешь писать.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-
-        TextButton(onClick = { go(MainActivity.SCREEN_ONBOARDING) }, modifier = Modifier.align(Alignment.CenterHorizontally)) {
-            Text("Пройти первую настройку заново", fontWeight = FontWeight.Normal)
-        }
+        Text(
+            "Пройти первую настройку заново",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier
+                .align(Alignment.CenterHorizontally)
+                .clip(CircleShape)
+                .clickable { go(MainActivity.SCREEN_ONBOARDING) }
+                .padding(horizontal = 16.dp, vertical = 10.dp),
+        )
     }
 }
 
-/** Большая карточка состояния с главной кнопкой. */
+/** Тёмная карточка состояния с фиолетовым свечением и главной кнопкой. */
 @Composable
-private fun StatusHero(
+private fun Hero(
     running: Boolean,
     canStart: Boolean,
     touchnotesLabel: String?,
@@ -144,114 +160,124 @@ private fun StatusHero(
     onOpenTouchnotes: () -> Unit,
     pills: @Composable () -> Unit,
 ) {
-    val bg = Brush.linearGradient(listOf(Color(0xFFE8F0FE), Color(0xFFF3E8FD), Color(0xFFFCE8E6)))
-    Box(
+    Column(
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(28.dp))
-            .background(bg)
-            .padding(22.dp),
+            .softCard(RoundedCornerShape(28.dp), 18.dp, Brand.Ink)
+            .drawBehind {
+                drawCircle(
+                    Brush.radialGradient(listOf(Color(0xA68E5CF7), Color(0x008E5CF7)), center = Offset(size.width * 0.86f, size.height * 0.12f), radius = size.height * 0.95f),
+                    radius = size.height * 0.95f,
+                    center = Offset(size.width * 0.86f, size.height * 0.12f),
+                )
+                drawCircle(
+                    Brush.radialGradient(listOf(Color(0x735B4CF0), Color(0x005B4CF0)), center = Offset(size.width * 0.08f, size.height * 1.05f), radius = size.height * 0.8f),
+                    radius = size.height * 0.8f,
+                    center = Offset(size.width * 0.08f, size.height * 1.05f),
+                )
+            }
+            .padding(26.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                Box(
-                    Modifier
-                        .size(56.dp)
-                        .clip(CircleShape)
-                        .background(if (running) GoogleColors.rainbow else Brush.linearGradient(listOf(Color.White, Color.White))),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        painterResource(R.drawable.ic_power),
-                        contentDescription = null,
-                        tint = if (running) Color.White else Color(0xFF5F6368),
-                        modifier = Modifier.size(28.dp),
-                    )
-                }
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        if (running) "Наставник работает" else "Наставник выключен",
-                        style = MaterialTheme.typography.titleLarge,
-                        color = Color(0xFF1F1F1F),
-                    )
-                    Text(
-                        if (running) "Кнопка висит поверх Touchnotes — нажми её, когда понадобится помощь."
-                        else "Включи — поверх записей появится кнопка наставника.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color(0xFF444746),
-                    )
-                }
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                if (running) {
-                    OutlinedButton(onClick = onStop) { Text("Выключить наставника") }
-                } else {
-                    RainbowButton("Запустить наставника", enabled = canStart, onClick = onStart)
-                }
-                if (touchnotesLabel != null) {
-                    FilledTonalButton(onClick = onOpenTouchnotes) {
-                        Icon(painterResource(R.drawable.ic_open), contentDescription = null, modifier = Modifier.size(18.dp))
-                        Text("  Открыть $touchnotesLabel")
-                    }
-                }
-            }
-            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) { pills() }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Box(
+                Modifier
+                    .size(10.dp)
+                    .clip(CircleShape)
+                    .background(if (running) Color(0xFF4ADE80) else Color(0xFF8E8D98)),
+            )
+            Text(
+                if (running) "Работает поверх Touchnotes" else "Сейчас выключен",
+                style = MaterialTheme.typography.labelMedium,
+                color = Color(0xFFC9C8D3),
+            )
         }
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(
+                if (running) "Наставник включён" else "Включи наставника",
+                style = MaterialTheme.typography.headlineMedium,
+                color = Color.White,
+            )
+            Text(
+                if (running) "Кнопка ждёт у края экрана. Нажми её пальцем — выбери подсказку, проверку или вопрос."
+                else "Поверх записей появится небольшая кнопка. Стилусу она не мешает.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color(0xFFB7B6C2),
+            )
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (running) {
+                if (touchnotesLabel != null) InkButton("Открыть $touchnotesLabel", light = true, icon = R.drawable.ic_open, onClick = onOpenTouchnotes)
+                SoftButton("Выключить", onDark = true, icon = R.drawable.ic_power, onClick = onStop)
+            } else {
+                InkButton("Запустить наставника", light = true, enabled = canStart, icon = R.drawable.ic_power, onClick = onStart)
+                if (touchnotesLabel != null) SoftButton("Открыть $touchnotesLabel", onDark = true, onClick = onOpenTouchnotes)
+            }
+        }
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) { pills() }
     }
 }
 
 /** Карточка «нужно внимание»: что не так и кнопка, чтобы исправить. */
 @Composable
-private fun AttentionCard(title: String, text: String, action: String, onAction: () -> Unit) {
-    Card(
-        shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
-        modifier = Modifier.fillMaxWidth(),
+private fun Attention(title: String, text: String, action: String, onAction: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(22.dp))
+            .background(MaterialTheme.colorScheme.errorContainer)
+            .padding(18.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Row(Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            Column(Modifier.weight(1f)) {
-                Text(title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.error)
-                Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            FilledTonalButton(onClick = onAction) { Text(action) }
+        Box(
+            Modifier
+                .size(36.dp)
+                .clip(CircleShape)
+                .background(Brand.Error),
+            contentAlignment = Alignment.Center,
+        ) { Text("!", color = Color.White, style = MaterialTheme.typography.titleMedium) }
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onErrorContainer)
+            Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.8f))
         }
+        InkButton(action, onClick = onAction)
     }
 }
 
 @Composable
 private fun Tile(icon: Int, tint: Color, title: String, caption: String, modifier: Modifier, onClick: () -> Unit) {
-    Card(
-        onClick = onClick,
-        modifier = modifier,
-        shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+    Column(
+        modifier
+            .softCard(color = MaterialTheme.colorScheme.surface)
+            .clickable(onClick = onClick)
+            .padding(18.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            IconBadge(icon, tint)
-            Column {
-                Text(title, style = MaterialTheme.typography.titleMedium)
-                Text(caption, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
+        IconBadge(icon, tint)
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(title, style = MaterialTheme.typography.titleMedium)
+            Text(caption, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
 
 @Composable
-private fun Step(n: Int, color: Color, title: String, text: String) {
-    Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+private fun Step(n: Int, title: String, text: String) {
+    Row(Modifier.padding(vertical = 14.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
         Box(
             Modifier
                 .size(30.dp)
-                .clip(CircleShape)
-                .background(color.copy(alpha = 0.14f)),
+                .clip(RoundedCornerShape(10.dp))
+                .background(MaterialTheme.colorScheme.primaryContainer),
             contentAlignment = Alignment.Center,
         ) {
-            Text(n.toString(), color = color, style = MaterialTheme.typography.labelLarge)
+            Text(n.toString(), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.titleSmall)
         }
-        Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.titleSmall)
-            Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.width(0.dp))
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(title, style = MaterialTheme.typography.titleMedium)
+            Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

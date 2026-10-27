@@ -1,5 +1,12 @@
 package app.nastavnik.ui
 
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.clip
+import androidx.compose.material3.Icon
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.background
 import android.content.Intent
 import android.media.projection.MediaProjectionConfig
 import android.media.projection.MediaProjectionManager
@@ -111,23 +118,38 @@ class ProjectionPermissionActivity : ComponentActivity() {
 @Composable
 private fun Explanation(onAllow: () -> Unit, onCancel: () -> Unit) {
     Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
-        Card(Modifier.widthIn(max = 520.dp).fillMaxWidth()) {
-            Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Разреши снимок экрана", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                Text(
-                    "Наставник смотрит на экран только когда ты нажимаешь кнопку — чтобы увидеть твои записи в Touchnotes. " +
-                        "Снимок уходит только в выбранную нейросеть и больше никуда.",
-                )
-                Text(
-                    "В следующем окне выбери «Весь экран» и нажми «Начать». " +
-                        "На Android 14 и новее система спрашивает это заново при каждом запуске наставника.",
-                    color = MaterialTheme.colorScheme.secondary,
-                )
-                Spacer(Modifier.padding(2.dp))
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    TextButton(onClick = onCancel) { Text("Не сейчас") }
-                    Button(onClick = onAllow) { Text("Разрешить") }
-                }
+        Column(
+            Modifier
+                .widthIn(max = 520.dp)
+                .fillMaxWidth()
+                .softCard(RoundedCornerShape(28.dp), 24.dp, MaterialTheme.colorScheme.surface)
+                .padding(26.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Box(
+                Modifier
+                    .size(52.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(Brand.gradient),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(painterResource(app.nastavnik.R.drawable.ic_search), contentDescription = null, tint = Color.White, modifier = Modifier.size(24.dp))
+            }
+            Text("Разреши снимок экрана", style = MaterialTheme.typography.headlineSmall)
+            Text(
+                "Наставник смотрит на экран только когда ты нажимаешь кнопку — чтобы увидеть твои записи в Touchnotes. " +
+                    "Снимок уходит только в выбранную нейросеть и больше никуда.",
+                style = MaterialTheme.typography.bodyLarge,
+            )
+            Text(
+                "В следующем окне выбери «Весь экран» и нажми «Начать». " +
+                    "На Android 14 и новее система спрашивает это заново при каждом запуске наставника.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Row(Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End)) {
+                SoftButton("Не сейчас", onClick = onCancel)
+                InkButton("Разрешить", onClick = onAllow)
             }
         }
     }

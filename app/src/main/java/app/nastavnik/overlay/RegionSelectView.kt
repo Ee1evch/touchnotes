@@ -54,7 +54,8 @@ class RegionSelector(private val context: Context, private val wm: WindowManager
             setTextColor(Color.WHITE)
             textSize = 17f
             setPadding(dp(16f), dp(10f), dp(16f), dp(10f))
-            background = GradientDrawable().apply { setColor(0xCC1F1F1F.toInt()); cornerRadius = dp(20f).toFloat() }
+            background = GradientDrawable().apply { setColor(0xE616161A.toInt()); cornerRadius = dp(20f).toFloat() }
+            typeface = Fonts.medium(context)
         }
         root.addView(hint, FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT).apply {
             gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
@@ -64,16 +65,17 @@ class RegionSelector(private val context: Context, private val wm: WindowManager
         val bar = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             setPadding(dp(8f), dp(8f), dp(8f), dp(8f))
-            background = GradientDrawable().apply { setColor(Color.WHITE); cornerRadius = dp(28f).toFloat() }
+            background = GradientDrawable().apply { setColor(0xFA16161A.toInt()); cornerRadius = dp(28f).toFloat() }
             elevation = dp(6f).toFloat()
         }
         fun button(label: String, primary: Boolean, onClick: () -> Unit) = Button(context).apply {
             text = label
             isAllCaps = false
             textSize = 16f
-            setTextColor(if (primary) Color.WHITE else 0xFF1F1F1F.toInt())
+            typeface = Fonts.semibold(context)
+            setTextColor(if (primary) 0xFF16161A.toInt() else 0xFFF4F4F6.toInt())
             background = GradientDrawable().apply {
-                setColor(if (primary) 0xFF0B57D0.toInt() else 0xFFF0F4F9.toInt())
+                setColor(if (primary) Color.WHITE else 0x1FFFFFFF)
                 cornerRadius = dp(22f).toFloat()
             }
             setPadding(dp(18f), 0, dp(18f), 0)
@@ -116,7 +118,7 @@ class RegionSelector(private val context: Context, private val wm: WindowManager
             color = Color.WHITE
             strokeWidth = resources.displayMetrics.density * 2.5f
         }
-        private val corner = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF0B57D0.toInt() }
+        private val corner = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF5B4CF0.toInt() }
         private var startX = 0f
         private var startY = 0f
         private var sel: RectF? = null

@@ -323,28 +323,35 @@ class AnswerOverlay(baseContext: Context, private val wm: WindowManager, private
             root.dragZone = header
             root.contentDescription = "Заметка: ${kind.label}"
 
-            val icon = TextView(ctx).apply {
-                text = NoteColors.glyph(kind)
-                gravity = Gravity.CENTER
-                setTextColor(NoteColors.of(kind))
-                typeface = Typeface.DEFAULT_BOLD
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+            // Метка вида: цветная «пилюля» с точкой — «Ошибка», «Следующий шаг», «Верно», «Теория».
+            val chip = LinearLayout(ctx).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(11f), 0, dp(13f), 0)
                 background = GradientDrawable().apply {
-                    shape = GradientDrawable.OVAL
+                    cornerRadius = dp(14f).toFloat()
                     setColor(NoteColors.soft(kind))
                 }
             }
-            header.addView(icon, LinearLayout.LayoutParams(dp(28f), dp(28f)).apply { marginEnd = dp(10f) })
+            val chipDot = View(ctx).apply {
+                background = GradientDrawable().apply {
+                    shape = GradientDrawable.OVAL
+                    setColor(NoteColors.of(kind))
+                }
+            }
+            chip.addView(chipDot, LinearLayout.LayoutParams(dp(7f), dp(7f)).apply { marginEnd = dp(7f) })
             val title = TextView(ctx).apply {
                 text = NoteColors.title(kind)
-                setTextColor(0xFF1F1F1F.toInt())
-                typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
+                setTextColor(NoteColors.text(kind))
+                typeface = Fonts.semibold(ctx)
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f)
             }
-            header.addView(title, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            chip.addView(title)
+            header.addView(chip, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(28f)))
+            header.addView(View(ctx), LinearLayout.LayoutParams(0, 1, 1f))
             eye.apply {
                 setImageResource(R.drawable.ic_eye)
-                setColorFilter(0xFF5F6368.toInt())
+                setColorFilter(0xFF7B7A83.toInt())
                 setPadding(dp(8f), dp(8f), dp(8f), dp(8f))
                 contentDescription = "Скрыть выделение"
                 setOnClickListener {
@@ -357,7 +364,7 @@ class AnswerOverlay(baseContext: Context, private val wm: WindowManager, private
             header.addView(GripView(ctx), LinearLayout.LayoutParams(dp(24f), dp(36f)))
             val close = ImageView(ctx).apply {
                 setImageResource(R.drawable.ic_close)
-                setColorFilter(0xFF5F6368.toInt())
+                setColorFilter(0xFF7B7A83.toInt())
                 setPadding(dp(8f), dp(8f), dp(8f), dp(8f))
                 contentDescription = "Закрыть заметку"
                 setOnClickListener { entries.firstOrNull { it.note === this@NoteWindow }?.let { closeEntry(it) } }
@@ -386,9 +393,9 @@ class AnswerOverlay(baseContext: Context, private val wm: WindowManager, private
         private fun pill(label: String, primary: Boolean) = TextView(ctx).apply {
             text = label
             gravity = Gravity.CENTER
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
-            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-            setTextColor(if (primary) Color.WHITE else 0xFF0B57D0.toInt())
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14.5f)
+            typeface = Fonts.semibold(ctx)
+            setTextColor(if (primary) Color.WHITE else 0xFF16161A.toInt())
             setBackgroundResource(if (primary) R.drawable.primary_btn_bg else R.drawable.quick_btn_bg)
             setPadding(dp(18f), 0, dp(18f), 0)
         }

@@ -25,21 +25,22 @@ class BubbleMenu(baseContext: Context, private val wm: WindowManager) {
         val dp = { v: Float -> OverlayWindows.dp(ctx, v) }
         val menu = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(0, dp(6f), 0, dp(6f))
+            setPadding(dp(6f), dp(8f), dp(6f), dp(8f))
             background = GradientDrawable().apply {
-                setColor(Color.WHITE)
+                setColor(0xFA16161A.toInt())
                 cornerRadius = dp(20f).toFloat()
-                setStroke(dp(1f), 0xFFE3E3E3.toInt())
+                setStroke(dp(1f), 0x1AFFFFFF)
             }
-            elevation = dp(8f).toFloat()
+            elevation = dp(12f).toFloat()
         }
         items.forEach { (label, action) ->
             val tv = TextView(ctx).apply {
                 text = label
-                textSize = 16f
-                setTextColor(0xFF1F1F1F.toInt())
-                setPadding(dp(18f), dp(12f), dp(28f), dp(12f))
-                setBackgroundResource(android.R.drawable.list_selector_background)
+                textSize = 15.5f
+                typeface = Fonts.medium(ctx)
+                setTextColor(0xFFF4F4F6.toInt())
+                setPadding(dp(14f), dp(12f), dp(28f), dp(12f))
+                setBackgroundResource(R.drawable.menu_row_bg)
                 setOnClickListener {
                     dismiss()
                     action()

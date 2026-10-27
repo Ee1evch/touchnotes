@@ -187,7 +187,7 @@ class MentorFlowTest {
         val scenario = ActivityScenario.launch(MainActivity::class.java)
         SystemClock.sleep(800)
         scenario.onActivity { BubbleService.start(it) }
-        target = device.wait(Until.findObject(By.text("Как это работает")), 5000)?.visibleBounds
+        target = device.wait(Until.findObject(By.text("КАК ЭТО РАБОТАЕТ")), 5000)?.visibleBounds
         assertNotNull("на главном экране нет заголовка «Как это работает»", target)
         askHint()
 

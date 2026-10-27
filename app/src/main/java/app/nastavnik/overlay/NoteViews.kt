@@ -19,26 +19,35 @@ import android.widget.FrameLayout
 import app.nastavnik.ai.MarkKind
 import app.nastavnik.geom.Side
 
-/** Цвета заметок: ошибка — красная, подсказка — синяя, верно — зелёная, теория — фиолетовая. */
+/** Цвета заметок: ошибка — коралловая, следующий шаг — фирменная фиолетово-синяя, верно — зелёная, теория — янтарная. */
 object NoteColors {
     fun of(kind: MarkKind): Int = when (kind) {
-        MarkKind.ERROR -> Color.parseColor("#D93025")
-        MarkKind.HINT -> Color.parseColor("#1A73E8")
-        MarkKind.OK -> Color.parseColor("#188038")
-        MarkKind.THEORY -> Color.parseColor("#8430CE")
-        MarkKind.NOTE -> Color.parseColor("#1A73E8")
+        MarkKind.ERROR -> Color.parseColor("#E5484D")
+        MarkKind.HINT -> Color.parseColor("#5B4CF0")
+        MarkKind.OK -> Color.parseColor("#1F9D60")
+        MarkKind.THEORY -> Color.parseColor("#D9822B")
+        MarkKind.NOTE -> Color.parseColor("#5B4CF0")
     }
 
-    /** Светлый фон значка в заголовке заметки. */
+    /** Светлый фон метки вида в заголовке заметки. */
     fun soft(kind: MarkKind): Int = when (kind) {
-        MarkKind.ERROR -> Color.parseColor("#FCE8E6")
-        MarkKind.HINT -> Color.parseColor("#E8F0FE")
-        MarkKind.OK -> Color.parseColor("#E6F4EA")
-        MarkKind.THEORY -> Color.parseColor("#F3E8FD")
-        MarkKind.NOTE -> Color.parseColor("#E8F0FE")
+        MarkKind.ERROR -> Color.parseColor("#FDECEC")
+        MarkKind.HINT -> Color.parseColor("#ECEAFE")
+        MarkKind.OK -> Color.parseColor("#E5F6ED")
+        MarkKind.THEORY -> Color.parseColor("#FCF0E3")
+        MarkKind.NOTE -> Color.parseColor("#ECEAFE")
     }
 
-    /** Значок вида заметки. */
+    /** Текст метки вида — темнее основного цвета, чтобы читался на светлом фоне. */
+    fun text(kind: MarkKind): Int = when (kind) {
+        MarkKind.ERROR -> Color.parseColor("#C8333A")
+        MarkKind.HINT -> Color.parseColor("#4A3BD6")
+        MarkKind.OK -> Color.parseColor("#17804D")
+        MarkKind.THEORY -> Color.parseColor("#A85F14")
+        MarkKind.NOTE -> Color.parseColor("#4A3BD6")
+    }
+
+    /** Значок вида. */
     fun glyph(kind: MarkKind): String = when (kind) {
         MarkKind.ERROR -> "!"
         MarkKind.HINT -> "✎"
@@ -47,9 +56,9 @@ object NoteColors {
         MarkKind.NOTE -> "✦"
     }
 
-    /** Заголовок заметки. */
+    /** Подпись метки вида. */
     fun title(kind: MarkKind): String = when (kind) {
-        MarkKind.ERROR -> "Здесь ошибка"
+        MarkKind.ERROR -> "Ошибка"
         MarkKind.HINT -> "Следующий шаг"
         MarkKind.OK -> "Верно"
         MarkKind.THEORY -> "Теория"
@@ -72,10 +81,10 @@ class MarkView(context: Context, val kind: MarkKind) : View(context) {
     private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         this.color = this@MarkView.color
         alpha = when (kind) {
-            MarkKind.ERROR -> 46
-            MarkKind.OK -> 40
-            MarkKind.THEORY -> 34
-            else -> 22
+            MarkKind.ERROR -> 40
+            MarkKind.OK -> 38
+            MarkKind.THEORY -> 44
+            else -> 20
         }
     }
     private val line = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -161,14 +170,14 @@ class NoteBackground(context: Context) : Drawable() {
     private val border = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
         strokeWidth = 1f * d
-        color = Color.parseColor("#DADCE0")
+        color = Color.parseColor("#14000000")
     }
     // Мягкая тень без размытия (оно не работает с аппаратной отрисовкой и WebView): несколько полупрозрачных обводок.
     private val shadows = listOf(9f, 6f, 3.5f, 1.5f).map { w ->
         Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE
             strokeWidth = w * d
-            color = Color.argb(10, 32, 33, 36)
+            color = Color.argb(9, 22, 22, 26)
         }
     }
     private val path = Path()
@@ -250,7 +259,7 @@ class NoteBackground(context: Context) : Drawable() {
 /** «Ручка» в заголовке заметки: шесть точек — за неё заметку можно перетащить. */
 class GripView(context: Context) : View(context) {
     private val d = resources.displayMetrics.density
-    private val dot = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#9AA0A6") }
+    private val dot = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#A3A2AB") }
 
     init {
         contentDescription = "Перетащить заметку"

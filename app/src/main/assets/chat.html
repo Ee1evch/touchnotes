@@ -5,18 +5,22 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="stylesheet" href="katex/katex.min.css">
 <style>
+  @font-face { font-family: "Onest"; src: url("fonts/Onest-Regular.ttf"); font-weight: 400; }
+  @font-face { font-family: "Onest"; src: url("fonts/Onest-Medium.ttf"); font-weight: 500; }
+  @font-face { font-family: "Onest"; src: url("fonts/Onest-SemiBold.ttf"); font-weight: 600; }
+  @font-face { font-family: "Onest"; src: url("fonts/Onest-Bold.ttf"); font-weight: 700; }
   /* Оформление в духе Gemini: ответ без «пузыря», вопрос — в серой пилюле справа. */
   :root {
-    --text: #1f1f1f;
-    --muted: #444746;
-    --user-bg: #e9eef6;
-    --error-bg: #fce8e6;
-    --error-text: #b3261e;
-    --code-bg: #f0f4f9;
+    --text: #16161a;
+    --muted: #5e5d66;
+    --user-bg: #f1efea;
+    --error-bg: #fdecec;
+    --error-text: #c8333a;
+    --code-bg: #f1efea;
   }
-  html, body { margin: 0; padding: 0; background: #fff; color: var(--text); }
+  html, body { margin: 0; padding: 0; background: #f4f2ee; color: var(--text); }
   body {
-    font-family: "Google Sans Text", "Google Sans", "Roboto", "Noto Sans", sans-serif;
+    font-family: "Onest", "Roboto", "Noto Sans", sans-serif;
     font-size: 16px;
     line-height: 1.55;
     padding: 4px 4px 6px;
@@ -57,7 +61,7 @@
   /* «Думаю…» переливается радугой Google */
   .thinking {
     font-weight: 500;
-    background: linear-gradient(90deg, #4285f4, #9b72cb, #ea4335, #fbbc04, #34a853, #4285f4);
+    background: linear-gradient(90deg, #5b4cf0, #8e5cf7, #e06ab8, #8e5cf7, #5b4cf0);
     background-size: 300% 100%;
     -webkit-background-clip: text;
     background-clip: text;
@@ -70,7 +74,7 @@
     width: 8px; height: 8px;
     margin-left: 4px;
     border-radius: 50%;
-    background: linear-gradient(135deg, #4285f4, #d96570);
+    background: linear-gradient(135deg, #5b4cf0, #b15cf2);
     animation: pulse 1s ease-in-out infinite;
   }
   @keyframes shimmer { to { background-position: -300% 0; } }
@@ -88,7 +92,7 @@
   var list = document.getElementById('list');
   var nodes = {};
   var SPARK = '<svg viewBox="0 0 24 24"><defs><linearGradient id="g" x1="0" y1="1" x2="1" y2="0">' +
-    '<stop offset="0" stop-color="#4285F4"/><stop offset="0.55" stop-color="#9B72CB"/><stop offset="1" stop-color="#D96570"/>' +
+    '<stop offset="0" stop-color="#4A3BE6"/><stop offset="0.55" stop-color="#7B55F4"/><stop offset="1" stop-color="#B15CF2"/>' +
     '</linearGradient></defs><path fill="url(#g)" d="M12,1.5C12.7,7.2 16.8,11.3 22.5,12C16.8,12.7 12.7,16.8 12,22.5C11.3,16.8 7.2,12.7 1.5,12C7.2,11.3 11.3,7.2 12,1.5Z"/></svg>';
 
   function nearBottom() {

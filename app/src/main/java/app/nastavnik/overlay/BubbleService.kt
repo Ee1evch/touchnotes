@@ -390,15 +390,15 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
         askBar.dismiss()
         val items = mutableListOf<BarItem>()
         if (mentor.state.value.busy) {
-            items += BarItem("Остановить", R.drawable.ic_close, 0xFF444746.toInt()) { mentor.dismiss() }
+            items += BarItem("Остановить", R.drawable.ic_close, 0xFFC9C8D3.toInt()) { mentor.dismiss() }
         }
-        items += BarItem(QuickAction.NEXT_STEP.short, R.drawable.ic_bulb, color(R.color.google_blue)) { quick(QuickAction.NEXT_STEP) }
-        items += BarItem(QuickAction.FIND_ERROR.short, R.drawable.ic_search, color(R.color.google_red)) { quick(QuickAction.FIND_ERROR) }
-        items += BarItem(QuickAction.THEORY.short, R.drawable.ic_book, color(R.color.google_yellow)) { quick(QuickAction.THEORY) }
-        items += BarItem("Спросить…", R.drawable.ic_mic, color(R.color.sparkle_mid)) { askBar.show(anchor()) }
-        items += BarItem("Чистовик", R.drawable.ic_note, color(R.color.google_green)) { startClean() }
+        items += BarItem(QuickAction.NEXT_STEP.short, R.drawable.ic_bulb, color(R.color.menu_hint)) { quick(QuickAction.NEXT_STEP) }
+        items += BarItem(QuickAction.FIND_ERROR.short, R.drawable.ic_search, color(R.color.menu_error)) { quick(QuickAction.FIND_ERROR) }
+        items += BarItem(QuickAction.THEORY.short, R.drawable.ic_book, color(R.color.menu_theory)) { quick(QuickAction.THEORY) }
+        items += BarItem("Спросить…", R.drawable.ic_mic, 0xFFF4F4F6.toInt()) { askBar.show(anchor()) }
+        items += BarItem("Чистовик", R.drawable.ic_note, color(R.color.menu_ok)) { startClean() }
         if (overlay.isShowing) {
-            items += BarItem("Убрать заметки", R.drawable.ic_close, 0xFF444746.toInt()) { mentor.dismiss() }
+            items += BarItem("Убрать заметки", R.drawable.ic_close, 0xFFC9C8D3.toInt()) { mentor.dismiss() }
         }
         bar.showActions(anchor(), items)
         barOwner = BarOwner.ACTIONS

@@ -34,15 +34,24 @@ class BubbleView(context: Context, private val listener: Listener) : View(contex
     }
 
     private val density = resources.displayMetrics.density
+    // Графитовый круг с мягкой тенью — хорошо виден на белом листе и не спорит с записями.
     private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.WHITE
-        setShadowLayer(4 * density, 0f, 1.5f * density, 0x40000000)
+        color = 0xFF16161A.toInt()
+        setShadowLayer(6 * density, 0f, 2.5f * density, 0x5516161A)
     }
     private val ring = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
-        strokeWidth = 3.5f * density
+        strokeWidth = 2.2f * density
     }
-    private val icon = ContextCompat.getDrawable(context, R.drawable.ic_sparkle)!!.mutate()
+    // Светящаяся дуга, которая бежит по кольцу, пока наставник думает.
+    private val arc = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = 3f * density
+        strokeCap = Paint.Cap.ROUND
+        color = Color.WHITE
+    }
+    private val arcRect = android.graphics.RectF()
+    private val icon = ContextCompat.getDrawable(context, R.drawable.ic_sparkle)!!.mutate().apply { setTint(Color.WHITE) }
     private val ringMatrix = Matrix()
     private var ringShader: SweepGradient? = null
     private var angle = 0f
@@ -66,7 +75,7 @@ class BubbleView(context: Context, private val listener: Listener) : View(contex
             invalidate()
         }
 
-    private val dot = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF34A853.toInt() }
+    private val dot = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF4ADE80.toInt() }
     private val dotBorder = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
     private val flashRing = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
@@ -108,7 +117,7 @@ class BubbleView(context: Context, private val listener: Listener) : View(contex
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
-        ringShader = SweepGradient(w / 2f, h / 2f, Rainbow.COLORS, null)
+        ringShader = SweepGradient(w / 2f, h / 2f, Rainbow.BRAND, null)
         ring.shader = ringShader
     }
 
@@ -130,8 +139,13 @@ class BubbleView(context: Context, private val listener: Listener) : View(contex
             ringMatrix.setRotate(angle, cx, cy)
             ringShader?.setLocalMatrix(ringMatrix)
             canvas.drawCircle(cx, cy, r - ring.strokeWidth / 2, ring)
+            if (busy) {
+                val ar = r - arc.strokeWidth / 2
+                arcRect.set(cx - ar, cy - ar, cx + ar, cy + ar)
+                canvas.drawArc(arcRect, angle - 90f, 70f, false, arc)
+            }
         }
-        val s = (r * 1.15f).toInt()
+        val s = (r * 0.92f).toInt()
         icon.setBounds((cx - s / 2).toInt(), (cy - s / 2).toInt(), (cx + s / 2).toInt(), (cy + s / 2).toInt())
         icon.draw(canvas)
         if (watching) {

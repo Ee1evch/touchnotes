@@ -112,6 +112,20 @@ class SmokeTest {
         scenario.close()
     }
 
+    /** Снимки всех экранов приложения — по ним проверяется дизайн. */
+    @Test
+    fun screensForReview() {
+        shell("settings put global hide_error_dialogs 1")
+        ctx.app.settings.setOnboardingDone(true)
+        for (screen in listOf(MainActivity.SCREEN_HOME, MainActivity.SCREEN_SETTINGS, MainActivity.SCREEN_HISTORY, MainActivity.SCREEN_ONBOARDING)) {
+            val scenario = ActivityScenario.launch<MainActivity>(Intent(ctx, MainActivity::class.java).putExtra(MainActivity.EXTRA_SCREEN, screen))
+            SystemClock.sleep(2500)
+            dismissSystemAnr()
+            screenshot("screen_$screen")
+            scenario.close()
+        }
+    }
+
     private fun stylusTap(x: Float, y: Float) {
         val props = arrayOf(MotionEvent.PointerProperties().apply { id = 0; toolType = MotionEvent.TOOL_TYPE_STYLUS })
         val coords = arrayOf(MotionEvent.PointerCoords().apply { this.x = x; this.y = y; pressure = 1f; size = 1f })

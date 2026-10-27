@@ -1,13 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ripple xmlns:android="http://schemas.android.com/apk/res/android" android:color="#55FFFFFF">
+<!-- Кнопка «Отправить»: фирменный градиент -->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android" android:color="#44FFFFFF">
     <item>
         <shape android:shape="oval">
-            <gradient
-                android:angle="45"
-                android:endColor="@color/sparkle_end"
-                android:centerColor="@color/sparkle_mid"
-                android:startColor="@color/sparkle_start"
-                android:type="linear" />
+            <gradient android:angle="315" android:startColor="@color/accent" android:endColor="@color/accent_2" android:type="linear" />
         </shape>
     </item>
 </ripple>

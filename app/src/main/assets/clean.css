@@ -1,15 +1,18 @@
 /* Чистовик: лист A4 = 794 × 1123 CSS-пикселей (96 dpi). */
+@font-face { font-family: "Onest"; src: url("fonts/Onest-Regular.ttf"); font-weight: 400; }
+@font-face { font-family: "Onest"; src: url("fonts/Onest-SemiBold.ttf"); font-weight: 600; }
+@font-face { font-family: "Onest"; src: url("fonts/Onest-Bold.ttf"); font-weight: 700; }
 :root {
   --page-w: 794px;
   --page-h: 1123px;
   --pad-top: 64px;
   --pad-side: 68px;
   --pad-bottom: 76px;
-  --ink: #1d2233;
-  --muted: #6a7189;
-  --rule: #e3e7f0;
-  --accent: #0b57d0;
-  --accent-soft: #e8f0fe;
+  --ink: #16161a;
+  --muted: #6b6a72;
+  --rule: #e6e2db;
+  --accent: #4b3fd9;
+  --accent-soft: #eeecfd;
   --thm: #7a4bd8;
   --thm-soft: #f6f1ff;
   --note: #c98a00;
@@ -59,7 +62,7 @@ body.preview .page { margin: 0 auto 14px; box-shadow: 0 2px 10px rgba(20, 30, 60
   bottom: 34px;
   display: flex;
   justify-content: space-between;
-  font-family: "Roboto", "Noto Sans", sans-serif;
+  font-family: "Onest", "Roboto", "Noto Sans", sans-serif;
   font-size: 11px;
   color: var(--muted);
   border-top: 1px solid var(--rule);
@@ -69,7 +72,7 @@ body.preview .page { margin: 0 auto 14px; box-shadow: 0 2px 10px rgba(20, 30, 60
 /* Шапка первого листа */
 .head { margin-bottom: 22px; padding-bottom: 14px; border-bottom: 2px solid var(--ink); }
 .head .subject {
-  font-family: "Roboto", "Noto Sans", sans-serif;
+  font-family: "Onest", "Roboto", "Noto Sans", sans-serif;
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.12em;
@@ -77,14 +80,14 @@ body.preview .page { margin: 0 auto 14px; box-shadow: 0 2px 10px rgba(20, 30, 60
   color: var(--accent);
 }
 .head h1 { font-size: 30px; line-height: 1.2; margin: 6px 0 6px; font-weight: 700; }
-.head .date { font-family: "Roboto", "Noto Sans", sans-serif; font-size: 12px; color: var(--muted); }
+.head .date { font-family: "Onest", "Roboto", "Noto Sans", sans-serif; font-size: 12px; color: var(--muted); }
 
 /* Блоки */
 .blk { margin: 0 0 14px; }
 .blk p { margin: 0 0 6px; }
 .blk p:last-child { margin-bottom: 0; }
 h2.blk {
-  font-family: "Roboto", "Noto Sans", sans-serif;
+  font-family: "Onest", "Roboto", "Noto Sans", sans-serif;
   font-size: 19px;
   font-weight: 700;
   margin: 20px 0 10px;
@@ -93,7 +96,7 @@ h2.blk {
 h2.blk::before { content: ""; display: inline-block; width: 6px; height: 18px; background: var(--accent); border-radius: 2px; margin-right: 9px; vertical-align: -2px; }
 
 .box { border-radius: 10px; padding: 12px 16px; }
-.box .title { font-family: "Roboto", "Noto Sans", sans-serif; font-weight: 700; font-size: 14.5px; margin-bottom: 4px; }
+.box .title { font-family: "Onest", "Roboto", "Noto Sans", sans-serif; font-weight: 700; font-size: 14.5px; margin-bottom: 4px; }
 .def { background: var(--accent-soft); }
 .def .title { color: var(--accent); }
 .thm { background: var(--thm-soft); border-left: 4px solid var(--thm); border-radius: 0 10px 10px 0; }
@@ -101,7 +104,7 @@ h2.blk::before { content: ""; display: inline-block; width: 6px; height: 18px; b
 .note { background: var(--note-soft); border-left: 4px solid var(--note); border-radius: 0 10px 10px 0; }
 .note.check { background: var(--check-soft); border-left-color: var(--check); }
 .note.extra { background: var(--extra-soft); border-left-color: var(--extra); }
-.note .label { font-family: "Roboto", "Noto Sans", sans-serif; font-weight: 700; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--note); margin-bottom: 2px; }
+.note .label { font-family: "Onest", "Roboto", "Noto Sans", sans-serif; font-weight: 700; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--note); margin-bottom: 2px; }
 .note.check .label { color: var(--check); }
 .note.extra .label { color: var(--extra); }
 
@@ -110,7 +113,7 @@ h2.blk::before { content: ""; display: inline-block; width: 6px; height: 18px; b
 .math-block .katex-display { margin: 0.35em 0; }
 .katex { font-size: 1.1em; }
 
-.steps .title { font-family: "Roboto", "Noto Sans", sans-serif; font-weight: 700; font-size: 15px; margin-bottom: 6px; }
+.steps .title { font-family: "Onest", "Roboto", "Noto Sans", sans-serif; font-weight: 700; font-size: 15px; margin-bottom: 6px; }
 .steps ol { list-style: none; margin: 0; padding: 0; counter-reset: step var(--start, 0); }
 .steps li { counter-increment: step; position: relative; padding: 4px 0 6px 38px; border-bottom: 1px dashed var(--rule); }
 .steps li:last-child { border-bottom: none; }
@@ -124,7 +127,7 @@ h2.blk::before { content: ""; display: inline-block; width: 6px; height: 18px; b
   border-radius: 50%;
   background: var(--accent);
   color: #fff;
-  font-family: "Roboto", "Noto Sans", sans-serif;
+  font-family: "Onest", "Roboto", "Noto Sans", sans-serif;
   font-size: 13px;
   font-weight: 700;
   line-height: 24px;
@@ -133,17 +136,17 @@ h2.blk::before { content: ""; display: inline-block; width: 6px; height: 18px; b
 
 table.tbl { border-collapse: collapse; width: 100%; font-size: 14.5px; }
 table.tbl th, table.tbl td { border: 1px solid #d7dcea; padding: 6px 9px; text-align: center; vertical-align: middle; }
-table.tbl th { background: var(--accent-soft); font-family: "Roboto", "Noto Sans", sans-serif; font-weight: 700; color: var(--accent); }
+table.tbl th { background: var(--accent-soft); font-family: "Onest", "Roboto", "Noto Sans", sans-serif; font-weight: 700; color: var(--accent); }
 table.tbl tr:nth-child(even) td { background: #fafbfe; }
 
 figure.plot { margin: 4px 0 16px; text-align: center; }
 figure.plot svg { display: block; margin: 0 auto; }
-figure.plot figcaption { font-family: "Roboto", "Noto Sans", sans-serif; font-size: 12.5px; color: var(--muted); margin-top: 4px; }
+figure.plot figcaption { font-family: "Onest", "Roboto", "Noto Sans", sans-serif; font-size: 12.5px; color: var(--muted); margin-top: 4px; }
 .legend { display: flex; justify-content: center; gap: 18px; flex-wrap: wrap; font-size: 13.5px; margin-top: 2px; }
 .legend .swatch { display: inline-block; width: 18px; height: 3px; margin-right: 6px; vertical-align: middle; border-radius: 2px; }
 
 .summary { background: #f3f5fa; border-radius: 10px; padding: 12px 16px 10px; }
-.summary .title, .questions .title { font-family: "Roboto", "Noto Sans", sans-serif; font-weight: 700; font-size: 16px; margin-bottom: 6px; }
+.summary .title, .questions .title { font-family: "Onest", "Roboto", "Noto Sans", sans-serif; font-weight: 700; font-size: 16px; margin-bottom: 6px; }
 .summary ul { margin: 0; padding-left: 20px; }
 .summary li { margin: 2px 0; }
 .questions { border: 1.5px solid var(--accent); border-radius: 10px; padding: 12px 16px 10px; }
@@ -151,4 +154,4 @@ figure.plot figcaption { font-family: "Roboto", "Noto Sans", sans-serif; font-si
 .questions ol { margin: 0; padding-left: 22px; }
 .questions li { margin: 3px 0; }
 
-.cont { font-family: "Roboto", "Noto Sans", sans-serif; font-size: 12px; color: var(--muted); font-weight: 400; }
+.cont { font-family: "Onest", "Roboto", "Noto Sans", sans-serif; font-size: 12px; color: var(--muted); font-weight: 400; }

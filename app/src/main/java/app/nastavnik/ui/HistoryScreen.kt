@@ -10,12 +10,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -27,12 +22,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import app.nastavnik.R
 import app.nastavnik.app
 import app.nastavnik.data.CleanNoteEntity
 import app.nastavnik.data.ConversationSummary
@@ -61,10 +57,7 @@ fun HistoryScreen(onBack: () -> Unit) {
         return
     }
     ScreenScaffold(title = "История", onBack = onBack) {
-        TabRow(selectedTabIndex = tab) {
-            Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("Задачи") })
-            Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("Чистовики") })
-        }
+        Segmented(listOf(0 to "Задачи", 1 to "Чистовики"), tab) { tab = it }
         if (tab == 0) ConversationList(onOpen = { openConversation = it }) else CleanNoteList()
     }
 }
@@ -75,20 +68,45 @@ private fun ConversationList(onOpen: (Long) -> Unit) {
     val items by remember { context.app.db.conversations().observeSummaries() }.collectAsStateWithLifecycle(initialValue = emptyList())
     val active = remember { context.app.settings.load().activeConversationId }
     if (items.isEmpty()) {
-        Text("Пока пусто. Задачи появятся после первого вопроса наставнику.", color = MaterialTheme.colorScheme.secondary)
+        Empty("Пока пусто", "Задачи появятся после первого вопроса наставнику.")
     }
     items.forEach { c: ConversationSummary ->
-        Card(Modifier.fillMaxWidth().clickable { onOpen(c.id) }) {
-            Column(Modifier.padding(14.dp)) {
-                Text(c.title, fontWeight = FontWeight.Bold)
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .softCard(color = MaterialTheme.colorScheme.surface)
+                .clickable { onOpen(c.id) }
+                .padding(18.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            IconBadge(R.drawable.ic_bulb, if (c.id == active) Brand.Accent else Brand.InkSoft)
+            Column(Modifier.weight(1f)) {
+                Text(c.title, style = MaterialTheme.typography.titleMedium, maxLines = 2)
                 Text(
                     listOf(c.subject, dateFmt.format(Date(c.updatedAt)), "сообщений: ${c.messageCount}").filter { it.isNotBlank() }.joinToString(" · ") +
                         if (c.id == active) " · текущая" else "",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.secondary,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun Empty(title: String, text: String) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .softCard(color = MaterialTheme.colorScheme.surface)
+            .padding(28.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        IconBadge(R.drawable.ic_history, Brand.Accent, 52)
+        Text(title, style = MaterialTheme.typography.titleLarge)
+        Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -106,20 +124,20 @@ private fun ConversationDetail(id: Long, onBack: () -> Unit) {
     }
     ScreenScaffold(title = title, onBack = onBack, scrollable = false) {
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Button(onClick = {
+            InkButton("Продолжить эту задачу", onClick = {
                 context.app.settings.setActiveConversation(id)
                 if (BubbleService.running) {
                     context.startService(Intent(context, BubbleService::class.java).setAction(BubbleService.ACTION_RELOAD))
                 }
                 onBack()
-            }) { Text("Продолжить эту задачу") }
-            OutlinedButton(onClick = {
+            })
+            SoftButton("Удалить", onClick = {
                 scope.launch {
                     db.conversations().delete(id)
                     if (context.app.settings.load().activeConversationId == id) context.app.settings.setActiveConversation(0)
                     onBack()
                 }
-            }) { Text("Удалить") }
+            })
         }
         val list = messages
         if (list != null) {
@@ -162,38 +180,47 @@ private fun CleanNoteList() {
     var message by remember { mutableStateOf<String?>(null) }
     message?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
     if (items.isEmpty()) {
-        Text("Чистовиков пока нет. Их делает пункт «Чистовик» в меню кнопки наставника.", color = MaterialTheme.colorScheme.secondary)
+        Empty("Чистовиков пока нет", "Их делает пункт «Чистовик» в меню кнопки наставника.")
     }
     items.forEach { n: CleanNoteEntity ->
         val pdf = n.pdfPath?.let(::File)?.takeIf { it.exists() }
         val pngs = n.pngPaths.orEmpty().split("\n").filter { it.isNotBlank() }.map(::File).filter { it.exists() }
-        Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(n.title, fontWeight = FontWeight.Bold)
-                Text(
-                    "${n.subject} · ${dateFmt.format(Date(n.createdAt))}" + (n.publicPath?.let { "\n$it" } ?: ""),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.secondary,
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    if (pdf != null) {
-                        TextButton(onClick = { report(TouchnotesSender.viewPdf(context, pdf)) { message = it } }) { Text("Открыть") }
-                        TextButton(onClick = {
-                            report(TouchnotesSender.sendPdf(context, pdf, n.title, context.app.settings.load().sendTarget)) { message = it }
-                        }) { Text("В Touchnotes") }
-                    }
-                    if (pngs.isNotEmpty()) {
-                        TextButton(onClick = { report(TouchnotesSender.sendImages(context, pngs, n.title)) { message = it } }) { Text("Картинками") }
-                    }
-                    TextButton(onClick = {
-                        scope.launch {
-                            db.cleanNotes().delete(n.id)
-                            pdf?.parentFile?.deleteRecursively()
-                        }
-                    }) { Text("Удалить") }
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .softCard(color = MaterialTheme.colorScheme.surface)
+                .padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                IconBadge(R.drawable.ic_note, Brand.Ok)
+                Column(Modifier.weight(1f)) {
+                    Text(n.title, style = MaterialTheme.typography.titleMedium, maxLines = 2)
+                    Text(
+                        listOf(n.subject, dateFmt.format(Date(n.createdAt))).filter { it.isNotBlank() }.joinToString(" · ") + (n.publicPath?.let { "\n$it" } ?: ""),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
-                if (pdf == null) Text("Файл удалён — осталась копия в «Документы/Конспекты».", style = MaterialTheme.typography.bodySmall)
             }
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                if (pdf != null) {
+                    TextButton(onClick = { report(TouchnotesSender.viewPdf(context, pdf)) { message = it } }) { Text("Открыть") }
+                    TextButton(onClick = {
+                        report(TouchnotesSender.sendPdf(context, pdf, n.title, context.app.settings.load().sendTarget)) { message = it }
+                    }) { Text("В Touchnotes") }
+                }
+                if (pngs.isNotEmpty()) {
+                    TextButton(onClick = { report(TouchnotesSender.sendImages(context, pngs, n.title)) { message = it } }) { Text("Картинками") }
+                }
+                TextButton(onClick = {
+                    scope.launch {
+                        db.cleanNotes().delete(n.id)
+                        pdf?.parentFile?.deleteRecursively()
+                    }
+                }) { Text("Удалить") }
+            }
+            if (pdf == null) Text("Файл удалён — осталась копия в «Документы/Конспекты».", style = MaterialTheme.typography.bodySmall)
         }
     }
 }

@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Четырёхлучевая «искра» с градиентом в духе Gemini -->
+<!-- Четырёхлучевая «искра» в фирменном фиолетово-синем градиенте -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:aapt="http://schemas.android.com/aapt"
     android:width="24dp"
@@ -14,9 +14,9 @@
                 android:startY="21"
                 android:endX="21"
                 android:endY="3">
-                <item android:color="#FF4285F4" android:offset="0" />
-                <item android:color="#FF9B72CB" android:offset="0.55" />
-                <item android:color="#FFD96570" android:offset="1" />
+                <item android:color="#FF4A3BE6" android:offset="0" />
+                <item android:color="#FF7B55F4" android:offset="0.55" />
+                <item android:color="#FFB15CF2" android:offset="1" />
             </gradient>
         </aapt:attr>
     </path>
