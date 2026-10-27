@@ -133,7 +133,16 @@ class MentorFlowTest {
         println("IMG-END $name")
     }
 
+    /** Эмулятор иногда показывает «… isn't responding» про чужое приложение — закрываем, чтобы не мешало. */
+    private fun dismissSystemAnr() {
+        if (device.hasObject(By.textContains("isn't responding")) || device.hasObject(By.textContains("не отвечает"))) {
+            (device.findObject(By.text("Wait")) ?: device.findObject(By.text("Подождать")))?.click()
+            SystemClock.sleep(800)
+        }
+    }
+
     private fun askHint() {
+        dismissSystemAnr()
         val bubble = device.wait(Until.findObject(By.desc("Наставник").pkg(pkg)), 15000)
         if (bubble == null) screenshot("no_bubble")
         assertNotNull("плавающая кнопка не появилась", bubble)
