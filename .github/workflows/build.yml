@@ -22,8 +22,12 @@ jobs:
           distribution: temurin
           java-version: "17"
 
+      # Android SDK на раннере ubuntu уже установлен ($ANDROID_HOME);
+      # недостающую платформу Android Gradle Plugin докачает сам.
       - name: Android SDK
-        uses: android-actions/setup-android@v3
+        run: |
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          ls "$ANDROID_HOME/platforms" "$ANDROID_HOME/build-tools" || true
 
       - name: Gradle
         uses: gradle/actions/setup-gradle@v4
