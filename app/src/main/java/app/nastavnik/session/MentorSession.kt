@@ -7,6 +7,7 @@ import app.nastavnik.ai.ChatRequest
 import app.nastavnik.ai.ChatTurn
 import app.nastavnik.ai.ImagePart
 import app.nastavnik.ai.Mark
+import app.nastavnik.ai.MarkKind
 import app.nastavnik.ai.NBox
 import app.nastavnik.ai.Prompts
 import app.nastavnik.ai.Role
@@ -217,7 +218,7 @@ class MentorSession(private val app: NastavnikApp, private val scope: CoroutineS
             }
             if (silent) {
                 // Ошибок нет — экран не трогаем; есть — показываем как обычный ответ.
-                if (final.allGood || final.marks.none { it.kind == app.nastavnik.ai.MarkKind.ERROR }) {
+                if (final.allGood || final.marks.none { it.kind == MarkKind.ERROR }) {
                     // Если на экране висела найденная раньше ошибка — её исправили, убираем.
                     _state.update {
                         it.copy(

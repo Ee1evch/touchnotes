@@ -317,7 +317,7 @@ class AskBar(baseContext: Context, private val wm: WindowManager, private val ca
         val b = anchor.rect
         val x = if (anchor.onLeft) b.right + dp(4f) else b.left - dp(4f) - w
         // Клавиатура закрывает низ экрана — строку держим в верхней части.
-        val y = minOf(b.top, (area.top + area.height * 0.3f).toInt()).coerceAtLeast(area.top)
+        val y = minOf(b.top, (area.top + area.height() * 0.3f).toInt()).coerceAtLeast(area.top)
         val p = OverlayWindows.absParams(
             x.coerceIn(0, (screen.x - w).coerceAtLeast(0)), y, w, WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH,
