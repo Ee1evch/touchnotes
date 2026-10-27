@@ -193,11 +193,15 @@
     return pages.length;
   }
 
+  // Ширину окна сообщает приложение (Clean.fit): в окне поверх приложений window.innerWidth бывает неверным.
+  var hostWidth = 0;
+
   function fitPreview() {
     if (!document.body.classList.contains('preview')) return;
-    // Пока WebView не разложен, ширина может быть 0 — тогда ждём события resize.
-    if (window.innerWidth < 50) return;
-    var k = Math.min(1, Math.max(0.2, (window.innerWidth - 16) / 794));
+    var w = hostWidth || window.innerWidth;
+    // Пока WebView не разложен, ширина может быть 0 — тогда ждём следующего вызова.
+    if (w < 50) return;
+    var k = Math.min(1, Math.max(0.2, (w - 16) / 794));
     pagesEl.style.zoom = k;
   }
 
@@ -241,6 +245,12 @@
   }
 
   window.addEventListener('resize', fitPreview);
-  global.Clean = { render: render };
+  global.Clean = {
+    render: render,
+    fit: function (w) {
+      hostWidth = w;
+      fitPreview();
+    }
+  };
   notify('onReady', '');
 })(window);

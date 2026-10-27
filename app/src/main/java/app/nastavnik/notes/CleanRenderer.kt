@@ -49,7 +49,7 @@ class CleanView(val webView: WebView, private val mode: String) {
         webView.addJavascriptInterface(Bridge(), "NativeClean")
         // Ширина WebView меняется (панель показали, повернули экран) — просим страницу вписаться заново.
         webView.addOnLayoutChangeListener { _, l, _, r, _, ol, _, or, _ ->
-            if (r - l != or - ol && ready) webView.evaluateJavascript("window.dispatchEvent(new Event('resize'));", null)
+            if (r - l != or - ol) fit()
         }
         webView.loadUrl(URL)
     }
@@ -58,7 +58,15 @@ class CleanView(val webView: WebView, private val mode: String) {
         if (ready) evaluate(noteJson) else pending = noteJson
     }
 
+    /** Сообщает странице ширину WebView в CSS-пикселях, чтобы лист вписался в предпросмотр. */
+    private fun fit() {
+        if (!ready || mode != "preview" || webView.width <= 0) return
+        val css = webView.width / webView.resources.displayMetrics.density
+        webView.evaluateJavascript("Clean.fit($css);", null)
+    }
+
     private fun evaluate(noteJson: String) {
+        fit()
         // JSON — это корректный JavaScript-литерал, подставляем как есть.
         webView.evaluateJavascript("Clean.render($noteJson, '$mode');", null)
     }
@@ -75,7 +83,10 @@ class CleanView(val webView: WebView, private val mode: String) {
 
         @JavascriptInterface
         fun onRendered(pages: Int) {
-            main.post { onRendered?.invoke(pages) }
+            main.post {
+                fit()
+                onRendered?.invoke(pages)
+            }
         }
 
         @JavascriptInterface
