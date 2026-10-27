@@ -18,6 +18,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
@@ -115,7 +117,13 @@ fun OnboardingScreen(resumeTick: Int, onDone: () -> Unit, onSkip: () -> Unit) {
     val step = steps[index.coerceIn(0, steps.lastIndex)]
     val icons = listOf(R.drawable.ic_sparkle, R.drawable.ic_open, R.drawable.ic_bulb, R.drawable.ic_search, R.drawable.ic_mic, R.drawable.ic_tune, R.drawable.ic_power)
 
+    // На планшете карточка — по центру экрана и не шире 620 dp.
+    val topPad = (LocalConfiguration.current.screenHeightDp * 0.08f).dp
     ScreenScaffold(title = "", onBack = null) {
+      Column(
+        Modifier.widthIn(max = 620.dp).fillMaxWidth().align(Alignment.CenterHorizontally).padding(top = topPad),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+      ) {
         // Прогресс: полоски по числу шагов.
         Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             steps.indices.forEach { i ->
@@ -198,5 +206,6 @@ fun OnboardingScreen(resumeTick: Int, onDone: () -> Unit, onSkip: () -> Unit) {
                 }
                 .padding(horizontal = 16.dp, vertical = 10.dp),
         )
+      }
     }
 }
