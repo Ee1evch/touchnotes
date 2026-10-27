@@ -124,7 +124,8 @@ class BubbleBar(baseContext: Context, private val wm: WindowManager) {
             setOnClickListener { dismiss() }
         }
         row.addView(close, LinearLayout.LayoutParams(dp(28f), dp(28f)).apply { marginStart = dp(6f) })
-        box.addView(row)
+        // Явно WRAP_CONTENT: строка «по ширине родителя» не участвует в ширине карточки, и текст обрезался бы.
+        box.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         if (items.isNotEmpty()) {
             val buttons = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL }
             items.forEach { item ->

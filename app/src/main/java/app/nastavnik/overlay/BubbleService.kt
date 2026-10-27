@@ -492,7 +492,8 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
         overlay.render(a)
         refreshBubbleBusy()
         // Опорный кадр для слежения за прокруткой — тот, по которому отвечал наставник.
-        if (a == null || a.seq != trackSeq) {
+        // Кадр появляется не в первом состоянии ответа («Смотрю на экран…»), а после снимка.
+        if (a == null || a.seq != trackSeq || (trackRef == null && a.thumb != null)) {
             trackSeq = a?.seq ?: -1L
             trackRef = a?.thumb
             replacedSince = 0L
@@ -564,7 +565,8 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
 
     private fun startClean() {
         if (!requireKey()) return
-        mentor.dismissDone()
+        // Заметки к задаче больше не нужны и не должны попасть на снимок для чистовика.
+        mentor.dismiss()
         clean.start { takeShot() }
     }
 
