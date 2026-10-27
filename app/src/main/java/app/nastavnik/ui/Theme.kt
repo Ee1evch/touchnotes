@@ -10,7 +10,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 
 /** Цвета Google и радужные градиенты в духе Gemini. */
 object GoogleColors {
@@ -37,11 +39,14 @@ private val Light = lightColorScheme(
     secondaryContainer = Color(0xFFC2E7FF),
     onSecondaryContainer = Color(0xFF001D35),
     tertiary = Color(0xFF146C2E),
-    background = Color(0xFFFFFFFF),
+    // Фон экранов чуть голубоватый, карточки на нём — белые: так в духе приложений Google.
+    background = Color(0xFFF4F7FC),
     surface = Color(0xFFFFFFFF),
     surfaceVariant = Color(0xFFF0F4F9),
+    surfaceContainerLowest = Color(0xFFFFFFFF),
     surfaceContainer = Color(0xFFF0F4F9),
     surfaceContainerHigh = Color(0xFFE9EEF6),
+    outlineVariant = Color(0xFFE1E5EB),
     onSurface = Color(0xFF1F1F1F),
     onSurfaceVariant = Color(0xFF444746),
     outline = Color(0xFFC4C7C5),
@@ -55,8 +60,10 @@ private val Dark = darkColorScheme(
     primaryContainer = Color(0xFF0842A0),
     onPrimaryContainer = Color(0xFFD3E3FD),
     background = Color(0xFF131314),
-    surface = Color(0xFF131314),
+    surface = Color(0xFF1E1F20),
     surfaceVariant = Color(0xFF1E1F20),
+    surfaceContainerLowest = Color(0xFF1E1F20),
+    outlineVariant = Color(0xFF333537),
     surfaceContainer = Color(0xFF1E1F20),
     surfaceContainerHigh = Color(0xFF282A2C),
     onSurface = Color(0xFFE3E3E3),
@@ -67,11 +74,18 @@ private val Dark = darkColorScheme(
 fun NastavnikTheme(content: @Composable () -> Unit) {
     MaterialTheme(
         colorScheme = if (isSystemInDarkTheme()) Dark else Light,
-        typography = Typography(),
+        typography = Typography().let { t ->
+            t.copy(
+                headlineMedium = t.headlineMedium.copy(fontWeight = FontWeight.Medium, letterSpacing = (-0.2).sp),
+                titleLarge = t.titleLarge.copy(fontWeight = FontWeight.Medium),
+                titleMedium = t.titleMedium.copy(fontWeight = FontWeight.Medium),
+                labelLarge = t.labelLarge.copy(fontWeight = FontWeight.Medium),
+            )
+        },
         shapes = Shapes(
             small = RoundedCornerShape(12.dp),
-            medium = RoundedCornerShape(20.dp),
-            large = RoundedCornerShape(28.dp),
+            medium = RoundedCornerShape(18.dp),
+            large = RoundedCornerShape(24.dp),
         ),
         content = content,
     )

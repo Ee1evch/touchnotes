@@ -34,7 +34,17 @@ data class NBox(val left: Float, val top: Float, val right: Float, val bottom: F
     val height: Float get() = bottom - top
 }
 
-data class Mark(val kind: MarkKind, val box: NBox?, val text: String)
+/**
+ * Заметка наставника. Место задаётся номером строки ([lines]), «под строкой» ([after]) и/или рамкой [box]
+ * (в долях присланного снимка). Приложение потом переводит всё это в точную рамку по чернилам.
+ */
+data class Mark(
+    val kind: MarkKind,
+    val box: NBox?,
+    val text: String,
+    val lines: IntRange? = null,
+    val after: Int? = null,
+)
 
 data class ScreenAnswer(
     val marks: List<Mark>,
@@ -47,22 +57,54 @@ data class ScreenAnswer(
 /**
  * Разбирает ответ наставника вида
  * ```
- * @@ error 410 520 980 590
+ * @@ error стр 3
  * Проверь знак при раскрытии скобок.
- * @@ hint 400 600 1200 680
+ * @@ hint после 5
  * Что получится, если приравнять производную к нулю?
+ * @@ error стр 4 : 410 520 980 590
  * ```
- * Работает и на недописанном (потоковом) тексте.
+ * Понимает и голые координаты (`@@ error 410 520 980 590`). Работает на недописанном (потоковом) тексте.
  */
 object ScreenAnswerParser {
     const val ALL_GOOD_MARKER = "[[ВЕРНО]]"
 
-    private val num = """(-?\d+(?:[.,]\d+)?)"""
-    private val sep = """[\s,;]+"""
-    private val header = Regex(
-        """^\s*@@\s*([\p{L}_]+)\s*[:\-]?\s*(?:[\[(]?\s*$num$sep$num$sep$num$sep$num\s*[\])]?)?\s*$""",
-    )
+    private val header = Regex("""^\s*@@\s*([\p{L}_]+)(.*)$""")
+    private val afterRe = Regex("""(?:после|под|after|below)\s*(?:стр\p{L}*\.?|line)?\s*(\d+)""", RegexOption.IGNORE_CASE)
+    private val linesRe = Regex("""(?:стр\p{L}*\.?|lines?|L)\s*(\d+)(?:\s*[-–—]\s*(\d+))?""", RegexOption.IGNORE_CASE)
+    private val rangeAtStart = Regex("""^[\s:\-]*(\d+)\s*[-–—]\s*(\d+)(?![\d.,])""")
+    // Дробная часть — только через точку: запятая в «(10,10,20,20)» разделяет числа.
+    private val numberRe = Regex("""-?\d+(?:\.\d+)?""")
     private val allGoodRegex = Regex("""\[\[\s*ВЕРНО\s*\]\]""", RegexOption.IGNORE_CASE)
+
+    private class Spec(val lines: IntRange?, val after: Int?, val coords: List<Float>?)
+
+    /** Что после вида заметки: номера строк, «после N», координаты. */
+    private fun parseSpec(restIn: String): Spec? {
+        var rest = restIn
+        var after: Int? = null
+        var lines: IntRange? = null
+        afterRe.find(rest)?.let { m ->
+            after = m.groupValues[1].toInt()
+            rest = rest.removeRange(m.range)
+        }
+        (linesRe.find(rest) ?: rangeAtStart.find(rest))?.let { m ->
+            val a = m.groupValues[1].toInt()
+            val b = m.groupValues[2].toIntOrNull() ?: a
+            lines = minOf(a, b)..maxOf(a, b)
+            rest = rest.removeRange(m.range)
+        }
+        val nums = numberRe.findAll(rest).map { it.value.toFloat() }.toMutableList()
+        // «@@ error 3» или «@@ error 3 410 520 980 590» — первое число тогда номер строки.
+        if (lines == null && after == null && (nums.size == 1 || nums.size == 5)) {
+            lines = nums.first().toInt()..nums.first().toInt()
+            nums.removeAt(0)
+        }
+        val coords = if (nums.size >= 4) nums.takeLast(4) else null
+        // В строке-метке не должно быть ничего, кроме этого; иначе это просто текст, начинающийся с «@@».
+        val leftover = numberRe.replace(rest, "").replace(Regex("""[\s:;,\[\]()|xх×=-]+"""), "")
+        if (leftover.isNotEmpty() && leftover.length > 3) return null
+        return Spec(lines, after, coords)
+    }
 
     fun parse(raw: String, mode: CoordMode, imageW: Int, imageH: Int, streaming: Boolean = false): ScreenAnswer {
         val done = DoneMarker.process(raw, streaming)
@@ -74,25 +116,26 @@ object ScreenAnswerParser {
         val marks = mutableListOf<Mark>()
         var kind: MarkKind? = null
         var box: NBox? = null
+        var lines: IntRange? = null
+        var after: Int? = null
         val body = StringBuilder()
         fun flush() {
             val t = body.toString().trim()
             if (kind != null || t.isNotEmpty()) {
-                if (t.isNotEmpty() || streaming) marks += Mark(kind ?: MarkKind.NOTE, box, t)
+                if (t.isNotEmpty() || streaming) marks += Mark(kind ?: MarkKind.NOTE, box, t, lines, after)
             }
             body.setLength(0)
         }
         for (line in text.lines()) {
             val m = header.matchEntire(line)
             val k = m?.let { MarkKind.parse(it.groupValues[1]) }
-            if (m != null && k != null) {
+            val spec = if (k != null) parseSpec(m!!.groupValues[2]) else null
+            if (k != null && spec != null) {
                 flush()
                 kind = k
-                box = if (m.groupValues[2].isNotEmpty()) {
-                    toBox((2..5).map { m.groupValues[it].replace(',', '.').toFloat() }, mode, imageW, imageH)
-                } else {
-                    null
-                }
+                box = spec.coords?.let { toBox(it, mode, imageW, imageH) }
+                lines = spec.lines
+                after = spec.after
             } else {
                 body.append(line).append('\n')
             }

@@ -119,7 +119,7 @@ class CleanSession(private val app: NastavnikApp, private val scope: CoroutineSc
             _state.value = CleanState.Generating(shots, retry)
             val request = ChatRequest(
                 modelId = settings.cleanModel,
-                system = Prompts.cleanSystem(settings.subject),
+                system = Prompts.cleanSystem(),
                 turns = listOf(ChatTurn(Role.USER, Prompts.cleanUserText(shots.size, retry), hadImage = true)),
                 images = shots.map { ImagePart(it) },
                 maxTokens = MAX_TOKENS,
@@ -129,7 +129,7 @@ class CleanSession(private val app: NastavnikApp, private val scope: CoroutineSc
                 val completion = backend.complete(key, request)
                 val parsed = withContext(Dispatchers.Default) { CleanNoteParser.parse(completion.text) }
                 val note = parsed.copy(
-                    subject = parsed.subject.ifBlank { settings.subject },
+                    subject = parsed.subject.trim(),
                     date = SimpleDateFormat("d MMMM yyyy", Locale("ru")).format(Date()),
                 )
                 _state.value = CleanState.Preview(shots, note, CleanNoteParser.toJson(note))
@@ -157,7 +157,7 @@ class CleanSession(private val app: NastavnikApp, private val scope: CoroutineSc
                 val settings = app.settings.load()
                 val dir = storage.newWorkDir()
                 val result = PdfExporter(app).export(host, s.json, dir, NoteStorage.fileBase(s.note.title))
-                val subject = settings.subject.ifBlank { s.note.subject }
+                val subject = s.note.subject.ifBlank { "Конспекты" }
                 val published = withContext(Dispatchers.IO) { storage.publish(result.pdf, result.pngs, subject, s.note.title) }
                 withContext(Dispatchers.IO) {
                     app.db.cleanNotes().insert(

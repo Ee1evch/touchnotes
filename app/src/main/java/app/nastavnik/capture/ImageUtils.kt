@@ -1,8 +1,14 @@
 package app.nastavnik.capture
 
 import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.Typeface
 import android.graphics.Rect
 import android.media.Image
+import app.nastavnik.geom.InkLines
+import app.nastavnik.geom.LineMap
 import java.io.ByteArrayOutputStream
 import kotlin.math.max
 import kotlin.math.roundToInt
@@ -59,18 +65,73 @@ object ImageUtils {
         return out.toByteArray()
     }
 
-    class Prepared(val jpeg: ByteArray, val width: Int, val height: Int, val screenRect: Rect)
+    /**
+     * Готовый снимок. [width]×[height] — сама запись (без поля), [gutter] — ширина поля с номерами строк слева,
+     * [lines] — найденные строки (в пикселях записи).
+     */
+    class Prepared(
+        val jpeg: ByteArray,
+        val width: Int,
+        val height: Int,
+        val screenRect: Rect,
+        val gutter: Int = 0,
+        val lines: LineMap = LineMap(emptyList(), width, height),
+    )
 
-    /** Полный конвейер: обрезка → уменьшение → JPEG. Возвращает и то, какую часть экрана показывает снимок. */
-    fun prepare(full: Bitmap, cropRect: Rect): Prepared {
+    /** Ширина поля с номерами строк слева от снимка. */
+    private const val GUTTER = 44
+
+    /**
+     * Полный конвейер: обрезка → уменьшение → JPEG. Возвращает и то, какую часть экрана показывает снимок.
+     * [numberLines] — найти строки записей и подписать их номерами на поле слева (для наставника; для чистовика не нужно).
+     */
+    fun prepare(full: Bitmap, cropRect: Rect, numberLines: Boolean = false): Prepared {
         val cropped = crop(full, cropRect)
         val used = if (cropped === full) Rect(0, 0, full.width, full.height) else Rect(cropRect).apply { intersect(0, 0, full.width, full.height) }
-        val scaled = scaleDown(cropped)
-        val bytes = toJpeg(scaled)
-        val result = Prepared(bytes, scaled.width, scaled.height, used)
+        var k = scaleFactor(cropped.width, cropped.height)
+        // Поле с номерами тоже идёт в 1,15 Мп: иначе Claude уменьшит снимок сам и пиксели разъедутся.
+        if (numberLines) while (k > 0.2f && (cropped.width * k + GUTTER) * (cropped.height * k) > MAX_PIXELS) k *= 0.99f
+        val scaled = if (k >= 1f) cropped else Bitmap.createScaledBitmap(cropped, (cropped.width * k).toInt().coerceAtLeast(1), (cropped.height * k).toInt().coerceAtLeast(1), true)
+        val result = if (numberLines) numbered(scaled, used) else Prepared(toJpeg(scaled), scaled.width, scaled.height, used)
         if (scaled !== cropped && scaled !== full) scaled.recycle()
         if (cropped !== full) cropped.recycle()
         return result
+    }
+
+    private fun numbered(src: Bitmap, used: Rect): Prepared {
+        val w = src.width
+        val h = src.height
+        val px = IntArray(w * h)
+        src.getPixels(px, 0, w, 0, 0, w, h)
+        for (i in px.indices) {
+            val p = px[i]
+            px[i] = (((p shr 16) and 0xFF) * 299 + ((p shr 8) and 0xFF) * 587 + (p and 0xFF) * 114) / 1000
+        }
+        val lines = InkLines.detect(px, w, h)
+        if (lines.lines.isEmpty()) return Prepared(toJpeg(src), w, h, used, 0, lines)
+        val out = Bitmap.createBitmap(w + GUTTER, h, Bitmap.Config.ARGB_8888)
+        val c = Canvas(out)
+        c.drawColor(Color.parseColor("#EEF1F6"))
+        c.drawBitmap(src, GUTTER.toFloat(), 0f, null)
+        c.drawRect(GUTTER - 2f, 0f, GUTTER.toFloat(), h.toFloat(), Paint().apply { color = Color.parseColor("#C8D1DE") })
+        val size = (lines.lineHeight * 0.7f).coerceIn(12f, 20f)
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.parseColor("#1A56DB")
+            textSize = size
+            typeface = Typeface.DEFAULT_BOLD
+            textAlign = Paint.Align.RIGHT
+        }
+        var lastY = -1000f
+        for (l in lines.lines) {
+            val y = l.centerY + size * 0.36f
+            // Строки слишком тесно — номер не помещается, пропускаем (модель тогда даст рамку).
+            if (y - lastY < size * 0.95f) continue
+            c.drawText(l.number.toString(), GUTTER - 7f, y, paint)
+            lastY = y
+        }
+        val jpeg = toJpeg(out)
+        out.recycle()
+        return Prepared(jpeg, w, h, used, GUTTER, lines)
     }
 
     /** Серая уменьшенная копия всего экрана — для слежения за прокруткой и письмом. */

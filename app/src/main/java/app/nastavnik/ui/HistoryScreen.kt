@@ -82,7 +82,7 @@ private fun ConversationList(onOpen: (Long) -> Unit) {
             Column(Modifier.padding(14.dp)) {
                 Text(c.title, fontWeight = FontWeight.Bold)
                 Text(
-                    "${c.subject} · ${dateFmt.format(Date(c.updatedAt))} · сообщений: ${c.messageCount}" +
+                    listOf(c.subject, dateFmt.format(Date(c.updatedAt)), "сообщений: ${c.messageCount}").filter { it.isNotBlank() }.joinToString(" · ") +
                         if (c.id == active) " · текущая" else "",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.secondary,

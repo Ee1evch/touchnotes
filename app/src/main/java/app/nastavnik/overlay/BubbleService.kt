@@ -104,7 +104,6 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
     // Слежение за экраном между вопросами.
     private var trackRef: Thumb? = null
     private var trackSeq = -1L
-    private var replacedSince = 0L
     private var prevThumb: Thumb? = null
     private var prevMask: BooleanArray? = null
     private var dirty = false
@@ -200,8 +199,12 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
         settings?.let { s -> if (bubbleAdded) placeBubble(s.bubbleSide, s.bubbleYFraction) }
         menu.dismiss()
         if (barOwner == BarOwner.ACTIONS) bar.dismiss()
-        // Повернули планшет — записи легли иначе, старые рамки уже не на своих местах.
-        if (overlay.isShowing) mentor.dismiss()
+        // Повернули планшет — записи легли иначе: отметки прячем, заметки остаются (в пределах экрана).
+        if (overlay.isShowing) {
+            trackRef = null
+            overlay.setSuspended(true)
+            overlay.onScreenChanged()
+        }
     }
 
     override fun onDestroy() {
@@ -496,7 +499,6 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
         if (a == null || a.seq != trackSeq || (trackRef == null && a.thumb != null)) {
             trackSeq = a?.seq ?: -1L
             trackRef = a?.thumb
-            replacedSince = 0L
         }
         when {
             a == null -> {
@@ -556,6 +558,8 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
 
     override fun onAllClosed() = mentor.dismiss()
 
+    override fun onMore() = quick(QuickAction.NEXT_STEP)
+
     private fun toggleRegion() {
         regionMode = !regionMode
         notice(if (regionMode) "Перед вопросом обведи пальцем задачу — уйдёт только она." else "Снова отправляю весь экран.")
@@ -567,7 +571,7 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
         if (!requireKey()) return
         // Заметки к задаче больше не нужны и не должны попасть на снимок для чистовика.
         mentor.dismiss()
-        clean.start { takeShot() }
+        clean.start { takeShot(numberLines = false) }
     }
 
     private fun renderClean(prev: CleanState, s: CleanState) {
@@ -583,7 +587,7 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
                     }
                 }
                 val items = mutableListOf<BarItem>()
-                if (!s.capturing && n < CleanState.MAX_SHOTS) items += BarItem("+ Экран") { clean.addShot { takeShot() } }
+                if (!s.capturing && n < CleanState.MAX_SHOTS) items += BarItem("+ Экран") { clean.addShot { takeShot(numberLines = false) } }
                 if (!s.capturing && n > 0) items += BarItem("Собрать", primary = true) { clean.build() }
                 items += BarItem("Отмена") { clean.cancel() }
                 message(BarOwner.CLEAN, text, items, busy = s.capturing)
@@ -667,7 +671,7 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
     }
 
     /** Снимок без наших окон, без системных панелей, не больше 1500 px и 1,15 Мп, JPEG 85%. */
-    private suspend fun takeShot(): ShotResult {
+    private suspend fun takeShot(numberLines: Boolean = true): ShotResult {
         if (!ensureProjection()) {
             return ShotResult.Failed(
                 "Нет разрешения на снимок экрана — без него наставник не видит записи. Нажми кнопку ещё раз и выбери «Весь экран».",
@@ -693,15 +697,13 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
                 } else {
                     OverlayWindows.contentRect(this)
                 }
-                val (prepared, thumb) = withContext(Dispatchers.Default) { ImageUtils.prepare(full, rect) to ImageUtils.thumb(full) }
+                val (prepared, thumb) = withContext(Dispatchers.Default) { ImageUtils.prepare(full, rect, numberLines) to ImageUtils.thumb(full) }
                 // В отладочной сборке последний снимок лежит в кэше — удобно проверить, что ушло в нейросеть.
                 if (BuildConfig.DEBUG) runCatching { File(cacheDir, "last_shot.jpg").writeBytes(prepared.jpeg) }
                 val r = prepared.screenRect
-                return ShotResult.Ok(
-                    prepared.jpeg,
-                    ShotGeometry(IRect(r.left, r.top, r.right, r.bottom), prepared.width, prepared.height),
-                    thumb,
-                )
+                val geometry = ShotGeometry(IRect(r.left, r.top, r.right, r.bottom), prepared.width, prepared.height, prepared.gutter, prepared.lines)
+                if (numberLines) ShotGeometry.last = geometry
+                return ShotResult.Ok(prepared.jpeg, geometry, thumb)
             } finally {
                 full.recycle()
             }
@@ -745,22 +747,15 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
                 if (BuildConfig.DEBUG) Log.i(TAG, "track: $motion")
                 when (val m = motion) {
                     is Motion.Moved -> {
-                        replacedSince = 0L
                         overlay.setSuspended(false)
                         overlay.setOffset(m.dx, m.dy)
                     }
                     is Motion.Same -> {
-                        replacedSince = 0L
                         overlay.setSuspended(false)
                         overlay.setOffset(0, 0)
                     }
-                    Motion.Replaced -> {
-                        val now = System.currentTimeMillis()
-                        if (replacedSince == 0L) replacedSince = now
-                        overlay.setSuspended(true)
-                        // Другая страница надолго — заметки к ней уже не относятся.
-                        if (now - replacedSince > FORGET_AFTER_MS) mentor.dismiss()
-                    }
+                    // На экране другое — отметки прячем; заметки остаются, пока их не закроют.
+                    Motion.Replaced -> overlay.setSuspended(true)
                 }
             }
             if (watching) watchTick(thumb, mask, s.watchPauseSec * 1000L)
@@ -853,7 +848,6 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
         private const val AFTER_PERMISSION_DELAY_MS = 600L
         private const val PERMISSION_TIMEOUT_MS = 120_000L
         private const val TICK_MS = 2000L
-        private const val FORGET_AFTER_MS = 20_000L
         private const val MIN_WATCH_GAP_MS = 45_000L
 
         @Volatile

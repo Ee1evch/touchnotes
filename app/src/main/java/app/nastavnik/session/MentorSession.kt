@@ -17,6 +17,8 @@ import app.nastavnik.ai.StreamUpdate
 import app.nastavnik.data.Conversation
 import app.nastavnik.data.Message
 import app.nastavnik.geom.IRect
+import app.nastavnik.geom.LineMap
+import app.nastavnik.geom.PlaceRef
 import app.nastavnik.geom.Thumb
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -32,8 +34,49 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-/** Какую часть экрана показывает снимок и в каком размере он ушёл в нейросеть. */
-data class ShotGeometry(val screen: IRect, val imageW: Int, val imageH: Int) {
+/**
+ * Какую часть экрана показывает снимок и в каком размере он ушёл в нейросеть.
+ * [imageW]×[imageH] — сама запись; слева к снимку добавлено поле шириной [gutter] с номерами строк [lines].
+ */
+data class ShotGeometry(
+    val screen: IRect,
+    val imageW: Int,
+    val imageH: Int,
+    val gutter: Int = 0,
+    val lines: LineMap? = null,
+) {
+    companion object {
+        /** Последний снимок для наставника — по нему тесты узнают номера строк. */
+        @Volatile
+        var last: ShotGeometry? = null
+    }
+
+    /** Ширина всего снимка, который видит модель (с полем). */
+    val sentW: Int get() = imageW + gutter
+
+    /**
+     * Место из ответа модели → точная рамка в долях записи: по номеру строки — ровно по её чернилам,
+     * рамку «на глаз» притягиваем к строкам, которые она задевает.
+     */
+    fun place(m: Mark): Mark {
+        val map = lines ?: LineMap(emptyList(), imageW, imageH)
+        val px = m.box?.let {
+            IRect(
+                (it.left * sentW).toInt() - gutter, (it.top * imageH).toInt(),
+                (it.right * sentW).toInt() - gutter, (it.bottom * imageH).toInt(),
+            )
+        }
+        val r = map.resolve(PlaceRef(m.lines, m.after, px), hintLike = m.kind == MarkKind.HINT)
+            ?: return m.copy(box = null, lines = null, after = null)
+        val w = imageW.toFloat()
+        val h = imageH.toFloat()
+        val box = NBox(
+            (r.left / w).coerceIn(0f, 1f), (r.top / h).coerceIn(0f, 1f),
+            (r.right / w).coerceIn(0f, 1f), (r.bottom / h).coerceIn(0f, 1f),
+        )
+        return m.copy(box = box.takeIf { it.width > 0f && it.height > 0f }, lines = null, after = null)
+    }
+
     fun toScreen(b: NBox): IRect = IRect(
         screen.left + (b.left * screen.width).toInt(),
         screen.top + (b.top * screen.height).toInt(),
@@ -162,7 +205,7 @@ class MentorSession(private val app: NastavnikApp, private val scope: CoroutineS
         val silent = base.kind == AskKind.WATCH
         val now = System.currentTimeMillis()
         // Тихая проверка не заводит новых разговоров в истории — только читает текущий.
-        val convId = if (silent) currentConversation(now) else ensureConversation(settings.subject, base.question, now)
+        val convId = if (silent) currentConversation(now) else ensureConversation(base.question, now)
         val history = (if (convId != 0L) db.messages().forConversation(convId) else emptyList())
             .filter { !it.isError && it.text.isNotBlank() }
             .takeLast(MAX_HISTORY)
@@ -173,11 +216,12 @@ class MentorSession(private val app: NastavnikApp, private val scope: CoroutineS
         }
         val g = shot.geometry
         val mode = settings.provider.coordMode(settings.model)
-        val turns = history + ChatTurn(Role.USER, Prompts.withShotSize(base.question, g.imageW, g.imageH), hadImage = true)
+        val turns = history + ChatTurn(Role.USER, Prompts.withShotSize(base.question, g.sentW, g.imageH), hadImage = true)
 
         val raw = StringBuilder()
         var lastEmit = 0L
-        fun parse(streaming: Boolean): ScreenAnswer = ScreenAnswerParser.parse(raw.toString(), mode, g.imageW, g.imageH, streaming)
+        fun parse(streaming: Boolean): ScreenAnswer =
+            ScreenAnswerParser.parse(raw.toString(), mode, g.sentW, g.imageH, streaming).let { a -> a.copy(marks = a.marks.map(g::place)) }
         fun emit(status: String? = null) {
             if (silent) return
             val a = parse(true)
@@ -188,7 +232,7 @@ class MentorSession(private val app: NastavnikApp, private val scope: CoroutineS
         try {
             val request = ChatRequest(
                 modelId = settings.model,
-                system = Prompts.mentorSystem(settings.subject, settings.strictness, mode),
+                system = Prompts.mentorSystem(settings.strictness, mode),
                 turns = turns,
                 images = listOf(ImagePart(shot.jpeg)),
                 maxTokens = MAX_TOKENS,
@@ -265,12 +309,12 @@ class MentorSession(private val app: NastavnikApp, private val scope: CoroutineS
         return if (conv != null && now - conv.updatedAt < NEW_TASK_AFTER_MS) current else 0L
     }
 
-    private suspend fun ensureConversation(subject: String, firstQuestion: String, now: Long): Long {
+    private suspend fun ensureConversation(firstQuestion: String, now: Long): Long {
         // Долго не спрашивали — скорее всего, это уже другая задача.
         currentConversation(now).let { if (it != 0L) return it }
         val stamp = SimpleDateFormat("d MMMM, HH:mm", Locale("ru")).format(Date(now))
         val title = if (Prompts.isQuickPrompt(firstQuestion)) "Задача · $stamp" else firstQuestion.take(60)
-        val id = db.conversations().insert(Conversation(title = title, subject = subject, createdAt = now, updatedAt = now))
+        val id = db.conversations().insert(Conversation(title = title, subject = "", createdAt = now, updatedAt = now))
         app.settings.setActiveConversation(id)
         _state.update { it.copy(conversationId = id) }
         return id

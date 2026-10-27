@@ -15,7 +15,7 @@ import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.Until
 import app.nastavnik.overlay.AnswerOverlay
 import app.nastavnik.overlay.BubbleService
-import app.nastavnik.overlay.OverlayWindows
+import app.nastavnik.session.ShotGeometry
 import app.nastavnik.ui.MainActivity
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -55,11 +55,29 @@ class MentorFlowTest {
     private val pkg = ctx.packageName
     private lateinit var server: MockWebServer
     private val bodies = CopyOnWriteArrayList<String>()
-    private val sizeRe = Regex("""\[Снимок экрана: (\d+)×(\d+) пикселей]""")
 
-    /** Рамка: от 25% до 60% ширины снимка и от 30% до 40% высоты — в пикселях присланного снимка. */
-    private fun answer(w: Int, h: Int): String =
-        "@@ ok ${w / 4} ${h * 3 / 10} ${w * 6 / 10} ${h * 4 / 10}\n" +
+    /** Текст на экране, который «нейросеть» должна отметить (его границы на экране). */
+    @Volatile
+    private var target: Rect? = null
+
+    /**
+     * Ответ «нейросети»: номер строки, в которой на снимке стоит [target]. Номер берём из той же
+     * разметки строк, что приложение нарисовало на поле слева от снимка, — как сделала бы настоящая модель.
+     */
+    private fun answer(): String {
+        var spec = "стр 1"
+        val g = ShotGeometry.last
+        val t = target
+        val lines = g?.lines?.lines.orEmpty()
+        if (g != null && t != null && lines.isNotEmpty()) {
+            val cy = ((t.centerY() - g.screen.top) * g.imageH.toFloat() / g.screen.height).toInt()
+            val cx = ((t.centerX() - g.screen.left) * g.imageW.toFloat() / g.screen.width).toInt()
+            val line = lines.firstOrNull { cy in it.top..it.bottom && cx in it.left..it.right }
+                ?: lines.minBy { kotlin.math.abs(it.centerY - cy) }
+            spec = "стр ${line.number}"
+            Log.i("MentorFlowTest", "target=$t -> line ${line.number} (${line.left},${line.top})-(${line.right},${line.bottom}) of ${lines.size}")
+        }
+        return "@@ ok $spec\n" +
             "Верно! Производная \$f'(x) = 3x^2 - 3\$ найдена правильно, и точки \$x = \\pm 1\$ тоже.\n\n" +
             "\$\$f(-1) = 2,\\quad f(1) = -2\$\$\n[[ГОТОВО]]"
 
@@ -84,10 +102,7 @@ class MentorFlowTest {
                 val body = request.body.readUtf8()
                 bodies += body
                 return if (body.contains("\"stream\":true")) {
-                    val m = sizeRe.find(body)
-                    val w = m?.groupValues?.get(1)?.toInt() ?: 1000
-                    val h = m?.groupValues?.get(2)?.toInt() ?: 700
-                    MockResponse().setHeader("content-type", "text/event-stream").setBody(sse(answer(w, h)))
+                    MockResponse().setHeader("content-type", "text/event-stream").setBody(sse(answer()))
                 } else {
                     // Модель «обернула» JSON в ```json — парсер должен справиться.
                     val text = "Вот чистовик:\n```json\n$note\n```"
@@ -150,13 +165,18 @@ class MentorFlowTest {
         device.wait(Until.findObject(By.text("Подсказка")), 8000)!!.click()
     }
 
-    /** Где на экране должна быть рамка: снимок — это экран без системных панелей. */
-    private fun expectedMark(): Rect {
-        val cr = OverlayWindows.contentRect(ctx)
-        return Rect(
-            cr.left + cr.width() / 4, cr.top + cr.height() * 3 / 10,
-            cr.left + cr.width() * 6 / 10, cr.top + cr.height() * 4 / 10,
-        )
+    /** Отметка без полей окна (поле под значок — 12 dp с каждой стороны). */
+    private fun inner(r: app.nastavnik.geom.IRect): Rect {
+        val pad = (12 * ctx.resources.displayMetrics.density + 0.5f).toInt()
+        return Rect(r.left + pad, r.top + pad, r.right - pad, r.bottom - pad)
+    }
+
+    /** Отметка легла точно на нужную строку: накрывает текст и не больше пары строк по высоте. */
+    private fun assertMarkOn(text: Rect, mark: Rect) {
+        Log.i("MentorFlowTest", "text=$text mark=$mark")
+        assertTrue("отметка $mark не накрывает текст $text", mark.contains(text.centerX(), text.centerY()))
+        assertTrue("отметка выше строки: ${mark.height()} при тексте ${text.height()}", mark.height() <= text.height() * 3)
+        assertTrue("отметка сдвинута по вертикали", kotlin.math.abs(mark.centerY() - text.centerY()) <= text.height())
     }
 
     @Test
@@ -164,9 +184,11 @@ class MentorFlowTest {
         val scenario = ActivityScenario.launch(MainActivity::class.java)
         SystemClock.sleep(800)
         scenario.onActivity { BubbleService.start(it) }
+        target = device.wait(Until.findObject(By.text("Как это работает")), 5000)?.visibleBounds
+        assertNotNull("на главном экране нет заголовка «Как это работает»", target)
         askHint()
 
-        // Ответ пришёл → рамка на месте, рядом заметка с кнопкой «Сделать чистовик».
+        // Ответ пришёл → строка подсвечена, рядом заметка с кнопкой «Сделать чистовик».
         val cleanBtn = device.wait(Until.findObject(By.text("Сделать чистовик")), 40000)
         SystemClock.sleep(1500)
         screenshot("flow_answer")
@@ -175,13 +197,9 @@ class MentorFlowTest {
         assertNotNull("рамка не нарисована", mark)
         val note = device.findObject(By.desc("Заметка: Верно"))
         assertNotNull("заметка не показана", note)
-        val exp = expectedMark()
-        val got = Rect(mark!!.left, mark.top, mark.right, mark.bottom)
-        Log.i("MentorFlowTest", "mark expected=$exp got=$got note=${note.visibleBounds}")
-        val tol = device.displayWidth / 40
-        assertTrue("рамка не на месте: ждали центр (${exp.centerX()}, ${exp.centerY()}), а она $got",
-            kotlin.math.abs(got.centerX() - exp.centerX()) <= tol && kotlin.math.abs(got.centerY() - exp.centerY()) <= tol)
-        assertTrue("заметка закрыла отмеченное место", !Rect.intersects(note.visibleBounds, exp))
+        val got = inner(mark!!)
+        assertMarkOn(target!!, got)
+        assertTrue("заметка закрыла отмеченное место", !Rect.intersects(note.visibleBounds, got))
 
         // Первый запрос: стрим, картинка и размер снимка в последнем сообщении, промт с координатами.
         val first = Json.parseToJsonElement(bodies.first()).jsonObject
@@ -230,26 +248,36 @@ class MentorFlowTest {
         )
         SystemClock.sleep(1200)
         scenario.onActivity { BubbleService.start(it) }
+        // Отмечаем какой-нибудь текст посередине экрана — после прокрутки он останется виден.
+        SystemClock.sleep(800)
+        val h = device.displayHeight
+        val pick = device.findObjects(By.pkg(pkg).clazz("android.widget.TextView"))
+            .filter { o -> (o.text?.length ?: 0) >= 6 && o.visibleBounds.centerY() in (h * 35 / 100)..(h * 65 / 100) && o.visibleBounds.centerX() < device.displayWidth * 6 / 10 }
+            .minByOrNull { kotlin.math.abs(it.visibleBounds.centerY() - h / 2) }
+        assertNotNull("нет текста посередине экрана настроек", pick)
+        val labelText = pick!!.text
+        target = pick.visibleBounds
         askHint()
         assertNotNull("нет заметки", device.wait(Until.findObject(By.desc("Заметка: Верно")), 40000))
         SystemClock.sleep(5000) // пусть слежение сделает пару кадров
         val before = AnswerOverlay.shownMarks.singleOrNull()
         assertNotNull("рамка не нарисована", before)
-        val label = device.findObject(By.textStartsWith("Модель наставника"))
-        val labelBefore = label?.visibleBounds
+        val labelBefore = device.findObject(By.text(labelText))?.visibleBounds
+        assertMarkOn(labelBefore!!, inner(before!!))
         screenshot("scroll_before")
         val x = device.displayWidth / 4
-        device.swipe(x, device.displayHeight * 3 / 4, x, device.displayHeight * 2 / 4, 80)
+        device.swipe(x, h * 3 / 4, x, h * 9 / 16, 80)
         SystemClock.sleep(7000)
         screenshot("scroll_follow")
         val after = AnswerOverlay.shownMarks.singleOrNull()
-        val labelAfter = device.findObject(By.textStartsWith("Модель наставника"))?.visibleBounds
+        val labelAfter = device.findObject(By.text(labelText))?.visibleBounds
         Log.i("MentorFlowTest", "scroll: mark $before -> $after, label $labelBefore -> $labelAfter")
         assertNotNull("рамка пропала после прокрутки", after)
         assertNotNull("не найден ориентир на странице", labelBefore)
         if (labelBefore != null && labelAfter != null) {
             val pageDy = labelAfter.top - labelBefore.top
-            val markDy = after!!.top - before!!.top
+            val markDy = after!!.top - before.top
+            assertMarkOn(labelAfter, inner(after))
             assertTrue("страница не прокрутилась ($pageDy)", kotlin.math.abs(pageDy) > 60)
             assertTrue("рамка не поехала вместе со страницей: страница $pageDy, рамка $markDy",
                 kotlin.math.abs(markDy - pageDy) <= device.displayHeight / 25)

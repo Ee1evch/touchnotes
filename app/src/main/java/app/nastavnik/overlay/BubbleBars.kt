@@ -43,7 +43,7 @@ data class BarItem(
 private fun card(ctx: Context, radius: Float): GradientDrawable = GradientDrawable().apply {
     setColor(Color.WHITE)
     cornerRadius = radius
-    setStroke(OverlayWindows.dp(ctx, 1f), 0xFFDDE3EA.toInt())
+    setStroke(OverlayWindows.dp(ctx, 1f), 0xFFE3E7ED.toInt())
 }
 
 /**
@@ -70,17 +70,29 @@ class BubbleBar(baseContext: Context, private val wm: WindowManager) {
 
     private fun dp(v: Float) = OverlayWindows.dp(ctx, v)
 
+    /** Меню у кнопки: одна карточка, в ней строки со значками в цветных кружках. */
     fun showActions(anchor: BubbleAnchor, items: List<BarItem>) {
         val col = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
-            gravity = if (anchor.onLeft) Gravity.START else Gravity.END
+            background = card(ctx, dp(24f).toFloat())
+            elevation = dp(6f).toFloat()
+            setPadding(dp(6f), dp(8f), dp(6f), dp(8f))
         }
+        val head = TextView(ctx).apply {
+            text = "Наставник"
+            setTextColor(0xFF5F6368.toInt())
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            letterSpacing = 0.06f
+            setPadding(dp(14f), dp(2f), dp(14f), dp(6f))
+        }
+        col.addView(head)
         items.forEach { item ->
-            val chip = chip(item) {
+            val row = chip(item) {
                 dismiss()
                 item.action()
             }
-            col.addView(chip, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(46f)).apply { bottomMargin = dp(8f) })
+            col.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(48f)))
         }
         show(anchor, col, outside = true, centerOnBubble = true)
         showingActions = true
@@ -93,9 +105,9 @@ class BubbleBar(baseContext: Context, private val wm: WindowManager) {
     fun showMessage(anchor: BubbleAnchor, text: String, items: List<BarItem> = emptyList(), busy: Boolean = false, autoHideMs: Long = 0, outside: Boolean = false) {
         val box = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
-            background = card(ctx, dp(20f).toFloat())
-            setPadding(dp(16f), dp(12f), dp(12f), dp(12f))
-            elevation = dp(3f).toFloat()
+            background = card(ctx, dp(24f).toFloat())
+            setPadding(dp(18f), dp(14f), dp(12f), dp(14f))
+            elevation = dp(6f).toFloat()
         }
         val row = LinearLayout(ctx).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -152,19 +164,25 @@ class BubbleBar(baseContext: Context, private val wm: WindowManager) {
         val row = LinearLayout(ctx).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            background = card(ctx, dp(23f).toFloat()).apply { if (item.primary) setColor(0xFFE8F0FE.toInt()) }
-            setPadding(dp(14f), 0, dp(18f), 0)
-            elevation = dp(2f).toFloat()
+            setBackgroundResource(R.drawable.menu_row_bg)
+            setPadding(dp(8f), 0, dp(20f), 0)
             isClickable = true
             setOnClickListener { onClick() }
             contentDescription = item.label
         }
         item.icon?.let {
+            val tint = item.tint ?: 0xFF444746.toInt()
             val iv = ImageView(ctx).apply {
                 setImageResource(it)
-                item.tint?.let { t -> imageTintList = ColorStateList.valueOf(t) }
+                imageTintList = ColorStateList.valueOf(tint)
+                setPadding(dp(7f), dp(7f), dp(7f), dp(7f))
+                // Светлый кружок цвета значка.
+                background = GradientDrawable().apply {
+                    shape = GradientDrawable.OVAL
+                    setColor(Color.argb(30, Color.red(tint), Color.green(tint), Color.blue(tint)))
+                }
             }
-            row.addView(iv, LinearLayout.LayoutParams(dp(20f), dp(20f)).apply { marginEnd = dp(10f) })
+            row.addView(iv, LinearLayout.LayoutParams(dp(34f), dp(34f)).apply { marginEnd = dp(12f) })
         }
         val tv = TextView(ctx).apply {
             text = item.label
@@ -180,7 +198,7 @@ class BubbleBar(baseContext: Context, private val wm: WindowManager) {
     private fun show(anchor: BubbleAnchor, content: View, outside: Boolean, centerOnBubble: Boolean) {
         dismiss(notify = false)
         val frame = FrameLayout(ctx)
-        val m = dp(6f) // место под тень
+        val m = dp(12f) // место под тень
         frame.setPadding(m, m, m, m)
         frame.addView(content, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         frame.setOnTouchListener { _, e ->

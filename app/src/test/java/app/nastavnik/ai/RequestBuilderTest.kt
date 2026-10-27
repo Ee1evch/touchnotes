@@ -19,7 +19,7 @@ class RequestBuilderTest {
 
     private fun request(model: ClaudeModel = ClaudeModel.SONNET, stream: Boolean = true) = MessageRequest(
         model = model.id,
-        system = Prompts.mentorSystem("Линейная алгебра", Strictness.HINTS),
+        system = Prompts.mentorSystem(Strictness.HINTS),
         turns = listOf(
             ChatTurn(Role.USER, "Подскажи следующий шаг", hadImage = true),
             ChatTurn(Role.ASSISTANT, "Вспомни правило Крамера."),
@@ -63,7 +63,7 @@ class RequestBuilderTest {
         assertEquals(4096, body["max_tokens"]!!.jsonPrimitive.content.toInt())
         assertTrue(body["stream"]!!.jsonPrimitive.content.toBoolean())
         assertEquals("default", body["fallbacks"]!!.jsonPrimitive.content)
-        assertTrue(body["system"]!!.jsonPrimitive.content.contains("Предмет: Линейная алгебра."))
+        assertTrue(body["system"]!!.jsonPrimitive.content.contains("Ты — наставник"))
         assertEquals("medium", (body["output_config"] as JsonObject)["effort"]!!.jsonPrimitive.content)
         assertNull(body["temperature"])
     }
@@ -103,12 +103,13 @@ class RequestBuilderTest {
 
     @Test
     fun strictnessAndSubjectInSystemPrompt() {
-        val s = Prompts.mentorSystem("Физика", Strictness.QUESTIONS_ONLY)
-        assertTrue(s.contains("Предмет: Физика."))
+        val s = Prompts.mentorSystem(Strictness.QUESTIONS_ONLY)
+        // Предмет модель определяет сама — выбирать его в настройках не нужно.
+        assertTrue(s.contains("Предмет определи сам"))
         assertTrue(s.contains("Строгость: только наводящие вопросы"))
         assertTrue(s.contains("последней строкой напиши ровно [[ГОТОВО]]."))
-        val clean = Prompts.cleanSystem("Матлогика")
-        assertTrue(clean.contains("Предмет: Матлогика."))
+        val clean = Prompts.cleanSystem()
+        assertTrue(clean.contains("Предмет определи сам"))
         assertTrue(clean.contains("\$формулами\$"))
     }
 }

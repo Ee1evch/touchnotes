@@ -36,7 +36,6 @@ data class AppSettings(
     /** Насколько прозрачными становятся заметки, когда к ним подносят стилус (0.15…0.8). */
     val noteFadeAlpha: Float,
     val strictness: Strictness,
-    val subject: String,
     val bubbleAlpha: Float,
     val bubbleSizeDp: Int,
     val bubbleSide: BubbleSide,
@@ -55,13 +54,6 @@ data class AppSettings(
 class SettingsRepo(private val context: Context) {
     private val prefs: SharedPreferences = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
     private val secure: SharedPreferences? by lazy { openSecure() }
-
-    val subjects = listOf(
-        "Математический анализ",
-        "Линейная алгебра",
-        "Математическая логика",
-        "Физика",
-    )
 
     fun provider(): AiProvider = AiProvider.byName(prefs.getString(K_PROVIDER, null))
 
@@ -87,7 +79,6 @@ class SettingsRepo(private val context: Context) {
         watchPauseSec = prefs.getInt(K_WATCH_PAUSE, 0).coerceAtLeast(0),
         noteFadeAlpha = prefs.getFloat(K_NOTE_FADE, 0.35f).coerceIn(0.15f, 0.8f),
         strictness = runCatching { Strictness.valueOf(prefs.getString(K_STRICTNESS, null)!!) }.getOrDefault(Strictness.HINTS),
-        subject = prefs.getString(K_SUBJECT, null) ?: subjects.first(),
         bubbleAlpha = prefs.getFloat(K_ALPHA, 0.7f).coerceIn(MIN_ALPHA, MAX_ALPHA),
         bubbleSizeDp = prefs.getInt(K_SIZE, 56).coerceIn(40, 72),
         bubbleSide = if (prefs.getString(K_SIDE, "RIGHT") == "LEFT") BubbleSide.LEFT else BubbleSide.RIGHT,
@@ -150,7 +141,6 @@ class SettingsRepo(private val context: Context) {
             if (s.anthropicCompatBaseUrl.isBlank()) "Не задан адрес Claude-совместимого прокси" else null
     }
     fun setStrictness(s: Strictness) = prefs.edit { putString(K_STRICTNESS, s.name) }
-    fun setSubject(s: String) = prefs.edit { putString(K_SUBJECT, s.trim()) }
     fun setBubbleAlpha(a: Float) = prefs.edit { putFloat(K_ALPHA, a.coerceIn(MIN_ALPHA, MAX_ALPHA)) }
     fun setBubbleSize(dp: Int) = prefs.edit { putInt(K_SIZE, dp.coerceIn(40, 72)) }
     fun setBubbleSide(side: BubbleSide) = prefs.edit { putString(K_SIDE, side.name) }
@@ -238,7 +228,6 @@ class SettingsRepo(private val context: Context) {
         private const val K_MODEL = "model"
         private const val K_CLEAN_MODEL = "clean_model"
         private const val K_STRICTNESS = "strictness"
-        private const val K_SUBJECT = "subject"
         private const val K_ALPHA = "bubble_alpha"
         private const val K_SIZE = "bubble_size"
         private const val K_SIDE = "bubble_side"

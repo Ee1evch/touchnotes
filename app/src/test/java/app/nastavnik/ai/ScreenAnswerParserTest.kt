@@ -45,6 +45,30 @@ class ScreenAnswerParserTest {
     }
 
     @Test
+    fun lineReferences() {
+        val raw = "@@ error стр 3\nПроверь знак.\n@@ ok стр 1-2\nВерно.\n@@ hint после 5\nДальше?\n" +
+            "@@ error стр 4 : 100 200 300 260\nТут.\n@@ theory 2\nТеория.\n@@ error L7\nx"
+        val a = ScreenAnswerParser.parse(raw, CoordMode.PIXELS_XY, 1000, 800)
+        assertEquals(6, a.marks.size)
+        assertEquals(3..3, a.marks[0].lines)
+        assertNull(a.marks[0].box)
+        assertEquals(1..2, a.marks[1].lines)
+        assertEquals(5, a.marks[2].after)
+        assertEquals(MarkKind.HINT, a.marks[2].kind)
+        assertEquals(4..4, a.marks[3].lines)
+        assertNotNull(a.marks[3].box)
+        assertEquals(2..2, a.marks[4].lines)
+        assertEquals(7..7, a.marks[5].lines)
+    }
+
+    @Test
+    fun ordinaryTextStartingWithAtIsNotHeader() {
+        val a = ScreenAnswerParser.parse("@@ error стр 1\nТекст\n@@ ok это просто фраза в тексте", CoordMode.PIXELS_XY, 1000, 800)
+        assertEquals(1, a.marks.size)
+        assertTrue(a.marks[0].text.contains("просто фраза"))
+    }
+
+    @Test
     fun textWithoutHeaderBecomesNote() {
         val a = ScreenAnswerParser.parse("Просто ответ без меток.", CoordMode.PIXELS_XY, 1000, 800)
         assertEquals(MarkKind.NOTE, a.marks.single().kind)
@@ -95,11 +119,11 @@ class ScreenAnswerParserTest {
 
     @Test
     fun promptMentionsCoordinateSystem() {
-        val px = Prompts.mentorSystem("Физика", Strictness.HINTS, CoordMode.PIXELS_XY)
+        val px = Prompts.mentorSystem(Strictness.HINTS, CoordMode.PIXELS_XY)
         assertTrue(px.contains("в пикселях"))
-        assertTrue(px.contains("@@ error 410 520 980 590"))
+        assertTrue(px.contains("@@ error стр 4"))
         assertFalse(px.contains("{"))
-        val g = Prompts.mentorSystem("Физика", Strictness.HINTS, CoordMode.NORM_YX)
+        val g = Prompts.mentorSystem(Strictness.HINTS, CoordMode.NORM_YX)
         assertTrue(g.contains("box_2d"))
         assertEquals("Вопрос\n\n[Снимок экрана: 1383×864 пикселей]", Prompts.withShotSize("Вопрос", 1383, 864))
     }

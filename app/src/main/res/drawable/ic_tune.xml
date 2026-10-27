@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Настройки: три ползунка -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
+    <path android:strokeColor="#FF000000" android:strokeWidth="2" android:strokeLineCap="round"
+        android:pathData="M4,6L20,6M4,12L20,12M4,18L20,18" />
+    <path android:fillColor="#FF000000" android:pathData="M9,3.5a2.5,2.5 0 1,1 0,5a2.5,2.5 0 1,1 0,-5z" />
+    <path android:fillColor="#FF000000" android:pathData="M15,9.5a2.5,2.5 0 1,1 0,5a2.5,2.5 0 1,1 0,-5z" />
+    <path android:fillColor="#FF000000" android:pathData="M8,15.5a2.5,2.5 0 1,1 0,5a2.5,2.5 0 1,1 0,-5z" />
+</vector>
