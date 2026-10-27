@@ -6,7 +6,18 @@ import kotlin.math.abs
  * Уменьшенный серый кадр экрана: [cols]×[rows] клеток, в каждой — средняя яркость 0…255.
  * Им приложение «видит» экран между вопросами: прокрутили ли страницу, пишет ли студент.
  */
-class Thumb(val cols: Int, val rows: Int, val screenW: Int, val screenH: Int, val luma: IntArray) {
+class Thumb(
+    val cols: Int,
+    val rows: Int,
+    val screenW: Int,
+    val screenH: Int,
+    val luma: IntArray,
+    /**
+     * Профиль строк в полном вертикальном разрешении: для каждой строки пикселей — средняя яркость
+     * в [BANDS] вертикальных полосах. По нему прокрутка находится с точностью до пикселя.
+     */
+    val rowProfile: IntArray = IntArray(0),
+) {
     val cellW: Float get() = screenW.toFloat() / cols
     val cellH: Float get() = screenH.toFloat() / rows
 
@@ -44,8 +55,23 @@ class Thumb(val cols: Int, val rows: Int, val screenW: Int, val screenH: Int, va
         return ink.toFloat() / (c.width * c.height)
     }
 
+    /** Маска для [rowProfile]: строка y в полосе b закрыта нашим окном. */
+    fun rowMaskOf(rects: List<IRect>): BooleanArray {
+        val m = BooleanArray(screenH * BANDS)
+        val bandW = screenW.toFloat() / BANDS
+        for (r in rects) {
+            val b0 = (r.left / bandW).toInt().coerceIn(0, BANDS - 1)
+            val b1 = ((r.right - 1) / bandW).toInt().coerceIn(0, BANDS - 1)
+            for (y in r.top.coerceAtLeast(0) until r.bottom.coerceAtMost(screenH)) for (b in b0..b1) m[y * BANDS + b] = true
+        }
+        return m
+    }
+
     companion object {
         const val INK_DIFF = 18
+
+        /** Сколько вертикальных полос в профиле строк. */
+        const val BANDS = 8
 
         /** Сколько клеток по ширине: на планшете 2560 px это 16 px на клетку. */
         const val COLS = 160
@@ -59,10 +85,15 @@ class ThumbBuilder(private val srcW: Int, private val srcH: Int, val cols: Int =
     private val sum = LongArray(cols * rows)
     private val count = IntArray(cols * rows)
     private val colOf = IntArray(srcW) { x -> (x.toLong() * cols / srcW).toInt() }
+    private val bandOf = IntArray(srcW) { x -> (x.toLong() * Thumb.BANDS / srcW).toInt() }
+    private val bandCount = IntArray(Thumb.BANDS).also { c -> bandOf.forEach { c[it]++ } }
+    private val profile = IntArray(srcH * Thumb.BANDS)
+    private val bandSum = LongArray(Thumb.BANDS)
 
     fun addRow(y: Int, argb: IntArray, offset: Int = 0) {
         val r = (y.toLong() * rows / srcH).toInt().coerceIn(0, rows - 1)
         val base = r * cols
+        bandSum.fill(0L)
         for (x in 0 until srcW) {
             val p = argb[offset + x]
             // Яркость по ITU-R BT.601, целочисленно.
@@ -70,10 +101,18 @@ class ThumbBuilder(private val srcW: Int, private val srcH: Int, val cols: Int =
             val i = base + colOf[x]
             sum[i] += l.toLong()
             count[i]++
+            bandSum[bandOf[x]] += l.toLong()
+        }
+        if (y in 0 until srcH) {
+            for (b in 0 until Thumb.BANDS) profile[y * Thumb.BANDS + b] = (bandSum[b] / bandCount[b].coerceAtLeast(1)).toInt()
         }
     }
 
-    fun build(): Thumb = Thumb(cols, rows, srcW, srcH, IntArray(cols * rows) { i -> if (count[i] == 0) 255 else (sum[i] / count[i]).toInt() })
+    fun build(): Thumb = Thumb(
+        cols, rows, srcW, srcH,
+        IntArray(cols * rows) { i -> if (count[i] == 0) 255 else (sum[i] / count[i]).toInt() },
+        profile,
+    )
 }
 
 sealed interface Motion {
@@ -124,16 +163,57 @@ object ScreenMotion {
         return Score(if (n == 0) Double.MAX_VALUE else total.toDouble() / n, n)
     }
 
+    /** Средняя разница профилей строк, если содержимое сдвинулось на [dy] пикселей. */
+    private fun profileScore(ref: Thumb, cur: Thumb, mask: BooleanArray?, dy: Int): Score {
+        val bands = Thumb.BANDS
+        val h = cur.screenH
+        var total = 0L
+        var n = 0
+        val y0 = maxOf(0, dy)
+        val y1 = minOf(h, h + dy)
+        for (y in y0 until y1) {
+            val ry = y - dy
+            val ci = y * bands
+            val ri = ry * bands
+            for (b in 0 until bands) {
+                if (mask != null && mask[ci + b]) continue
+                total += abs(cur.rowProfile[ci + b] - ref.rowProfile[ri + b])
+                n++
+            }
+        }
+        return Score(if (n == 0) Double.MAX_VALUE else total.toDouble() / n, n)
+    }
+
     /**
      * Сравнивает кадр [cur] с опорным [ref] (снят, когда наставник отвечал).
-     * [mask] — клетки [cur], закрытые нашими окнами.
+     * [mask] — клетки [cur], закрытые нашими окнами, [rowMask] — то же для профиля строк.
      */
-    fun estimate(ref: Thumb, cur: Thumb, mask: BooleanArray? = null): Motion {
+    fun estimate(ref: Thumb, cur: Thumb, mask: BooleanArray? = null, rowMask: BooleanArray? = null): Motion {
         if (ref.cols != cur.cols || ref.rows != cur.rows) return Motion.Replaced
         val total = cur.cols * cur.rows
         val changed0 = changedCells(ref, cur, mask)
         if (changed0 <= maxOf(2, total / 100)) return Motion.Same(changed0)
 
+        // 1. Обычная прокрутка — по вертикали, с точностью до пикселя (профиль строк).
+        val canProfile = ref.rowProfile.size == ref.screenH * Thumb.BANDS && cur.rowProfile.size == ref.rowProfile.size
+        if (canProfile) {
+            val minCompared = (ref.screenH * Thumb.BANDS * 0.4).toInt()
+            val p0 = profileScore(ref, cur, rowMask, 0).mean
+            var bestDy = 0
+            var best = p0
+            fun tryDy(dy: Int) {
+                val sc = profileScore(ref, cur, rowMask, dy)
+                if (sc.compared >= minCompared && sc.mean < best - 1e-9) { best = sc.mean; bestDy = dy }
+            }
+            val range = cur.screenH / 2
+            var dy = -range
+            while (dy <= range) { tryDy(dy); dy += 3 }
+            val coarse = bestDy
+            for (d in coarse - 3..coarse + 3) tryDy(d)
+            if (bestDy != 0 && best <= p0 * 0.5) return Motion.Moved(0, bestDy)
+        }
+
+        // 2. Сдвиг ещё и по горизонтали (страницу увеличили и двигают) — по сетке клеток.
         val minCompared = (total * 0.4).toInt()
         val s0 = score(ref, cur, mask, 0, 0)
         var bestDx = 0
@@ -145,7 +225,6 @@ object ScreenMotion {
                 best = s.mean; bestDx = dx; bestDy = dy
             }
         }
-        // Сначала вертикаль (обычная прокрутка), потом горизонталь, потом уточнение.
         for (dy in -cur.rows / 2..cur.rows / 2) tryShift(0, dy)
         val dy0 = bestDy
         for (dx in -cur.cols / 4..cur.cols / 4) tryShift(dx, dy0)

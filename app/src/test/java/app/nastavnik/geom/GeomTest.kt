@@ -98,6 +98,54 @@ class GeomTest {
         assertTrue("dy=${m.dy}", m.dy in -260..-220)
     }
 
+    /** Экран с неподвижной шапкой приложения сверху: прокручивается только содержимое под ней. */
+    private fun thumbWithHeader(sheet: IntArray, scroll: Int, header: Int = 130): Thumb {
+        val b = ThumbBuilder(w, h)
+        val row = IntArray(w)
+        for (y in 0 until h) {
+            if (y < header) {
+                for (x in 0 until w) row[x] = if (y in 50..80 && x in 60..400 && (x / 6) % 2 == 0) 0xFF303030.toInt() else 0xFFF0F4F9.toInt()
+            } else {
+                System.arraycopy(sheet, (y + scroll) * w, row, 0, w)
+            }
+            b.addRow(y, row)
+        }
+        return b.build()
+    }
+
+    @Test
+    fun scrollByNonWholeCellsUnderFixedHeader() {
+        val sheet = tall(7)
+        for (dist in listOf(379, -237, 53)) {
+            val ref = thumbWithHeader(sheet, 900)
+            val cur = thumbWithHeader(sheet, 900 + dist)
+            val m = ScreenMotion.estimate(ref, cur)
+            assertTrue("сдвиг $dist: ожидали Moved, получили $m", m is Motion.Moved)
+            m as Motion.Moved
+            assertTrue("сдвиг $dist: dy=${m.dy}", kotlin.math.abs(m.dy + dist) <= 3)
+        }
+    }
+
+    @Test
+    fun scrollIsFoundWhenOurWindowsCoverPartOfScreen() {
+        val sheet = tall(8)
+        val ref = thumbOf(sheet, 600)
+        val shifted = sheet.copyOf()
+        val cur0 = thumbOf(sheet, 600 + 311)
+        // Заметка и рамка поверх экрана: закрашены и замаскированы.
+        val rects = listOf(IRect(900, 200, 1500, 600), IRect(100, 300, 800, 420))
+        val px = IntArray(w * h)
+        for (y in 0 until h) System.arraycopy(shifted, (y + 600 + 311) * w, px, y * w, w)
+        for (r in rects) for (y in r.top until r.bottom) for (x in r.left until r.right) px[y * w + x] = 0xFF4285F4.toInt()
+        val b = ThumbBuilder(w, h)
+        val row = IntArray(w)
+        for (y in 0 until h) { System.arraycopy(px, y * w, row, 0, w); b.addRow(y, row) }
+        val cur = b.build()
+        val m = ScreenMotion.estimate(ref, cur, cur.maskOf(rects), cur.rowMaskOf(rects))
+        assertTrue("ожидали Moved, получили $m (без окон: ${ScreenMotion.estimate(ref, cur0)})", m is Motion.Moved)
+        assertTrue(kotlin.math.abs((m as Motion.Moved).dy + 311) <= 3)
+    }
+
     @Test
     fun otherPageIsReplaced() {
         val a = thumbOf(tall(3), 0)

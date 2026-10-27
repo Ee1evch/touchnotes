@@ -735,10 +735,11 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
                 continue
             }
             val thumb = grabThumb() ?: continue
-            val mask = thumb.maskOf(ourRects())
+            val rects = ourRects()
+            val mask = thumb.maskOf(rects)
             val ref = trackRef
             if (overlay.isShowing && ref != null) {
-                val motion = withContext(Dispatchers.Default) { ScreenMotion.estimate(ref, thumb, mask) }
+                val motion = withContext(Dispatchers.Default) { ScreenMotion.estimate(ref, thumb, mask, thumb.rowMaskOf(rects)) }
                 if (BuildConfig.DEBUG) Log.i(TAG, "track: $motion")
                 when (val m = motion) {
                     is Motion.Moved -> {
