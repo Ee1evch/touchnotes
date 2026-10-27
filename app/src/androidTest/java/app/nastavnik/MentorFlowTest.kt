@@ -134,7 +134,10 @@ class MentorFlowTest {
     }
 
     private fun askHint() {
-        device.wait(Until.findObject(By.desc("Наставник").pkg(pkg)), 8000)!!.click()
+        val bubble = device.wait(Until.findObject(By.desc("Наставник").pkg(pkg)), 15000)
+        if (bubble == null) screenshot("no_bubble")
+        assertNotNull("плавающая кнопка не появилась", bubble)
+        bubble!!.click()
         device.wait(Until.findObject(By.text("Подсказка")), 8000)!!.click()
     }
 

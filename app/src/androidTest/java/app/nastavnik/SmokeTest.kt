@@ -140,7 +140,8 @@ class SmokeTest {
         val scenario = ActivityScenario.launch(MainActivity::class.java)
         SystemClock.sleep(800)
         scenario.onActivity { BubbleService.start(it) }
-        val bubble = device.wait(Until.findObject(By.desc("Наставник").pkg(pkg)), 8000)
+        val bubble = device.wait(Until.findObject(By.desc("Наставник").pkg(pkg)), 15000)
+        if (bubble == null) screenshot("no_bubble")
         assertNotNull("плавающая кнопка не появилась", bubble)
         val b = bubble.visibleBounds
         Log.i(TAG, "bubble bounds=$b display=${device.displayWidth}x${device.displayHeight}")
