@@ -1,30 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- «Чернила, бумага и стекло»: тёплый фон, графитовый текст, полупрозрачные стеклянные пластины вместо цветного акцента -->
+    <!-- «Чернила, бумага и стекло»: тёплый фон, графитовый текст; цвет — только у смысла (ошибка, верно, теория) -->
     <color name="paper">#F4F2EE</color>
     <color name="surface">#FFFFFF</color>
-    <color name="surface_alt">#F1EFEA</color>
     <color name="ink">#16161A</color>
-    <color name="ink_soft">#5E5D66</color>
-    <color name="line">#E6E2DB</color>
-
     <color name="accent">#16161A</color>
-    <color name="glass">#C8FFFFFF</color>
-    <color name="glass_rim">#F2FFFFFF</color>
 
-    <!-- Виды заметок -->
-    <color name="kind_error">#E5484D</color>
+    <!-- Тихая проверка: «всё верно» — кнопка коротко вспыхивает зелёным -->
     <color name="kind_ok">#1F9D60</color>
-    <color name="kind_theory">#D9822B</color>
-    <color name="kind_hint">#3A3A42</color>
-
-    <!-- Значки в стеклянном меню у кнопки -->
-    <color name="menu_hint">#3A3A42</color>
-    <color name="menu_error">#E5484D</color>
-    <color name="menu_theory">#D9822B</color>
-    <color name="menu_ok">#1F9D60</color>
-    <color name="menu_neutral">#6B6A73</color>
 
     <color name="text_main">#16161A</color>
-    <color name="ic_launcher_background">#EEF0F4</color>
 </resources>

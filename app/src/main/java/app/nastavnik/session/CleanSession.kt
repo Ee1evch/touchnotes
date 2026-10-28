@@ -115,10 +115,6 @@ class CleanSession(private val app: NastavnikApp, private val scope: CoroutineSc
         _state.value = CleanState.Collecting(shots + images.take(room))
     }
 
-    fun removeLastShot() {
-        val s = _state.value as? CleanState.Collecting ?: return
-        _state.value = if (s.shots.size <= 1) CleanState.Idle else s.copy(shots = s.shots.dropLast(1), message = null)
-    }
 
     fun build() {
         val shots = _state.value.shots

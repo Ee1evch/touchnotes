@@ -142,9 +142,6 @@ interface MessageDao {
 
     @Query("SELECT * FROM messages WHERE conversation_id = :conversationId ORDER BY id")
     suspend fun forConversation(conversationId: Long): List<Message>
-
-    @Query("SELECT * FROM messages WHERE conversation_id = :conversationId ORDER BY id")
-    fun observe(conversationId: Long): Flow<List<Message>>
 }
 
 @Dao

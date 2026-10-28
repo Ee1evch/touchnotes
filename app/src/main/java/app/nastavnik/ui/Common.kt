@@ -10,14 +10,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
@@ -30,6 +28,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -167,24 +167,22 @@ fun FieldLabel(text: String, hint: String? = null) {
     }
 }
 
-/** Главная кнопка-пилюля. [light] — белая, для тёмной карточки; [danger] — красная, для удаления. */
+/** Главная кнопка-пилюля: графитовая; [danger] — красная, для удаления. */
 @Composable
 fun InkButton(
     text: String,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
-    light: Boolean = false,
     danger: Boolean = false,
     icon: Int? = null,
     onClick: () -> Unit,
 ) {
     val bg = when {
         !enabled -> Color(0xFFB9B7BF)
-        light -> Color.White
         danger -> Brand.Error
         else -> Brand.Ink
     }
-    val fg = if (light && enabled) Brand.Ink else Color.White
+    val fg = Color.White
     Row(
         modifier
             .heightIn(min = 50.dp)
@@ -200,14 +198,14 @@ fun InkButton(
     }
 }
 
-/** Второстепенная кнопка-пилюля. [onDark] — полупрозрачная, для тёмной карточки. */
+/** Второстепенная кнопка-пилюля из стекла. */
 @Composable
-fun SoftButton(text: String, modifier: Modifier = Modifier, onDark: Boolean = false, icon: Int? = null, onClick: () -> Unit) {
-    val fg = if (onDark) Color.White else MaterialTheme.colorScheme.onSurface
+fun SoftButton(text: String, modifier: Modifier = Modifier, icon: Int? = null, onClick: () -> Unit) {
+    val fg = MaterialTheme.colorScheme.onSurface
     Row(
         modifier
             .heightIn(min = 50.dp)
-            .then(if (onDark) Modifier.clip(CircleShape).background(Color.White.copy(alpha = 0.12f)) else Modifier.glass(CircleShape, 4.dp, strong = true))
+            .glass(CircleShape, 4.dp, strong = true)
             .clickable(onClick = onClick)
             .padding(horizontal = 20.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -220,11 +218,11 @@ fun SoftButton(text: String, modifier: Modifier = Modifier, onDark: Boolean = fa
 
 /** Пилюля состояния с точкой: зелёная — всё хорошо, красная — нужно внимание. */
 @Composable
-fun StatusPill(text: String, ok: Boolean, onDark: Boolean = false) {
+fun StatusPill(text: String, ok: Boolean) {
     Row(
         modifier = Modifier
             .clip(CircleShape)
-            .background(if (onDark) Color.White.copy(alpha = 0.09f) else Color.White.copy(alpha = 0.6f))
+            .background(Color.White.copy(alpha = 0.6f))
             .border(0.6.dp, Color(0x1416161A), CircleShape)
             .padding(horizontal = 12.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -234,52 +232,25 @@ fun StatusPill(text: String, ok: Boolean, onDark: Boolean = false) {
             Modifier
                 .size(7.dp)
                 .clip(CircleShape)
-                .background(if (ok) Color(0xFF4ADE80) else Color(0xFFF87171)),
+                .background(if (ok) Brand.Ok else Brand.Error),
         )
-        Text(text, style = MaterialTheme.typography.labelMedium, color = if (onDark) Color(0xFFD9D8E2) else MaterialTheme.colorScheme.onSurface)
+        Text(text, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurface)
     }
 }
 
-/** Значок в скруглённом квадрате мягкого цвета. */
+/** Значок в скруглённом стеклянном квадрате. Все значки одного цвета — графитовые: цвет в приложении только у смысла (ошибка, верно, теория). */
 @Composable
-fun IconBadge(icon: Int, tint: Color, size: Int = 42) {
+fun IconBadge(icon: Int, size: Int = 42) {
+    val shape = RoundedCornerShape((size * 0.33f).dp)
     Box(
         Modifier
             .size(size.dp)
-            .clip(RoundedCornerShape((size * 0.33f).dp))
-            .background(tint.copy(alpha = 0.1f))
-            .border(0.8.dp, Color.White.copy(alpha = 0.9f), RoundedCornerShape((size * 0.33f).dp)),
+            .clip(shape)
+            .background(Brand.Ink.copy(alpha = 0.06f))
+            .border(0.8.dp, Color.White.copy(alpha = 0.9f), shape),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(painterResource(icon), contentDescription = null, tint = tint, modifier = Modifier.size((size * 0.5f).dp))
-    }
-}
-
-/** Строка-пункт: значок, заголовок, пояснение и что-нибудь справа. */
-@Composable
-fun SettingRow(
-    icon: Int,
-    tint: Color,
-    title: String,
-    subtitle: String? = null,
-    onClick: (() -> Unit)? = null,
-    trailing: @Composable RowScope.() -> Unit = {},
-) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .clip(MaterialTheme.shapes.medium)
-            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
-            .padding(vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-        IconBadge(icon, tint)
-        Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.titleMedium)
-            if (subtitle != null) Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        trailing()
+        Icon(painterResource(icon), contentDescription = null, tint = Brand.Ink, modifier = Modifier.size((size * 0.48f).dp))
     }
 }
 
@@ -416,7 +387,7 @@ fun StatusLine(text: String, tone: Tone) {
     val (bg, fg) = when (tone) {
         Tone.OK -> Brand.OkSoft to Brand.Ok
         Tone.ERROR -> Brand.ErrorSoft to Color(0xFFB4232A)
-        Tone.INFO -> MaterialTheme.colorScheme.surfaceContainer to MaterialTheme.colorScheme.onSurface
+        Tone.INFO -> Brand.Ink.copy(alpha = 0.05f) to MaterialTheme.colorScheme.onSurface
     }
     Text(
         text,
@@ -442,4 +413,23 @@ fun NumberBadge(n: Int) {
     ) {
         Text(n.toString(), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.titleSmall)
     }
+}
+
+/** Ползунок в общем стиле: графитовая дорожка и ручка, пустая часть дорожки видна и на стекле. */
+@Composable
+fun AppSlider(value: Float, onValueChange: (Float) -> Unit, onValueChangeFinished: () -> Unit, valueRange: ClosedFloatingPointRange<Float>, steps: Int = 0) {
+    Slider(
+        value = value,
+        onValueChange = onValueChange,
+        onValueChangeFinished = onValueChangeFinished,
+        valueRange = valueRange,
+        steps = steps,
+        colors = SliderDefaults.colors(
+            thumbColor = Brand.Ink,
+            activeTrackColor = Brand.Ink,
+            inactiveTrackColor = Brand.Ink.copy(alpha = 0.12f),
+            activeTickColor = Color.White.copy(alpha = 0.7f),
+            inactiveTickColor = Brand.Ink.copy(alpha = 0.3f),
+        ),
+    )
 }

@@ -22,8 +22,5 @@ object Permissions {
     fun overlaySettingsIntent(context: Context): Intent =
         Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${context.packageName}"))
 
-    fun appSettingsIntent(context: Context): Intent =
-        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}"))
-
     const val CONSOLE_KEYS_URL = "https://console.anthropic.com/settings/keys"
 }

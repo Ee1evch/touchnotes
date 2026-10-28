@@ -131,7 +131,7 @@ private fun ConversationList(onOpen: (Long) -> Unit) {
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
-                    IconBadge(R.drawable.ic_bulb, if (current) Brand.Accent else Brand.InkSoft)
+                    IconBadge(R.drawable.ic_bulb)
                     Column(Modifier.weight(1f)) {
                         Text(c.title, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         Text(
@@ -174,7 +174,7 @@ private fun Empty(icon: Int, title: String, text: String) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        IconBadge(icon, Brand.Accent, 56)
+        IconBadge(icon, 56)
         Text(title, style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center)
         Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center, modifier = Modifier.widthIn(max = 460.dp))
     }
@@ -305,7 +305,7 @@ private fun CleanNoteList() {
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                IconBadge(R.drawable.ic_note, Brand.Ok)
+                IconBadge(R.drawable.ic_note)
                 Column(Modifier.weight(1f)) {
                     Text(n.title, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     val cardCount by remember(n.id) { db.cards().observeForNote(n.id) }.collectAsStateWithLifecycle(initialValue = 0)

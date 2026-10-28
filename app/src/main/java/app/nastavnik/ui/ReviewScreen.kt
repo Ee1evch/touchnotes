@@ -97,7 +97,7 @@ fun ReviewScreen(onBack: () -> Unit, onExample: () -> Unit) {
                     .weight(1f)
                     .height(6.dp)
                     .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.surfaceContainerHighest),
+                    .background(Brand.Ink.copy(alpha = 0.1f)),
             ) {
                 Box(
                     Modifier
@@ -113,7 +113,6 @@ fun ReviewScreen(onBack: () -> Unit, onExample: () -> Unit) {
         Column(
             Modifier
                 .fillMaxWidth()
-                .heightIn(min = 320.dp)
                 .glass(RoundedCornerShape(28.dp))
                 .padding(horizontal = 28.dp, vertical = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -129,11 +128,20 @@ fun ReviewScreen(onBack: () -> Unit, onExample: () -> Unit) {
                 )
                 BoxDots(card.box)
             }
-            RichText(card.front, sizePx = 24, center = true, modifier = Modifier.padding(top = 12.dp))
-            AnimatedVisibility(revealed, enter = fadeIn() + expandVertically()) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                    HorizontalDivider(Modifier.widthIn(max = 240.dp), color = MaterialTheme.colorScheme.outlineVariant)
-                    RichText(card.back, sizePx = 19, center = true)
+            // Вопрос (и ответ) — по центру карточки, а не прижаты к теме сверху.
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 220.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
+            ) {
+                RichText(card.front, sizePx = 24, center = true)
+                AnimatedVisibility(revealed, enter = fadeIn() + expandVertically()) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                        HorizontalDivider(Modifier.widthIn(max = 240.dp), color = MaterialTheme.colorScheme.outlineVariant)
+                        RichText(card.back, sizePx = 19, center = true)
+                    }
                 }
             }
         }
@@ -187,7 +195,7 @@ private fun BoxDots(box: Int) {
                     .padding(top = 1.dp)
                     .size(8.dp)
                     .clip(CircleShape)
-                    .background(if (i <= box) Brand.Accent else MaterialTheme.colorScheme.surfaceContainerHighest),
+                    .background(if (i <= box) Brand.Accent else Brand.Ink.copy(alpha = 0.1f)),
             )
         }
     }
@@ -203,7 +211,7 @@ private fun AllDone(total: Int, remembered: Int, learned: Int, all: Int, nextDue
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        IconBadge(R.drawable.ic_check, Brand.Ok, 56)
+        IconBadge(R.drawable.ic_check, 56)
         Text(if (total > 0) "Тренировка закончена" else "На сегодня всё повторено", style = MaterialTheme.typography.titleLarge)
         if (total > 0) {
             Text(
@@ -231,7 +239,7 @@ private fun NoCards(onSample: () -> Unit, onExample: () -> Unit) {
             .padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        IconBadge(R.drawable.ic_cards, Brand.Accent, 52)
+        IconBadge(R.drawable.ic_cards, 52)
         Text("Карточки для повторения", style = MaterialTheme.typography.headlineSmall)
         Text(
             "Каждый чистовик сам превращается в карточки: определения, теоремы и формулы из твоих записей. " +

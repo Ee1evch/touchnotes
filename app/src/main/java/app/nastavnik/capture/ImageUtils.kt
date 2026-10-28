@@ -11,7 +11,6 @@ import app.nastavnik.geom.InkLines
 import app.nastavnik.geom.LineMap
 import java.io.ByteArrayOutputStream
 import kotlin.math.max
-import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
 object ImageUtils {
@@ -207,15 +206,5 @@ object ImageUtils {
             b.addRow(y, row)
         }
         return b.build()
-    }
-
-    /** Маленькая превьюшка для панели чистовика. */
-    fun thumbnail(jpeg: ByteArray, maxSide: Int): Bitmap? {
-        val opts = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        android.graphics.BitmapFactory.decodeByteArray(jpeg, 0, jpeg.size, opts)
-        var sample = 1
-        while (max(opts.outWidth, opts.outHeight) / (sample * 2) >= maxSide) sample *= 2
-        val decode = android.graphics.BitmapFactory.Options().apply { inSampleSize = sample }
-        return android.graphics.BitmapFactory.decodeByteArray(jpeg, 0, jpeg.size, decode)
     }
 }

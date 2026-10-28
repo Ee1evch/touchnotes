@@ -10,11 +10,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -23,7 +21,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -31,9 +28,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -45,7 +39,6 @@ import app.nastavnik.study.ruPlural
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.nastavnik.notes.TouchnotesSender
 import app.nastavnik.overlay.BubbleService
-import kotlinx.coroutines.delay
 
 @Composable
 fun HomeScreen(resumeTick: Int, go: (String) -> Unit) {
@@ -54,14 +47,9 @@ fun HomeScreen(resumeTick: Int, go: (String) -> Unit) {
     val overlay = remember(resumeTick, tick) { Permissions.overlay(context) }
     val notif = remember(resumeTick, tick) { Permissions.notifications(context) }
     val mic = remember(resumeTick, tick) { Permissions.mic(context) }
-    val running = remember(resumeTick, tick) { BubbleService.running }
+    // Наставника включают и выключают и отсюда, и из шторки, ярлыка, уведомления — следим за ним живьём.
+    val running by BubbleService.runningFlow.collectAsStateWithLifecycle()
     val touchnotes = remember(resumeTick) { TouchnotesSender.findTouchnotes(context) }
-
-    // Состояние сервиса меняется асинхронно — перепроверяем чуть позже.
-    LaunchedEffect(tick) {
-        delay(800)
-        if (BubbleService.running != running) tick++
-    }
 
     val notReady = remember(resumeTick, tick) { context.app.settings.notReadyReason() }
     val provider = remember(resumeTick, tick) { context.app.settings.provider().shortTitle }
@@ -127,17 +115,17 @@ fun HomeScreen(resumeTick: Int, go: (String) -> Unit) {
 
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             Tile(
-                R.drawable.ic_cards, Brand.Accent, "Повторение",
+                R.drawable.ic_cards, "Повторение",
                 if (due > 0) "${due} ${ruPlural(due, "карточка ждёт", "карточки ждут", "карточек ждут")}" else "Карточки из конспектов",
                 Modifier.weight(1f),
             ) { go(MainActivity.SCREEN_REVIEW) }
             Tile(
-                R.drawable.ic_flame, Brand.Theory, "Прогресс",
+                R.drawable.ic_flame, "Прогресс",
                 if (streak > 0) "$streak ${ruPlural(streak, "день", "дня", "дней")} подряд" else "Серия и темы с ошибками",
                 Modifier.weight(1f),
             ) { go(MainActivity.SCREEN_PROGRESS) }
-            Tile(R.drawable.ic_history, Brand.InkSoft, "История", "Задачи и чистовики", Modifier.weight(1f)) { go(MainActivity.SCREEN_HISTORY) }
-            Tile(R.drawable.ic_note, Brand.Ok, "Чистовик", "Конспект в PDF", Modifier.weight(1f)) { go(MainActivity.SCREEN_CLEAN) }
+            Tile(R.drawable.ic_history, "История", "Задачи и чистовики", Modifier.weight(1f)) { go(MainActivity.SCREEN_HISTORY) }
+            Tile(R.drawable.ic_note, "Чистовик", "Конспект в PDF", Modifier.weight(1f)) { go(MainActivity.SCREEN_CLEAN) }
         }
 
         SectionLabel("Как это работает")
@@ -255,7 +243,7 @@ private fun Today(due: Int, streak: Int, onReview: () -> Unit) {
                 style = MaterialTheme.typography.titleMedium,
             )
             Text(
-                if (streak > 0) "Пара минут — и серия $streak ${ruPlural(streak, "день", "дня", "дней")} продолжится." else "Пара минут — и материал не забудется к экзамену.",
+                if (streak > 0) "Пара минут — и серия не прервётся: уже $streak ${ruPlural(streak, "день", "дня", "дней")} подряд." else "Пара минут — и материал не забудется к экзамену.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -292,7 +280,7 @@ private fun Attention(title: String, text: String, action: String, onAction: () 
 }
 
 @Composable
-private fun Tile(icon: Int, tint: Color, title: String, caption: String, modifier: Modifier, onClick: () -> Unit) {
+private fun Tile(icon: Int, title: String, caption: String, modifier: Modifier, onClick: () -> Unit) {
     Column(
         modifier
             .glass()
@@ -300,7 +288,7 @@ private fun Tile(icon: Int, tint: Color, title: String, caption: String, modifie
             .padding(18.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        IconBadge(icon, tint)
+        IconBadge(icon)
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 1)
             // Две строки у всех плиток — ряд ровный, даже если подпись короткая.

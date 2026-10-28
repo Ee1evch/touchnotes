@@ -1,12 +1,9 @@
 package app.nastavnik.ui
 
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.draw.clip
 import androidx.compose.material3.Icon
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.background
 import android.content.Intent
 import android.media.projection.MediaProjectionConfig
 import android.media.projection.MediaProjectionManager
@@ -19,20 +16,16 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import app.nastavnik.app
 import app.nastavnik.overlay.BubbleService
@@ -122,7 +115,7 @@ private fun Explanation(onAllow: () -> Unit, onCancel: () -> Unit) {
             Modifier
                 .widthIn(max = 520.dp)
                 .fillMaxWidth()
-                .glass(RoundedCornerShape(28.dp))
+                .softCard(RoundedCornerShape(28.dp), 24.dp, Color.White) // поверх затемнения стекло выглядело бы серым
                 .padding(26.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
@@ -132,7 +125,7 @@ private fun Explanation(onAllow: () -> Unit, onCancel: () -> Unit) {
                     .glass(RoundedCornerShape(16.dp), 4.dp, strong = true),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(painterResource(app.nastavnik.R.drawable.ic_search), contentDescription = null, tint = Brand.Ink, modifier = Modifier.size(24.dp))
+                Icon(painterResource(app.nastavnik.R.drawable.ic_image), contentDescription = null, tint = Brand.Ink, modifier = Modifier.size(24.dp))
             }
             Text("Разреши снимок экрана", style = MaterialTheme.typography.headlineSmall)
             Text(

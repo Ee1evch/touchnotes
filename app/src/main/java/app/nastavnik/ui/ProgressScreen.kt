@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -29,10 +28,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
@@ -47,7 +44,6 @@ import app.nastavnik.study.ProgressSummary
 import app.nastavnik.study.ruPlural
 import java.text.SimpleDateFormat
 import java.util.Calendar
-import java.util.Date
 import java.util.Locale
 
 /** Учебный прогресс: серия дней подряд, активность за две недели, итоги и темы с ошибками. */
@@ -71,7 +67,7 @@ fun ProgressScreen(onBack: () -> Unit, onReview: () -> Unit) {
                     .padding(28.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                IconBadge(R.drawable.ic_chart, Brand.Accent, 52)
+                IconBadge(R.drawable.ic_chart, 52)
                 Text("Здесь появится твой прогресс", style = MaterialTheme.typography.titleLarge)
                 Text(
                     "Каждый вопрос наставнику, найденная ошибка, чистовик и повторённая карточка считаются. " +
@@ -85,10 +81,10 @@ fun ProgressScreen(onBack: () -> Unit, onReview: () -> Unit) {
         StreakCard(s, todayActive = s.days.last() > 0)
         ActivityChart(s.days, now)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Stat(s.questions.toString(), ruPlural(s.questions, "вопрос наставнику", "вопроса наставнику", "вопросов наставнику"), R.drawable.ic_bulb, Brand.Accent, Modifier.weight(1f))
-            Stat(s.errorsFound.toString(), ruPlural(s.errorsFound, "ошибка найдена", "ошибки найдены", "ошибок найдено"), R.drawable.ic_search, Brand.Error, Modifier.weight(1f))
-            Stat(s.cleanNotes.toString(), ruPlural(s.cleanNotes, "чистовик", "чистовика", "чистовиков"), R.drawable.ic_note, Brand.Ok, Modifier.weight(1f))
-            Stat("$learned/$allCards", "карточек выучено", R.drawable.ic_cards, Brand.Theory, Modifier.weight(1f), onClick = onReview)
+            Stat(s.questions.toString(), ruPlural(s.questions, "вопрос наставнику", "вопроса наставнику", "вопросов наставнику"), R.drawable.ic_bulb, Modifier.weight(1f))
+            Stat(s.errorsFound.toString(), ruPlural(s.errorsFound, "ошибка найдена", "ошибки найдены", "ошибок найдено"), R.drawable.ic_search, Modifier.weight(1f))
+            Stat(s.cleanNotes.toString(), ruPlural(s.cleanNotes, "чистовик", "чистовика", "чистовиков"), R.drawable.ic_note, Modifier.weight(1f))
+            Stat("$learned/$allCards", "карточек выучено", R.drawable.ic_cards, Modifier.weight(1f), onClick = onReview)
         }
         if (s.weakTopics.isNotEmpty()) WeakTopics(s.weakTopics)
     }
@@ -104,15 +100,7 @@ private fun StreakCard(s: ProgressSummary, todayActive: Boolean) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(20.dp),
     ) {
-        Box(
-            Modifier
-                .size(64.dp)
-                .clip(RoundedCornerShape(20.dp))
-                .background(Color(0x26FF9F43)),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(painterResource(R.drawable.ic_flame), contentDescription = null, tint = if (s.streak > 0) Color(0xFFFF9F43) else Color(0xFF8E8D98), modifier = Modifier.size(34.dp))
-        }
+        IconBadge(R.drawable.ic_flame, 64)
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(
                 if (s.streak > 0) "${s.streak} ${ruPlural(s.streak, "день", "дня", "дней")} подряд" else "Начни новую серию",
@@ -146,7 +134,7 @@ private fun ActivityChart(days: List<Int>, now: Long) {
     }
     val dayFmt = remember { SimpleDateFormat("d MMMM", Locale("ru")) }
     val accent = Brand.Accent
-    val track = MaterialTheme.colorScheme.surfaceContainerHighest
+    val track = Brand.Ink.copy(alpha = 0.1f)
     Column(
         Modifier
             .fillMaxWidth()
@@ -211,7 +199,7 @@ private fun ActivityChart(days: List<Int>, now: Long) {
 }
 
 @Composable
-private fun Stat(value: String, label: String, icon: Int, tint: Color, modifier: Modifier, onClick: (() -> Unit)? = null) {
+private fun Stat(value: String, label: String, icon: Int, modifier: Modifier, onClick: (() -> Unit)? = null) {
     Column(
         modifier
             .glass()
@@ -219,7 +207,7 @@ private fun Stat(value: String, label: String, icon: Int, tint: Color, modifier:
             .padding(18.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        IconBadge(icon, tint, 36)
+        IconBadge(icon, 36)
         Text(value, style = MaterialTheme.typography.headlineMedium)
         Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2)
     }
@@ -241,7 +229,7 @@ private fun WeakTopics(topics: List<Pair<String, Int>>) {
                         .fillMaxWidth()
                         .height(6.dp)
                         .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.surfaceContainerHighest),
+                        .background(Brand.Ink.copy(alpha = 0.1f)),
                 ) {
                     Box(
                         Modifier

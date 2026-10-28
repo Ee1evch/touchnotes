@@ -182,9 +182,27 @@
     nodes.forEach(place);
   }
 
+  // Тема без разметки LaTeX, как в названии файла: x^3 → x³, x_1 → x₁, \to → →, \frac{1}{x} → 1/x.
+  var SUP = { '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹', 'n': 'ⁿ', '+': '⁺', '-': '⁻' };
+  var SUB = { '0': '₀', '1': '₁', '2': '₂', '3': '₃', '4': '₄', '5': '₅', '6': '₆', '7': '₇', '8': '₈', '9': '₉', 'n': 'ₙ', 'i': 'ᵢ', 'k': 'ₖ' };
+  var SYM = { to: '→', infty: '∞', cdot: '·', times: '×', le: '≤', leq: '≤', ge: '≥', geq: '≥', ne: '≠', neq: '≠', pm: '±',
+    pi: 'π', alpha: 'α', beta: 'β', gamma: 'γ', delta: 'δ', Delta: 'Δ', varepsilon: 'ε', epsilon: 'ε', lambda: 'λ',
+    sum: '∑', int: '∫', sqrt: '√', 'in': '∈', forall: '∀', exists: '∃', Rightarrow: '⇒', Leftrightarrow: '⇔', approx: '≈' };
+  function mapChars(s, table) { return s.split('').map(function (c) { return table[c] || c; }).join(''); }
+  function plainTitle(t) {
+    return String(t || '')
+      .replace(/\\frac\{([^{}]*)\}\{([^{}]*)\}/g, '$1/$2')
+      .replace(/\^(?:\{([0-9n+\-]{1,3})\}|([0-9]{1,2}|n))/g, function (m, a, b) { return mapChars(a || b, SUP); })
+      .replace(/_(?:\{([0-9nik]{1,2})\}|([0-9]{1,2}|[nik]))/g, function (m, a, b) { return mapChars(a || b, SUB); })
+      .replace(/\\([a-zA-Z]+)/g, function (m, name) { return SYM[name] ? ' ' + SYM[name] + ' ' : ''; })
+      .replace(/[$\{\}]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
   function footers(note) {
     var pages = pagesEl.querySelectorAll('.page');
-    var plain = String(note.title || '').replace(/\$/g, '').replace(/\\[a-zA-Z]+/g, '').replace(/[{}]/g, '').replace(/\s+/g, ' ').trim();
+    var plain = plainTitle(note.title);
     var left = [note.subject, plain].filter(Boolean).join(' · ');
     pages.forEach(function (p, i) {
       p.querySelector('.f-left').textContent = left;

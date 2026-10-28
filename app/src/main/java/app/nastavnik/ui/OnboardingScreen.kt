@@ -1,8 +1,6 @@
 package app.nastavnik.ui
 
 import android.Manifest
-import android.content.Intent
-import android.net.Uri
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -21,18 +19,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import app.nastavnik.R
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.material3.Button
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -42,7 +35,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.nastavnik.app
 import app.nastavnik.overlay.BubbleService
@@ -115,7 +107,7 @@ fun OnboardingScreen(resumeTick: Int, onDone: () -> Unit, onSkip: () -> Unit) {
         ),
     )
     val step = steps[index.coerceIn(0, steps.lastIndex)]
-    val icons = listOf(R.drawable.ic_sparkle, R.drawable.ic_open, R.drawable.ic_bulb, R.drawable.ic_search, R.drawable.ic_mic, R.drawable.ic_tune, R.drawable.ic_power)
+    val icons = listOf(R.drawable.ic_sparkle, R.drawable.ic_layers, R.drawable.ic_bell, R.drawable.ic_image, R.drawable.ic_mic, R.drawable.ic_tune, R.drawable.ic_power)
 
     // На планшете карточка — по центру экрана и не шире 620 dp.
     val topPad = (LocalConfiguration.current.screenHeightDp * 0.08f).dp
@@ -132,7 +124,7 @@ fun OnboardingScreen(resumeTick: Int, onDone: () -> Unit, onSkip: () -> Unit) {
                         .weight(1f)
                         .height(5.dp)
                         .clip(CircleShape)
-                        .background(if (i <= index) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHighest),
+                        .background(if (i <= index) Brand.Ink else Brand.Ink.copy(alpha = 0.12f)),
                 )
             }
         }

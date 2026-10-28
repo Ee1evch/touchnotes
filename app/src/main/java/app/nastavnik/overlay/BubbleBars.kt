@@ -4,7 +4,6 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.content.res.ColorStateList
 import android.graphics.Color
-import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Handler
 import android.os.Looper
@@ -35,7 +34,6 @@ data class BubbleAnchor(val rect: IRect, val onLeft: Boolean)
 data class BarItem(
     val label: String,
     val icon: Int? = null,
-    val tint: Int? = null,
     val primary: Boolean = false,
     val action: () -> Unit,
 )
@@ -173,15 +171,15 @@ class BubbleBar(baseContext: Context, private val wm: WindowManager) {
             contentDescription = item.label
         }
         item.icon?.let {
-            val tint = item.tint ?: ON_GLASS
+            // Все значки меню одного цвета — графитовые, как и в приложении.
             val iv = ImageView(ctx).apply {
                 setImageResource(it)
-                imageTintList = ColorStateList.valueOf(tint)
+                imageTintList = ColorStateList.valueOf(ON_GLASS)
                 setPadding(dp(7f), dp(7f), dp(7f), dp(7f))
-                // Скруглённый квадрат цвета значка.
                 background = GradientDrawable().apply {
                     cornerRadius = dp(10f).toFloat()
-                    setColor(Color.argb(30, Color.red(tint), Color.green(tint), Color.blue(tint)))
+                    setColor(0x0F16161A)
+                    setStroke(dp(0.8f), 0xE6FFFFFF.toInt())
                 }
             }
             row.addView(iv, LinearLayout.LayoutParams(dp(32f), dp(32f)).apply { marginEnd = dp(12f) })
@@ -302,7 +300,10 @@ class AskBar(baseContext: Context, private val wm: WindowManager, private val ca
             setTextColor(0xFF16161A.toInt())
             setHintTextColor(0xFF8E8D98.toInt())
             typeface = Fonts.regular(ctx)
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES or InputType.TYPE_TEXT_FLAG_MULTI_LINE
+            // Без флага «многострочный»: иначе клавиатура показывает перенос строки вместо «Отправить».
+            // Длинный вопрос всё равно переносится по словам — до 4 строк.
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+            setHorizontallyScrolling(false)
             maxLines = 4
             imeOptions = EditorInfo.IME_ACTION_SEND
             setOnEditorActionListener { _, id, ev ->

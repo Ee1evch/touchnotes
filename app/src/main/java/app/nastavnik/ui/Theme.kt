@@ -6,7 +6,6 @@ import androidx.compose.material3.Shapes
 import androidx.compose.material3.Typography
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
@@ -52,7 +51,7 @@ private val Light = lightColorScheme(
     primary = Brand.Accent,
     onPrimary = Color.White,
     primaryContainer = Brand.AccentSoft,
-    onPrimaryContainer = Color(0xFF2A1F9E),
+    onPrimaryContainer = Brand.Ink,
     secondary = Brand.Ink,
     onSecondary = Color.White,
     secondaryContainer = Color(0xFFECE9E3),

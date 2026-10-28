@@ -59,7 +59,7 @@ class RegionSelector(private val context: Context, private val wm: WindowManager
         }
         root.addView(hint, FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT).apply {
             gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
-            topMargin = dp(48f)
+            topMargin = OverlayWindows.contentRect(context).top + dp(16f)
         })
 
         val bar = LinearLayout(context).apply {
@@ -100,7 +100,10 @@ class RegionSelector(private val context: Context, private val wm: WindowManager
         }
         root.addView(bar, FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT).apply {
             gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
-            bottomMargin = dp(40f)
+            // Окно на весь экран, вместе с панелью навигации: панель кнопок ставим над ней.
+            val screen = OverlayWindows.screenSize(context)
+            val area = OverlayWindows.contentRect(context)
+            bottomMargin = (screen.y - area.bottom).coerceAtLeast(0) + dp(24f)
         })
 
         try {

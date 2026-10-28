@@ -23,7 +23,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -71,10 +70,10 @@ fun CleanScreen(onClose: () -> Unit, onSettings: () -> Unit, onExample: () -> Un
             IdleClean(onExample)
             return@ScreenScaffold
         }
-        val (icon, tint) = when (s) {
-            is CleanState.Saved -> R.drawable.ic_note to Brand.Ok
-            is CleanState.Failed -> R.drawable.ic_close to Brand.Error
-            else -> R.drawable.ic_sparkle to Brand.Accent
+        val icon = when (s) {
+            is CleanState.Saved -> R.drawable.ic_check
+            is CleanState.Failed -> R.drawable.ic_close
+            else -> R.drawable.ic_sparkle
         }
         val message = when (s) {
             CleanState.Idle -> ""
@@ -96,10 +95,10 @@ fun CleanScreen(onClose: () -> Unit, onSettings: () -> Unit, onExample: () -> Un
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                 if (s is CleanState.Generating || s is CleanState.Saving) {
                     Box(Modifier.size(42.dp), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(Modifier.size(28.dp), strokeWidth = 3.dp, color = Brand.Accent)
+                        CircularProgressIndicator(Modifier.size(28.dp), strokeWidth = 3.dp, color = Brand.Ink, trackColor = Brand.Ink.copy(alpha = 0.1f))
                     }
                 } else {
-                    IconBadge(icon, tint)
+                    IconBadge(icon)
                 }
                 Text(message, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
             }
@@ -166,7 +165,7 @@ private fun IdleClean(onExample: () -> Unit) {
             .padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        IconBadge(R.drawable.ic_note, Brand.Ok, 52)
+        IconBadge(R.drawable.ic_note, 52)
         Text("Аккуратный конспект из твоих записей", style = MaterialTheme.typography.headlineSmall)
         Text(
             "Нейросеть перепишет рукописные записи начисто: заголовки, определения, формулы, шаги решения и графики. " +

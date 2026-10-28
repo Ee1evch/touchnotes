@@ -1,7 +1,6 @@
 package app.nastavnik.overlay
 
 import android.content.Context
-import android.content.res.Configuration
 import android.graphics.PixelFormat
 import android.graphics.Point
 import android.graphics.Rect
@@ -69,11 +68,6 @@ object OverlayWindows {
         val m = DisplayMetrics()
         context.getSystemService(DisplayManager::class.java).getDisplay(Display.DEFAULT_DISPLAY).getRealMetrics(m)
         return Point(m.widthPixels, m.heightPixels)
-    }
-
-    fun isLandscape(context: Context): Boolean {
-        val s = screenSize(context)
-        return if (s.x != s.y) s.x > s.y else context.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
     }
 
     /**

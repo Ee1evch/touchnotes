@@ -56,6 +56,9 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -308,7 +311,7 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
             "Нажми на кнопку поверх Touchnotes — ответ появится прямо на записи"
         }
         val b = NotificationCompat.Builder(this, NastavnikApp.CHANNEL_SERVICE)
-            .setSmallIcon(R.drawable.ic_bulb)
+            .setSmallIcon(R.drawable.ic_tile)
             .setContentTitle("Наставник рядом")
             .setContentText(text)
             .setOngoing(true)
@@ -419,16 +422,16 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
         askBar.dismiss()
         val items = mutableListOf<BarItem>()
         if (mentor.state.value.busy) {
-            items += BarItem("Остановить", R.drawable.ic_close, color(R.color.menu_neutral)) { mentor.dismiss() }
+            items += BarItem("Остановить", R.drawable.ic_close) { mentor.dismiss() }
         }
-        items += BarItem(QuickAction.NEXT_STEP.short, R.drawable.ic_bulb, color(R.color.menu_hint)) { quick(QuickAction.NEXT_STEP) }
-        items += BarItem(QuickAction.FIND_ERROR.short, R.drawable.ic_search, color(R.color.menu_error)) { quick(QuickAction.FIND_ERROR) }
-        items += BarItem(QuickAction.THEORY.short, R.drawable.ic_book, color(R.color.menu_theory)) { quick(QuickAction.THEORY) }
-        items += BarItem(QuickAction.SIMILAR.short, R.drawable.ic_refresh, color(R.color.menu_hint)) { quick(QuickAction.SIMILAR) }
-        items += BarItem("Спросить…", R.drawable.ic_mic, color(R.color.menu_hint)) { askBar.show(anchor()) }
-        items += BarItem("Чистовик", R.drawable.ic_note, color(R.color.menu_ok)) { startClean() }
+        items += BarItem(QuickAction.NEXT_STEP.short, R.drawable.ic_bulb) { quick(QuickAction.NEXT_STEP) }
+        items += BarItem(QuickAction.FIND_ERROR.short, R.drawable.ic_search) { quick(QuickAction.FIND_ERROR) }
+        items += BarItem(QuickAction.THEORY.short, R.drawable.ic_book) { quick(QuickAction.THEORY) }
+        items += BarItem(QuickAction.SIMILAR.short, R.drawable.ic_refresh) { quick(QuickAction.SIMILAR) }
+        items += BarItem("Спросить…", R.drawable.ic_mic) { askBar.show(anchor()) }
+        items += BarItem("Чистовик", R.drawable.ic_note) { startClean() }
         if (overlay.isShowing) {
-            items += BarItem("Убрать заметки", R.drawable.ic_close, color(R.color.menu_neutral)) { mentor.dismiss() }
+            items += BarItem("Убрать заметки", R.drawable.ic_close) { mentor.dismiss() }
         }
         val pages = if (notebookReady) notebook.size else 0
         bar.showActions(anchor(), items, if (pages > 0) "НАСТАВНИК · КОНСПЕКТ $pages СТР." else "НАСТАВНИК")
@@ -444,7 +447,7 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
         menu.show(
             bubbleParams.x, bubbleParams.y, bubbleParams.width, anchor().onLeft,
             listOf(
-                (if (watching) "Не следить за решением" else "Следить за решением") to {
+                MenuEntry(if (watching) "Не следить за решением" else "Следить за решением", R.drawable.ic_eye) {
                     napp.settings.setWatchPauseSec(if (watching) 0 else DEFAULT_WATCH_PAUSE_SEC)
                     notice(
                         if (watching) {
@@ -454,20 +457,20 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
                         },
                     )
                 },
-                (if (regionMode) "Отправлять весь экран" else "Выделять область перед вопросом") to { toggleRegion() },
-                "Новая задача" to {
+                MenuEntry(if (regionMode) "Отправлять весь экран" else "Выделять область перед вопросом", R.drawable.ic_image) { toggleRegion() },
+                MenuEntry("Новая задача", R.drawable.ic_sparkle) {
                     mentor.newTask()
                     notice("Начинаю новую задачу.")
                 },
-                (if (readingMode) "Закончить чтение конспекта" else "Пролистать весь конспект") to {
+                MenuEntry(if (readingMode) "Закончить чтение конспекта" else "Пролистать весь конспект", R.drawable.ic_book) {
                     if (readingMode) stopReading() else startReading()
                 },
-                "Забыть конспект" to { forgetNotebook() },
-                "История" to { openScreen(MainActivity.SCREEN_HISTORY) },
-                "Повторить карточки" to { openScreen(MainActivity.SCREEN_REVIEW) },
-                "Настройки" to { openSettings() },
-                "Спрятать на 10 минут" to { hideFor(10 * 60 * 1000L) },
-                "Выключить" to { stopSelf() },
+                MenuEntry("Забыть конспект", R.drawable.ic_trash) { forgetNotebook() },
+                MenuEntry("История", R.drawable.ic_history) { openScreen(MainActivity.SCREEN_HISTORY) },
+                MenuEntry("Повторить карточки", R.drawable.ic_cards) { openScreen(MainActivity.SCREEN_REVIEW) },
+                MenuEntry("Настройки", R.drawable.ic_tune) { openSettings() },
+                MenuEntry("Спрятать на 10 минут", R.drawable.ic_eye_off) { hideFor(10 * 60 * 1000L) },
+                MenuEntry("Выключить", R.drawable.ic_power) { stopSelf() },
             ),
         )
     }
@@ -1179,9 +1182,16 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
         /** Если изменилось больше этой доли экрана, а сдвига нет — страницу увеличили или сменили. */
         private const val RELOCATE_CHANGE = 0.04f
 
-        @Volatile
-        var running = false
-            private set
+        private val runningState = MutableStateFlow(false)
+
+        /** Включён ли наставник — экраны приложения подписываются, чтобы не показывать старое состояние. */
+        val runningFlow: StateFlow<Boolean> = runningState.asStateFlow()
+
+        var running: Boolean
+            get() = runningState.value
+            private set(value) {
+                runningState.value = value
+            }
 
         /** Сколько страниц конспекта запомнено — для тестов. */
         @Volatile

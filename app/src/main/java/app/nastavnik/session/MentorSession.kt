@@ -191,9 +191,6 @@ class MentorSession(private val app: NastavnikApp, private val scope: CoroutineS
         _state.update { it.copy(answer = null) }
     }
 
-    /** Снимает «Сделать чистовик?» с последнего ответа. */
-    fun dismissDone() = _state.update { s -> s.copy(answer = s.answer?.copy(done = false)) }
-
     fun ask(question: String, kind: AskKind, shot: suspend () -> ShotResult) {
         if (isBusy) {
             // Вопрос студента важнее тихой проверки: она уступает ему место.
