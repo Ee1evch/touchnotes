@@ -37,6 +37,8 @@ data class AppSettings(
     val noteFadeAlpha: Float,
     /** Во сколько напомнить о карточках (час, -1 — не напоминать). */
     val reminderHour: Int,
+    /** Наставник видит весь конспект: страницы, которые студент пролистал, уходят вместе с вопросом. */
+    val seeNotebook: Boolean,
     val strictness: Strictness,
     val bubbleAlpha: Float,
     val bubbleSizeDp: Int,
@@ -81,6 +83,7 @@ class SettingsRepo(private val context: Context) {
         watchPauseSec = prefs.getInt(K_WATCH_PAUSE, 0).coerceAtLeast(0),
         noteFadeAlpha = prefs.getFloat(K_NOTE_FADE, 0.35f).coerceIn(0.15f, 0.8f),
         reminderHour = prefs.getInt(K_REMINDER, DEFAULT_REMINDER_HOUR).coerceIn(-1, 23),
+        seeNotebook = prefs.getBoolean(K_NOTEBOOK, true),
         strictness = runCatching { Strictness.valueOf(prefs.getString(K_STRICTNESS, null)!!) }.getOrDefault(Strictness.HINTS),
         bubbleAlpha = prefs.getFloat(K_ALPHA, 0.7f).coerceIn(MIN_ALPHA, MAX_ALPHA),
         bubbleSizeDp = prefs.getInt(K_SIZE, 56).coerceIn(40, 72),
@@ -109,6 +112,7 @@ class SettingsRepo(private val context: Context) {
     fun setWatchPauseSec(sec: Int) = prefs.edit { putInt(K_WATCH_PAUSE, sec.coerceAtLeast(0)) }
     fun setNoteFadeAlpha(a: Float) = prefs.edit { putFloat(K_NOTE_FADE, a.coerceIn(0.15f, 0.8f)) }
     fun setReminderHour(h: Int) = prefs.edit { putInt(K_REMINDER, h.coerceIn(-1, 23)) }
+    fun setSeeNotebook(on: Boolean) = prefs.edit { putBoolean(K_NOTEBOOK, on) }
 
     /** Подставить настройки, вставленные из прокси (Claudex и т.п.). */
     fun apply(c: ProxyConfig) {
@@ -230,6 +234,7 @@ class SettingsRepo(private val context: Context) {
         private const val K_WATCH_PAUSE = "watch_pause_sec"
         private const val K_NOTE_FADE = "note_fade_alpha"
         private const val K_REMINDER = "reminder_hour"
+        private const val K_NOTEBOOK = "see_notebook"
         const val DEFAULT_REMINDER_HOUR = 18
         private const val K_MODEL = "model"
         private const val K_CLEAN_MODEL = "clean_model"

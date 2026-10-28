@@ -51,10 +51,10 @@ class RegionSelector(private val context: Context, private val wm: WindowManager
         val dp = { v: Float -> OverlayWindows.dp(context, v) }
         val hint = TextView(context).apply {
             text = "Обведи пальцем задачу, которую нужно отправить"
-            setTextColor(Color.WHITE)
+            setTextColor(GlassInk.TEXT)
             textSize = 17f
             setPadding(dp(16f), dp(10f), dp(16f), dp(10f))
-            background = GradientDrawable().apply { setColor(0xE616161A.toInt()); cornerRadius = dp(20f).toFloat() }
+            background = GlassDrawable(context, dp(20f).toFloat(), 0.88f)
             typeface = Fonts.medium(context)
         }
         root.addView(hint, FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT).apply {
@@ -65,7 +65,7 @@ class RegionSelector(private val context: Context, private val wm: WindowManager
         val bar = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             setPadding(dp(8f), dp(8f), dp(8f), dp(8f))
-            background = GradientDrawable().apply { setColor(0xFA16161A.toInt()); cornerRadius = dp(28f).toFloat() }
+            background = GlassDrawable(context, dp(28f).toFloat(), 0.88f)
             elevation = dp(6f).toFloat()
         }
         fun button(label: String, primary: Boolean, onClick: () -> Unit) = Button(context).apply {
@@ -73,10 +73,11 @@ class RegionSelector(private val context: Context, private val wm: WindowManager
             isAllCaps = false
             textSize = 16f
             typeface = Fonts.semibold(context)
-            setTextColor(if (primary) 0xFF16161A.toInt() else 0xFFF4F4F6.toInt())
+            setTextColor(if (primary) Color.WHITE else GlassInk.TEXT)
             background = GradientDrawable().apply {
-                setColor(if (primary) Color.WHITE else 0x1FFFFFFF)
+                setColor(if (primary) GlassInk.TEXT else 0x8CFFFFFF.toInt())
                 cornerRadius = dp(22f).toFloat()
+                if (!primary) setStroke(dp(1f), 0x2416161A)
             }
             setPadding(dp(18f), 0, dp(18f), 0)
             minHeight = dp(44f)
@@ -118,7 +119,7 @@ class RegionSelector(private val context: Context, private val wm: WindowManager
             color = Color.WHITE
             strokeWidth = resources.displayMetrics.density * 2.5f
         }
-        private val corner = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF5B4CF0.toInt() }
+        private val corner = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
         private var startX = 0f
         private var startY = 0f
         private var sel: RectF? = null

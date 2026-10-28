@@ -6,11 +6,13 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.ColorFilter
 import android.graphics.DashPathEffect
+import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.PixelFormat
 import android.graphics.Rect
 import android.graphics.RectF
+import android.graphics.Shader
 import android.graphics.Typeface
 import android.graphics.drawable.Drawable
 import android.view.MotionEvent
@@ -19,32 +21,32 @@ import android.widget.FrameLayout
 import app.nastavnik.ai.MarkKind
 import app.nastavnik.geom.Side
 
-/** Цвета заметок: ошибка — коралловая, следующий шаг — фирменная фиолетово-синяя, верно — зелёная, теория — янтарная. */
+/** Цвета заметок: ошибка — коралловая, следующий шаг — графитовая, верно — зелёная, теория — янтарная. */
 object NoteColors {
     fun of(kind: MarkKind): Int = when (kind) {
         MarkKind.ERROR -> Color.parseColor("#E5484D")
-        MarkKind.HINT -> Color.parseColor("#5B4CF0")
+        MarkKind.HINT -> Color.parseColor("#3A3A42")
         MarkKind.OK -> Color.parseColor("#1F9D60")
         MarkKind.THEORY -> Color.parseColor("#D9822B")
-        MarkKind.NOTE -> Color.parseColor("#5B4CF0")
+        MarkKind.NOTE -> Color.parseColor("#3A3A42")
     }
 
     /** Светлый фон метки вида в заголовке заметки. */
     fun soft(kind: MarkKind): Int = when (kind) {
         MarkKind.ERROR -> Color.parseColor("#FDECEC")
-        MarkKind.HINT -> Color.parseColor("#ECEAFE")
+        MarkKind.HINT -> Color.parseColor("#ECECEF")
         MarkKind.OK -> Color.parseColor("#E5F6ED")
         MarkKind.THEORY -> Color.parseColor("#FCF0E3")
-        MarkKind.NOTE -> Color.parseColor("#ECEAFE")
+        MarkKind.NOTE -> Color.parseColor("#ECECEF")
     }
 
     /** Текст метки вида — темнее основного цвета, чтобы читался на светлом фоне. */
     fun text(kind: MarkKind): Int = when (kind) {
         MarkKind.ERROR -> Color.parseColor("#C8333A")
-        MarkKind.HINT -> Color.parseColor("#4A3BD6")
+        MarkKind.HINT -> Color.parseColor("#2A2A31")
         MarkKind.OK -> Color.parseColor("#17804D")
         MarkKind.THEORY -> Color.parseColor("#A85F14")
-        MarkKind.NOTE -> Color.parseColor("#4A3BD6")
+        MarkKind.NOTE -> Color.parseColor("#2A2A31")
     }
 
     /** Значок вида. */
@@ -84,7 +86,7 @@ class MarkView(context: Context, val kind: MarkKind) : View(context) {
             MarkKind.ERROR -> 40
             MarkKind.OK -> 38
             MarkKind.THEORY -> 44
-            else -> 20
+            else -> 16
         }
     }
     private val line = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -158,26 +160,31 @@ class MarkView(context: Context, val kind: MarkKind) : View(context) {
 }
 
 /**
- * Фон заметки: мягкая тень, белая карточка и «хвостик» к отмеченному месту.
- * Тень рисуется в поле [shadow] вокруг карточки — у окна должен быть такой же внутренний отступ.
+ * Фон заметки — «жидкое стекло»: полупрозрачная светлая пластина, сквозь которую видны записи,
+ * блик сверху, светлая кромка и лёгкая тень; «хвостик» указывает на отмеченное место.
+ * Тень рисуется в поле [shadow] вокруг пластины — у окна должен быть такой же внутренний отступ.
  */
 class NoteBackground(context: Context) : Drawable() {
     private val d = context.resources.displayMetrics.density
-    val tail = (10 * d).toInt()
-    val shadow = (10 * d).toInt()
-    private val radius = 22 * d
-    private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
-    private val border = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    val tail = (9 * d).toInt()
+    val shadow = (8 * d).toInt()
+    private val radius = 20 * d
+    private val fill = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val rim = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
-        strokeWidth = 1f * d
-        color = Color.parseColor("#14000000")
+        strokeWidth = 1.2f * d
+    }
+    private val hairline = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = 0.8f * d
+        color = Color.argb(26, 20, 20, 30)
     }
     // Мягкая тень без размытия (оно не работает с аппаратной отрисовкой и WebView): несколько полупрозрачных обводок.
-    private val shadows = listOf(9f, 6f, 3.5f, 1.5f).map { w ->
+    private val shadows = listOf(8f, 5f, 2.5f).map { w ->
         Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE
             strokeWidth = w * d
-            color = Color.argb(9, 22, 22, 26)
+            color = Color.argb(7, 22, 22, 26)
         }
     }
     private val path = Path()
@@ -211,6 +218,17 @@ class NoteBackground(context: Context) : Drawable() {
         path.reset()
         // Пока у окна нет размера, рисовать нечего.
         if (card.width() <= 2 * radius || card.height() <= 2 * radius) return
+        // Стекло: сверху светлее (блик), книзу прозрачнее — записи под заметкой видны.
+        fill.shader = LinearGradient(
+            0f, card.top, 0f, card.bottom,
+            intArrayOf(Color.argb(GLASS_TOP, 255, 255, 255), Color.argb(GLASS_BOTTOM, 250, 250, 252)),
+            null, Shader.TileMode.CLAMP,
+        )
+        rim.shader = LinearGradient(
+            0f, card.top, 0f, card.bottom,
+            intArrayOf(Color.argb(240, 255, 255, 255), Color.argb(90, 255, 255, 255)),
+            null, Shader.TileMode.CLAMP,
+        )
         path.addRoundRect(card, radius, radius, Path.Direction.CW)
         if (side == Side.NONE) return
         val t = tail.toFloat()
@@ -246,7 +264,11 @@ class NoteBackground(context: Context) : Drawable() {
         shadows.forEach { canvas.drawPath(path, it) }
         canvas.restore()
         canvas.drawPath(path, fill)
-        canvas.drawPath(path, border)
+        canvas.drawPath(path, hairline)
+        canvas.save()
+        canvas.translate(0f, 0.6f * d)
+        canvas.drawPath(path, rim)
+        canvas.restore()
     }
 
     override fun setAlpha(alpha: Int) = Unit
@@ -254,6 +276,12 @@ class NoteBackground(context: Context) : Drawable() {
 
     @Deprecated("Deprecated in Java")
     override fun getOpacity(): Int = PixelFormat.TRANSLUCENT
+
+    companion object {
+        /** Насколько непрозрачно стекло вверху и внизу (из 255): текст читается, записи под ним видны. */
+        const val GLASS_TOP = 214
+        const val GLASS_BOTTOM = 178
+    }
 }
 
 /** «Ручка» в заголовке заметки: шесть точек — за неё заметку можно перетащить. */

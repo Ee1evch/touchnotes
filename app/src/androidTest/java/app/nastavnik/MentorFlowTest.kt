@@ -26,6 +26,7 @@ import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
@@ -78,7 +79,8 @@ class MentorFlowTest {
             Log.i("MentorFlowTest", "target=$t -> line ${line.number} (${line.left},${line.top})-(${line.right},${line.bottom}) of ${lines.size}")
         }
         return "@@ тема Исследование функции\n@@ ok $spec\n" +
-            "Верно! Производная \$f'(x) = 3x^2 - 3\$ найдена правильно, и точки \$x = \\pm 1\$ тоже.\n\n" +
+            "Верно! Экстремумы найдены правильно.\n@@ подробнее\n" +
+            "Производная \$f'(x) = 3x^2 - 3\$ найдена правильно, и точки \$x = \\pm 1\$ тоже.\n\n" +
             "\$\$f(-1) = 2,\\quad f(1) = -2\$\$\n[[ГОТОВО]]"
     }
 
@@ -204,6 +206,16 @@ class MentorFlowTest {
         assertMarkOn(target!!, got)
         assertTrue("заметка закрыла отмеченное место", !Rect.intersects(note.visibleBounds, got))
 
+        // Видна короткая подсказка; «Подробнее» раскрывает полную — заметка становится шире.
+        val narrow = AnswerOverlay.shownNotes.single()
+        device.findObject(By.textStartsWith("Подробнее"))!!.click()
+        SystemClock.sleep(1500)
+        screenshot("note_expanded")
+        val wide = AnswerOverlay.shownNotes.single()
+        assertTrue("заметка не раскрылась: $narrow -> $wide", wide.width > narrow.width && wide.height > narrow.height)
+        device.findObject(By.textStartsWith("Коротко"))!!.click()
+        SystemClock.sleep(800)
+
         // «Глазик» на заметке прячет выделение и показывает снова.
         device.findObject(By.desc("Скрыть выделение"))!!.click()
         SystemClock.sleep(500)
@@ -255,6 +267,44 @@ class MentorFlowTest {
         val cardCount = runBlocking { ctx.app.db.cards().observeForNote(n.id).first() }
         assertEquals("карточки не добавились", 5, cardCount)
         device.pressBack()
+        scenario.close()
+    }
+
+    /** Наставник видит весь конспект: пролистанные страницы уходят вместе со следующим вопросом. */
+    @Test
+    fun questionCarriesWholeNotebook() {
+        val scenario = ActivityScenario.launch<MainActivity>(
+            Intent(ctx, MainActivity::class.java).putExtra(MainActivity.EXTRA_SCREEN, MainActivity.SCREEN_SETTINGS),
+        )
+        SystemClock.sleep(1200)
+        scenario.onActivity { BubbleService.start(it) }
+        SystemClock.sleep(800)
+        askHint()
+        assertNotNull("нет заметки", device.wait(Until.findObject(By.desc("Заметка: Верно")), 40000))
+        val afterAsk = BubbleService.notebookPages
+        assertTrue("страница вопроса не запомнилась", afterAsk >= 1)
+        // Убираем заметку и спокойно листаем вниз, задерживаясь на каждом экране.
+        device.findObject(By.desc("Закрыть заметку"))?.click()
+        val x = device.displayWidth / 4
+        val h = device.displayHeight
+        repeat(2) {
+            device.swipe(x, h * 3 / 4, x, h / 4, 60)
+            SystemClock.sleep(6000)
+        }
+        val afterScroll = BubbleService.notebookPages
+        Log.i("MentorFlowTest", "notebook pages: after ask $afterAsk, after scroll $afterScroll")
+        assertTrue("пролистанные страницы не запомнились ($afterAsk -> $afterScroll)", afterScroll > afterAsk)
+
+        val before = bodies.size
+        askHint()
+        assertNotNull("нет второй заметки", device.wait(Until.findObject(By.desc("Заметка: Верно")), 40000))
+        val req = Json.parseToJsonElement(bodies.drop(before).first { it.contains("\"stream\":true") }).jsonObject
+        val content = req["messages"]!!.jsonArray.last().jsonObject["content"] as JsonArray
+        val images = content.count { (it.jsonObject["type"] as JsonPrimitive).content == "image" }
+        val text = content.last().jsonObject["text"]!!.jsonPrimitive.content
+        Log.i("MentorFlowTest", "second ask: $images images")
+        assertTrue("с вопросом ушёл только текущий экран ($images)", images >= 2)
+        assertTrue("нет пояснения про конспект", text.contains("Последний снимок — текущий экран"))
         scenario.close()
     }
 

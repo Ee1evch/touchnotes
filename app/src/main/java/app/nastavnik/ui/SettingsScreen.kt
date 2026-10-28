@@ -58,6 +58,16 @@ fun SettingsScreen(onBack: () -> Unit) {
             ModelPicker(s.provider, ModelPresets.mentor(s.provider), s.cleanModel) { repo.setCleanModel(it, s.provider) }
         }
 
+        SectionCard("Весь конспект") {
+            FieldLabel(
+                "Что видит наставник",
+                "«Весь конспект» — страница, где ты спрашиваешь, и всё, что ты спокойно пролистал в этой тетради, " +
+                    "уходят вместе с вопросом: наставник видит условие, определения и прошлые шаги. " +
+                    "Пролистать всё сразу — долгое нажатие на кнопку → «Пролистать весь конспект». Страницы хранятся только на планшете, 12 часов.",
+            )
+            Segmented(listOf(true to "Весь конспект", false to "Только экран"), s.seeNotebook) { repo.setSeeNotebook(it) }
+        }
+
         SectionCard("Наставник") {
             FieldLabel("Строгость", s.strictness.label)
             Segmented(

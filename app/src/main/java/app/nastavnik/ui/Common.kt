@@ -36,7 +36,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.res.painterResource
@@ -54,6 +57,34 @@ fun Modifier.softCard(shape: Shape = RoundedCornerShape(24.dp), elevation: Dp = 
         .clip(shape)
         .then(if (color != null) Modifier.background(color) else Modifier)
 
+/**
+ * Стеклянная пластина: полупрозрачная белая, светлее сверху (блик), со светлой кромкой и тонкой линией по краю.
+ * Сквозь неё видны мягкие пятна фона. [strong] — плотнее, для мелких элементов поверх стекла.
+ */
+fun Modifier.glass(shape: Shape = RoundedCornerShape(24.dp), elevation: Dp = 10.dp, strong: Boolean = false): Modifier =
+    this
+        .shadow(elevation, shape, ambientColor = Color(0x1216161A), spotColor = Color(0x1A16161A))
+        .clip(shape)
+        .background(
+            Brush.verticalGradient(
+                listOf(Color.White.copy(alpha = if (strong) 0.92f else 0.76f), Color.White.copy(alpha = if (strong) 0.8f else 0.56f)),
+            ),
+        )
+        .border(0.6.dp, Color(0x1A16161A), shape)
+        .border(1.2.dp, Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.95f), Color.White.copy(alpha = 0.25f))), shape)
+
+/** Бумага с мягкими цветными пятнами — фон всех экранов, под стеклом. */
+fun Modifier.paperBackdrop(): Modifier = drawBehind {
+    drawRect(Brand.Paper)
+    val w = size.width
+    val h = size.height
+    fun blob(c: Color, x: Float, y: Float, r: Float) =
+        drawCircle(Brush.radialGradient(listOf(c, c.copy(alpha = 0f)), center = Offset(x, y), radius = r), r, Offset(x, y))
+    blob(Brand.BlobCool, w * 0.88f, h * 0.06f, maxOf(w, h) * 0.5f)
+    blob(Brand.BlobWarm, w * 0.04f, h * 0.42f, maxOf(w, h) * 0.42f)
+    blob(Brand.BlobMint, w * 0.92f, h * 0.9f, maxOf(w, h) * 0.45f)
+}
+
 @Composable
 fun ScreenScaffold(
     title: String,
@@ -61,7 +92,7 @@ fun ScreenScaffold(
     scrollable: Boolean = true,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    Scaffold(containerColor = MaterialTheme.colorScheme.background) { inner ->
+    Scaffold(modifier = Modifier.paperBackdrop(), containerColor = Color.Transparent) { inner ->
         val base = Modifier
             .fillMaxSize()
             .padding(inner)
@@ -92,7 +123,7 @@ fun RoundIconButton(icon: Int, description: String, onClick: () -> Unit) {
     Box(
         Modifier
             .size(44.dp)
-            .softCard(CircleShape, 6.dp, MaterialTheme.colorScheme.surface)
+            .glass(CircleShape, 6.dp, strong = true)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
@@ -108,7 +139,7 @@ fun SectionCard(title: String?, content: @Composable ColumnScope.() -> Unit) {
         Column(
             Modifier
                 .fillMaxWidth()
-                .softCard(color = MaterialTheme.colorScheme.surface)
+                .glass()
                 .padding(horizontal = 20.dp, vertical = 18.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
@@ -172,13 +203,11 @@ fun InkButton(
 /** Второстепенная кнопка-пилюля. [onDark] — полупрозрачная, для тёмной карточки. */
 @Composable
 fun SoftButton(text: String, modifier: Modifier = Modifier, onDark: Boolean = false, icon: Int? = null, onClick: () -> Unit) {
-    val bg = if (onDark) Color.White.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceContainer
     val fg = if (onDark) Color.White else MaterialTheme.colorScheme.onSurface
     Row(
         modifier
             .heightIn(min = 50.dp)
-            .clip(CircleShape)
-            .background(bg)
+            .then(if (onDark) Modifier.clip(CircleShape).background(Color.White.copy(alpha = 0.12f)) else Modifier.glass(CircleShape, 4.dp, strong = true))
             .clickable(onClick = onClick)
             .padding(horizontal = 20.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -195,7 +224,8 @@ fun StatusPill(text: String, ok: Boolean, onDark: Boolean = false) {
     Row(
         modifier = Modifier
             .clip(CircleShape)
-            .background(if (onDark) Color.White.copy(alpha = 0.09f) else MaterialTheme.colorScheme.surfaceContainer)
+            .background(if (onDark) Color.White.copy(alpha = 0.09f) else Color.White.copy(alpha = 0.6f))
+            .border(0.6.dp, Color(0x1416161A), CircleShape)
             .padding(horizontal = 12.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(7.dp),
@@ -217,7 +247,8 @@ fun IconBadge(icon: Int, tint: Color, size: Int = 42) {
         Modifier
             .size(size.dp)
             .clip(RoundedCornerShape((size * 0.33f).dp))
-            .background(tint.copy(alpha = 0.13f)),
+            .background(tint.copy(alpha = 0.1f))
+            .border(0.8.dp, Color.White.copy(alpha = 0.9f), RoundedCornerShape((size * 0.33f).dp)),
         contentAlignment = Alignment.Center,
     ) {
         Icon(painterResource(icon), contentDescription = null, tint = tint, modifier = Modifier.size((size * 0.5f).dp))
@@ -259,7 +290,7 @@ fun <T> Segmented(options: List<Pair<T, String>>, selected: T, onSelect: (T) -> 
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
-            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .background(Color(0x1416161A))
             .padding(4.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
@@ -271,7 +302,7 @@ fun <T> Segmented(options: List<Pair<T, String>>, selected: T, onSelect: (T) -> 
                     .weight(1f)
                     .height(42.dp)
                     .then(
-                        if (on) Modifier.softCard(RoundedCornerShape(12.dp), 3.dp, MaterialTheme.colorScheme.surface)
+                        if (on) Modifier.glass(RoundedCornerShape(12.dp), 3.dp, strong = true)
                         else Modifier.clip(RoundedCornerShape(12.dp)),
                     )
                     .selectable(selected = on, role = Role.RadioButton) { onSelect(value) },
@@ -343,10 +374,10 @@ fun AppTextField(
 /** Небольшая кнопка-«таблетка»: варианты адреса, второстепенные действия в строке. */
 @Composable
 fun ChipButton(text: String, selected: Boolean = false, enabled: Boolean = true, onClick: () -> Unit) {
-    val bg = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainer
+    val bg = if (selected) Brand.Ink else Color.White.copy(alpha = 0.62f)
     val fg = when {
         !enabled -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-        selected -> MaterialTheme.colorScheme.primary
+        selected -> Color.White
         else -> MaterialTheme.colorScheme.onSurface
     }
     Box(
@@ -354,6 +385,7 @@ fun ChipButton(text: String, selected: Boolean = false, enabled: Boolean = true,
             .heightIn(min = 40.dp)
             .clip(CircleShape)
             .background(bg)
+            .border(0.6.dp, Color(0x1A16161A), CircleShape)
             .clickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 10.dp),
         contentAlignment = Alignment.Center,

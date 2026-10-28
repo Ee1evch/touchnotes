@@ -41,9 +41,12 @@ data class NBox(val left: Float, val top: Float, val right: Float, val bottom: F
 data class Mark(
     val kind: MarkKind,
     val box: NBox?,
+    /** Короткая подсказка — её видно сразу. */
     val text: String,
     val lines: IntRange? = null,
     val after: Int? = null,
+    /** Полная подсказка — открывается кнопкой «Подробнее» (null — модель её не дала). */
+    val detail: String? = null,
 )
 
 data class ScreenAnswer(
@@ -77,6 +80,7 @@ object ScreenAnswerParser {
     // Дробная часть — только через точку: запятая в «(10,10,20,20)» разделяет числа.
     private val numberRe = Regex("""-?\d+(?:\.\d+)?""")
     private val topicRe = Regex("""^\s*@@\s*(?:тема|topic)(?!\p{L})\s*[:\-—]?\s*(.*)$""", RegexOption.IGNORE_CASE)
+    private val detailRe = Regex("""^\s*@@\s*(?:подробнее|подробно|details?|more)\s*:?\s*$""", RegexOption.IGNORE_CASE)
     private val allGoodRegex = Regex("""\[\[\s*ВЕРНО\s*\]\]""", RegexOption.IGNORE_CASE)
 
     private class Spec(val lines: IntRange?, val after: Int?, val coords: List<Float>?)
@@ -123,12 +127,20 @@ object ScreenAnswerParser {
         var after: Int? = null
         val body = StringBuilder()
         var topic: String? = null
+        // Текст заметки до строки «@@ подробнее» — короткая подсказка, после — полная.
+        val detail = StringBuilder()
+        var inDetail = false
         fun flush() {
             val t = body.toString().trim()
-            if (kind != null || t.isNotEmpty()) {
-                if (t.isNotEmpty() || streaming) marks += Mark(kind ?: MarkKind.NOTE, box, t, lines, after)
+            val d = detail.toString().trim().ifEmpty { null }
+            if (kind != null || t.isNotEmpty() || d != null) {
+                // Модель забыла короткую часть — показываем начало полной.
+                val short = t.ifEmpty { d?.let(::firstSentence).orEmpty() }
+                if (short.isNotEmpty() || streaming) marks += Mark(kind ?: MarkKind.NOTE, box, short, lines, after, d?.takeIf { it != short })
             }
             body.setLength(0)
+            detail.setLength(0)
+            inDetail = false
         }
         for (line in text.lines()) {
             val t = topicRe.matchEntire(line)
@@ -145,8 +157,10 @@ object ScreenAnswerParser {
                 box = spec.coords?.let { toBox(it, mode, imageW, imageH) }
                 lines = spec.lines
                 after = spec.after
+            } else if (detailRe.matches(line)) {
+                inDetail = true
             } else {
-                body.append(line).append('\n')
+                (if (inDetail) detail else body).append(line).append('\n')
             }
         }
         flush()
@@ -155,11 +169,25 @@ object ScreenAnswerParser {
         return ScreenAnswer(cleaned, done.done, allGood && cleaned.none { it.kind == MarkKind.ERROR }, topic)
     }
 
-    /** Текст для истории и для следующих запросов: без координат, с подписями. */
+    /** Текст для истории и для следующих запросов: без координат, с подписями, короткая и полная части. */
     fun toPlain(answer: ScreenAnswer): String =
         answer.marks.joinToString("\n\n") { m ->
-            if (m.kind == MarkKind.NOTE) m.text else "**${m.kind.label}.** ${m.text}"
+            val text = if (m.detail != null) "${m.text}\n\n${m.detail}" else m.text
+            if (m.kind == MarkKind.NOTE) text else "**${m.kind.label}.** $text"
         }
+
+    /** Первое предложение (или первая строка) — короткая подсказка, если модель её не выделила. */
+    internal fun firstSentence(text: String): String {
+        val line = text.lineSequence().firstOrNull { it.isNotBlank() }?.trim().orEmpty()
+        // Точка внутри формулы ($…$) — не конец предложения.
+        var inMath = false
+        for (i in line.indices) {
+            val c = line[i]
+            if (c == '$') inMath = !inMath
+            if (!inMath && (c == '.' || c == '?' || c == '!') && (i == line.lastIndex || line[i + 1] == ' ')) return line.substring(0, i + 1)
+        }
+        return line
+    }
 
     /** Пока строка `@@ …` не дописана до конца, её не показываем. */
     private fun hidePartialHeader(text: String): String {

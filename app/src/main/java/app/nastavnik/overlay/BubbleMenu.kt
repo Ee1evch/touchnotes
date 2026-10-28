@@ -2,8 +2,6 @@ package app.nastavnik.overlay
 
 import android.annotation.SuppressLint
 import android.content.Context
-import android.graphics.Color
-import android.graphics.drawable.GradientDrawable
 import android.view.ContextThemeWrapper
 import android.view.Gravity
 import android.view.MotionEvent
@@ -26,11 +24,7 @@ class BubbleMenu(baseContext: Context, private val wm: WindowManager) {
         val menu = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(6f), dp(8f), dp(6f), dp(8f))
-            background = GradientDrawable().apply {
-                setColor(0xFA16161A.toInt())
-                cornerRadius = dp(20f).toFloat()
-                setStroke(dp(1f), 0x1AFFFFFF)
-            }
+            background = GlassDrawable(ctx, dp(20f).toFloat(), 0.86f)
             elevation = dp(12f).toFloat()
         }
         items.forEach { (label, action) ->
@@ -38,7 +32,7 @@ class BubbleMenu(baseContext: Context, private val wm: WindowManager) {
                 text = label
                 textSize = 15.5f
                 typeface = Fonts.medium(ctx)
-                setTextColor(0xFFF4F4F6.toInt())
+                setTextColor(GlassInk.TEXT)
                 setPadding(dp(14f), dp(12f), dp(28f), dp(12f))
                 setBackgroundResource(R.drawable.menu_row_bg)
                 setOnClickListener {

@@ -122,18 +122,17 @@ private fun Explanation(onAllow: () -> Unit, onCancel: () -> Unit) {
             Modifier
                 .widthIn(max = 520.dp)
                 .fillMaxWidth()
-                .softCard(RoundedCornerShape(28.dp), 24.dp, MaterialTheme.colorScheme.surface)
+                .glass(RoundedCornerShape(28.dp))
                 .padding(26.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             Box(
                 Modifier
                     .size(52.dp)
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(Brand.gradient),
+                    .glass(RoundedCornerShape(16.dp), 4.dp, strong = true),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(painterResource(app.nastavnik.R.drawable.ic_search), contentDescription = null, tint = Color.White, modifier = Modifier.size(24.dp))
+                Icon(painterResource(app.nastavnik.R.drawable.ic_search), contentDescription = null, tint = Brand.Ink, modifier = Modifier.size(24.dp))
             }
             Text("Разреши снимок экрана", style = MaterialTheme.typography.headlineSmall)
             Text(

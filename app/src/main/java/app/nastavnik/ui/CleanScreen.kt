@@ -89,7 +89,7 @@ fun CleanScreen(onClose: () -> Unit, onSettings: () -> Unit, onExample: () -> Un
         Column(
             Modifier
                 .fillMaxWidth()
-                .softCard(color = MaterialTheme.colorScheme.surface)
+                .glass()
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
@@ -136,7 +136,7 @@ fun CleanScreen(onClose: () -> Unit, onSettings: () -> Unit, onExample: () -> Un
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
-                    .softCard(RoundedCornerShape(24.dp), 10.dp, Color(0xFFECE9E3)),
+                    .glass(RoundedCornerShape(24.dp)),
                 factory = { ctx ->
                     FrameLayout(ctx).also { frame ->
                         val web = WebView(ctx)
@@ -162,7 +162,7 @@ private fun IdleClean(onExample: () -> Unit) {
     Column(
         Modifier
             .fillMaxWidth()
-            .softCard(color = MaterialTheme.colorScheme.surface)
+            .glass()
             .padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {

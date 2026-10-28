@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Строка тёмного меню у кнопки: светлая подсветка при нажатии -->
-<ripple xmlns:android="http://schemas.android.com/apk/res/android" android:color="#26FFFFFF">
+<!-- Строка стеклянного меню у кнопки: лёгкая подсветка при нажатии -->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android" android:color="#1416161A">
     <item android:id="@android:id/mask">
         <shape android:shape="rectangle">
             <solid android:color="#FFFFFFFF" />

@@ -114,7 +114,7 @@ fun ReviewScreen(onBack: () -> Unit, onExample: () -> Unit) {
             Modifier
                 .fillMaxWidth()
                 .heightIn(min = 320.dp)
-                .softCard(RoundedCornerShape(28.dp), color = MaterialTheme.colorScheme.surface)
+                .glass(RoundedCornerShape(28.dp))
                 .padding(horizontal = 28.dp, vertical = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(18.dp),
@@ -198,7 +198,7 @@ private fun AllDone(total: Int, remembered: Int, learned: Int, all: Int, nextDue
     Column(
         Modifier
             .fillMaxWidth()
-            .softCard(color = MaterialTheme.colorScheme.surface)
+            .glass()
             .padding(horizontal = 28.dp, vertical = 36.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -227,7 +227,7 @@ private fun NoCards(onSample: () -> Unit, onExample: () -> Unit) {
     Column(
         Modifier
             .fillMaxWidth()
-            .softCard(color = MaterialTheme.colorScheme.surface)
+            .glass()
             .padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {

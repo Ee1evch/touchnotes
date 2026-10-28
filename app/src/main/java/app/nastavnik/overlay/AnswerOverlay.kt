@@ -100,7 +100,7 @@ class AnswerOverlay(baseContext: Context, private val wm: WindowManager, private
         a.marks.forEachIndexed { i, m ->
             val streamingThis = a.streaming && i == a.marks.lastIndex
             val e = entries.getOrNull(i) ?: addEntry(m, a)
-            e.note.setText(m.text, streamingThis)
+            e.note.setContent(m.text, m.detail, streamingThis)
         }
         entries.forEachIndexed { i, e ->
             val last = i == entries.lastIndex
@@ -128,14 +128,16 @@ class AnswerOverlay(baseContext: Context, private val wm: WindowManager, private
                 if (marksSuspended) mv.visibility = View.INVISIBLE
             }
         }
-        val width = minOf(dp(if (m.kind == MarkKind.THEORY) 480f else 400f), (area.width * 0.46f).toInt().coerceAtLeast(dp(300f)))
-        val height = dp(170f)
+        // Короткая подсказка — узкая заметка: она закрывает как можно меньше записей. «Подробнее» её расширит.
+        val width = minOf(dp(COMPACT_WIDTH_DP), (area.width * 0.4f).toInt().coerceAtLeast(dp(240f)))
+        val height = dp(118f)
         val avoid = entries.flatMap { listOfNotNull(it.note.rect(), it.anchor()) } + listOfNotNull(bubbleRect())
         val thumb = a.thumb
         val placement = CalloutPlacer.place(area, shifted, width, height, 0, avoid) { r ->
             thumb?.inkFraction(r.offset(-offX, -offY)) ?: 0f
         }
-        e.note.show(placement, anchor, width)
+        val wide = minOf(dp(if (m.kind == MarkKind.THEORY) 480f else 420f), (area.width * 0.5f).toInt().coerceAtLeast(width))
+        e.note.show(placement, anchor, width, wide)
         entries += e
         return e
     }
@@ -300,6 +302,13 @@ class AnswerOverlay(baseContext: Context, private val wm: WindowManager, private
         private val eye = ImageView(ctx)
         private val primary = pill("", primary = true)
         private val secondary = pill("", primary = false)
+        private val more = TextView(ctx)
+        private var showActions = false
+        private var shortText = ""
+        private var detailText: String? = null
+        private var expanded = false
+        private var compactW = 0
+        private var wideW = 0
         private var params: WindowManager.LayoutParams? = null
         private var side = Side.NONE
         private var anchor: IRect? = null
@@ -314,11 +323,11 @@ class AnswerOverlay(baseContext: Context, private val wm: WindowManager, private
         private var pinned = false
         private val unfade = Runnable { setFaded(false) }
 
-        private val headerH = dp(44f)
-        private val actionsH = dp(52f)
-        private val padH = dp(16f)
-        private val padTop = dp(6f)
-        private val padBottom = dp(12f)
+        private val headerH = dp(36f)
+        private val actionsH = dp(44f)
+        private val padH = dp(14f)
+        private val padTop = dp(4f)
+        private val padBottom = dp(8f)
 
         init {
             root.background = bg
@@ -330,10 +339,11 @@ class AnswerOverlay(baseContext: Context, private val wm: WindowManager, private
             val chip = LinearLayout(ctx).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
-                setPadding(dp(11f), 0, dp(13f), 0)
+                setPadding(dp(9f), 0, dp(11f), 0)
                 background = GradientDrawable().apply {
-                    cornerRadius = dp(14f).toFloat()
-                    setColor(NoteColors.soft(kind))
+                    cornerRadius = dp(12f).toFloat()
+                    // Метка тоже стеклянная: цвет вида едва заметен.
+                    setColor((NoteColors.soft(kind) and 0x00FFFFFF) or (0xB0 shl 24))
                 }
             }
             val chipDot = View(ctx).apply {
@@ -347,15 +357,15 @@ class AnswerOverlay(baseContext: Context, private val wm: WindowManager, private
                 text = NoteColors.title(kind)
                 setTextColor(NoteColors.text(kind))
                 typeface = Fonts.semibold(ctx)
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f)
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f)
             }
             chip.addView(title)
-            header.addView(chip, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(28f)))
+            header.addView(chip, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(24f)))
             header.addView(View(ctx), LinearLayout.LayoutParams(0, 1, 1f))
             eye.apply {
                 setImageResource(R.drawable.ic_eye)
-                setColorFilter(0xFF7B7A83.toInt())
-                setPadding(dp(8f), dp(8f), dp(8f), dp(8f))
+                setColorFilter(0xFF6B6A73.toInt())
+                setPadding(dp(7f), dp(7f), dp(7f), dp(7f))
                 contentDescription = "Скрыть выделение"
                 setOnClickListener {
                     val hidden = toggleMark(this@NoteWindow)
@@ -363,16 +373,16 @@ class AnswerOverlay(baseContext: Context, private val wm: WindowManager, private
                     contentDescription = if (hidden) "Показать выделение" else "Скрыть выделение"
                 }
             }
-            header.addView(eye, LinearLayout.LayoutParams(dp(36f), dp(36f)))
-            header.addView(GripView(ctx), LinearLayout.LayoutParams(dp(24f), dp(36f)))
+            header.addView(eye, LinearLayout.LayoutParams(dp(32f), dp(32f)))
+            header.addView(GripView(ctx), LinearLayout.LayoutParams(dp(20f), dp(32f)))
             val close = ImageView(ctx).apply {
                 setImageResource(R.drawable.ic_close)
-                setColorFilter(0xFF7B7A83.toInt())
-                setPadding(dp(8f), dp(8f), dp(8f), dp(8f))
+                setColorFilter(0xFF6B6A73.toInt())
+                setPadding(dp(7f), dp(7f), dp(7f), dp(7f))
                 contentDescription = "Закрыть заметку"
                 setOnClickListener { entries.firstOrNull { it.note === this@NoteWindow }?.let { closeEntry(it) } }
             }
-            header.addView(close, LinearLayout.LayoutParams(dp(36f), dp(36f)))
+            header.addView(close, LinearLayout.LayoutParams(dp(32f), dp(32f)))
             body.addView(header, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, headerH))
 
             WebViews.setupLocal(web)
@@ -382,13 +392,22 @@ class AnswerOverlay(baseContext: Context, private val wm: WindowManager, private
             web.loadUrl("file:///android_asset/note.html")
             body.addView(web, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, webH))
 
-            actions.addView(secondary, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(38f)).apply { marginEnd = dp(8f) })
-            actions.addView(primary, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(38f)))
+            // «Подробнее» — слева, кнопки действий — справа.
+            more.apply {
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+                typeface = Fonts.semibold(ctx)
+                setTextColor(0xFF2A2A31.toInt())
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(2f), 0, dp(10f), 0)
+                setOnClickListener { setExpanded(!expanded) }
+            }
+            actions.addView(more, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(34f)))
+            actions.addView(View(ctx), LinearLayout.LayoutParams(0, 1, 1f))
+            actions.addView(secondary, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(34f)).apply { marginEnd = dp(6f) })
+            actions.addView(primary, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(34f)))
             actions.isVisible = false
-            body.addView(actions, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, actionsH).apply {
-                gravity = Gravity.END
-            })
-            actions.gravity = Gravity.END or Gravity.CENTER_VERTICAL
+            body.addView(actions, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, actionsH))
+            actions.gravity = Gravity.CENTER_VERTICAL
             root.addView(body, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
             setupDrag()
         }
@@ -396,11 +415,11 @@ class AnswerOverlay(baseContext: Context, private val wm: WindowManager, private
         private fun pill(label: String, primary: Boolean) = TextView(ctx).apply {
             text = label
             gravity = Gravity.CENTER
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14.5f)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f)
             typeface = Fonts.semibold(ctx)
             setTextColor(if (primary) Color.WHITE else 0xFF16161A.toInt())
-            setBackgroundResource(if (primary) R.drawable.primary_btn_bg else R.drawable.quick_btn_bg)
-            setPadding(dp(18f), 0, dp(18f), 0)
+            setBackgroundResource(if (primary) R.drawable.primary_btn_bg else R.drawable.glass_btn_bg)
+            setPadding(dp(14f), 0, dp(14f), 0)
         }
 
         private inner class Bridge {
@@ -421,7 +440,9 @@ class AnswerOverlay(baseContext: Context, private val wm: WindowManager, private
             }
         }
 
-        fun show(p: Placement, anchor: IRect?, width: Int) {
+        fun show(p: Placement, anchor: IRect?, width: Int, wide: Int) {
+            compactW = width
+            wideW = wide
             this.anchor = anchor
             // «Глазик» нужен, только если на записи есть выделение.
             eye.isVisible = anchor != null
@@ -497,7 +518,15 @@ class AnswerOverlay(baseContext: Context, private val wm: WindowManager, private
             }
         }
 
-        fun setText(text: String, streaming: Boolean) {
+        /** Короткая подсказка видна сразу; полная — по «Подробнее». */
+        fun setContent(short: String, detail: String?, streaming: Boolean) {
+            shortText = short
+            detailText = detail
+            refreshMore()
+            setText(if (expanded && detail != null) "**$short**\n\n$detail" else short, streaming && (detail == null || expanded))
+        }
+
+        private fun setText(text: String, streaming: Boolean) {
             if (shownText == text && pendingStreaming == streaming) return
             shownText = text
             pendingText = text
@@ -505,32 +534,59 @@ class AnswerOverlay(baseContext: Context, private val wm: WindowManager, private
             if (ready) push(text, streaming)
         }
 
+        private fun setExpanded(value: Boolean) {
+            if (expanded == value || detailText == null) return
+            expanded = value
+            // Полная подсказка шире; свернули — заметка снова узкая и меньше закрывает.
+            params?.let { p ->
+                val w = if (value) wideW else compactW
+                if (side == Side.LEFT) p.x += p.width - w
+                p.width = w
+            }
+            refreshMore()
+            setText(if (value) "**$shortText**\n\n${detailText.orEmpty()}" else shortText, false)
+            relayout()
+        }
+
+        private fun refreshMore() {
+            val has = detailText != null
+            more.isVisible = has
+            more.text = if (expanded) "Коротко  ˄" else "Подробнее  ˅"
+            updateActionsRow()
+        }
+
+        private fun updateActionsRow() {
+            val visible = showActions || detailText != null
+            primary.isVisible = showActions
+            secondary.isVisible = showActions && secondary.text.isNotEmpty()
+            if (actions.isVisible != visible) {
+                actions.isVisible = visible
+                relayout()
+            }
+        }
+
         private fun push(text: String, streaming: Boolean) {
             web.evaluateJavascript("Note.set(${JsonPrimitive(text)}, $streaming)", null)
         }
 
-        /** Кнопки под последней заметкой: «Ещё подсказка» и «Понятно», а у верного решения — «Похожая задача» и «Сделать чистовик». */
+        /** Кнопки под последней заметкой: «Ещё подсказка», а у верного решения — «Похожая задача» и «Сделать чистовик». */
         fun setActions(show: Boolean, done: Boolean) {
-            val wasVisible = actions.isVisible
-            actions.isVisible = show
+            showActions = show
             if (show) {
                 if (done) {
                     primary.text = "Сделать чистовик"
                     primary.setOnClickListener { listener.onMakeClean() }
-                } else {
-                    primary.text = "Ещё подсказка"
-                    primary.setOnClickListener { listener.onMore() }
-                }
-                if (done) {
-                    // Решено — можно закрепить на похожей задаче; закрыть заметку можно крестиком.
+                    // Решено — можно закрепить на похожей задаче.
                     secondary.text = "Похожая задача"
                     secondary.setOnClickListener { listener.onSimilar() }
                 } else {
-                    secondary.text = "Понятно"
-                    secondary.setOnClickListener { clear(); listener.onAllClosed() }
+                    primary.text = "Ещё подсказка"
+                    primary.setOnClickListener { listener.onMore() }
+                    // Закрыть заметку можно крестиком — лишняя кнопка «Понятно» только занимала место.
+                    secondary.text = ""
                 }
             }
-            if (wasVisible != show) relayout()
+            updateActionsRow()
         }
 
         /** Выделение нашлось в новом месте (страницу увеличили) — заметка встаёт рядом, если её не ставили вручную. */
@@ -639,5 +695,8 @@ class AnswerOverlay(baseContext: Context, private val wm: WindowManager, private
         /** Отметки полупрозрачные: иначе Android 12+ не пропустит сквозь них стилус. */
         private const val MARK_ALPHA = 0.8f
         private const val FADE_MS = 2500L
+
+        /** Ширина свёрнутой заметки (короткая подсказка). */
+        private const val COMPACT_WIDTH_DP = 300f
     }
 }

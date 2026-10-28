@@ -35,6 +35,8 @@ import app.nastavnik.data.AppSettings
 import app.nastavnik.data.BubbleSide
 import app.nastavnik.geom.IRect
 import app.nastavnik.geom.LineMatch
+import app.nastavnik.geom.NotebookPages
+import app.nastavnik.geom.PageMatch
 import app.nastavnik.geom.Motion
 import app.nastavnik.geom.ScreenMotion
 import app.nastavnik.geom.Thumb
@@ -94,7 +96,7 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
     private var capturing = false
 
     /** Что сейчас показывает всплывашка у кнопки — чтобы не закрыть чужое сообщение. */
-    private enum class BarOwner { NONE, ACTIONS, STATUS, ERROR, CLEAN, NOTICE }
+    private enum class BarOwner { NONE, ACTIONS, STATUS, ERROR, CLEAN, NOTICE, NOTEBOOK }
     private var barOwner = BarOwner.NONE
     private var barText: String? = null
     private var shownErrorSeq = -1L
@@ -109,6 +111,28 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
     private var dirty = false
     private var lastChangeAt = 0L
     private var lastWatchAt = 0L
+
+    // Весь конспект: страницы, где спрашивали, и то, что пролистали в той же тетради.
+    private lateinit var notebook: NotebookPages
+    private var notebookReady = false
+
+    /** Всё про конспект — в одном потоке: сравнение страниц тяжёлое, а список общий. */
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    private val nb = Dispatchers.Default.limitedParallelism(1)
+
+    /** Студент листает тетрадь, в которой спрашивал: новые страницы запоминаем. */
+    @Volatile
+    private var chainActive = false
+    private var chainId = 0L
+
+    /** Где в «пролистывании» верх текущего экрана (пиксели). */
+    private var chainY = 0
+    private var chainPrev: Thumb? = null
+    private var pageCheckPending = false
+    private var jumped = false
+
+    /** «Пролистать весь конспект»: запоминаем каждую новую страницу, даже после перелистывания. */
+    private var readingMode = false
 
     // Перенос выделений после увеличения/уменьшения страницы.
     private var relocateWanted = false
@@ -150,6 +174,11 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
         }
         settings = napp.settings.load()
         addBubble()
+        notebook = NotebookPages(File(filesDir, "notebook"))
+        lifecycleScope.launch {
+            withContext(nb) { notebook.load(System.currentTimeMillis()) }
+            notebookReady = true
+        }
 
         lifecycleScope.launch { mentor.load() }
         lifecycleScope.launch { mentor.state.collect { renderMentor(it) } }
@@ -390,18 +419,19 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
         askBar.dismiss()
         val items = mutableListOf<BarItem>()
         if (mentor.state.value.busy) {
-            items += BarItem("Остановить", R.drawable.ic_close, 0xFFC9C8D3.toInt()) { mentor.dismiss() }
+            items += BarItem("Остановить", R.drawable.ic_close, color(R.color.menu_neutral)) { mentor.dismiss() }
         }
         items += BarItem(QuickAction.NEXT_STEP.short, R.drawable.ic_bulb, color(R.color.menu_hint)) { quick(QuickAction.NEXT_STEP) }
         items += BarItem(QuickAction.FIND_ERROR.short, R.drawable.ic_search, color(R.color.menu_error)) { quick(QuickAction.FIND_ERROR) }
         items += BarItem(QuickAction.THEORY.short, R.drawable.ic_book, color(R.color.menu_theory)) { quick(QuickAction.THEORY) }
         items += BarItem(QuickAction.SIMILAR.short, R.drawable.ic_refresh, color(R.color.menu_hint)) { quick(QuickAction.SIMILAR) }
-        items += BarItem("Спросить…", R.drawable.ic_mic, 0xFFF4F4F6.toInt()) { askBar.show(anchor()) }
+        items += BarItem("Спросить…", R.drawable.ic_mic, color(R.color.menu_hint)) { askBar.show(anchor()) }
         items += BarItem("Чистовик", R.drawable.ic_note, color(R.color.menu_ok)) { startClean() }
         if (overlay.isShowing) {
-            items += BarItem("Убрать заметки", R.drawable.ic_close, 0xFFC9C8D3.toInt()) { mentor.dismiss() }
+            items += BarItem("Убрать заметки", R.drawable.ic_close, color(R.color.menu_neutral)) { mentor.dismiss() }
         }
-        bar.showActions(anchor(), items)
+        val pages = if (notebookReady) notebook.size else 0
+        bar.showActions(anchor(), items, if (pages > 0) "НАСТАВНИК · КОНСПЕКТ $pages СТР." else "НАСТАВНИК")
         barOwner = BarOwner.ACTIONS
     }
 
@@ -429,6 +459,10 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
                     mentor.newTask()
                     notice("Начинаю новую задачу.")
                 },
+                (if (readingMode) "Закончить чтение конспекта" else "Пролистать весь конспект") to {
+                    if (readingMode) stopReading() else startReading()
+                },
+                "Забыть конспект" to { forgetNotebook() },
                 "История" to { openScreen(MainActivity.SCREEN_HISTORY) },
                 "Повторить карточки" to { openScreen(MainActivity.SCREEN_REVIEW) },
                 "Настройки" to { openSettings() },
@@ -609,6 +643,16 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
                 }
                 val items = mutableListOf<BarItem>()
                 if (!s.capturing && n < CleanState.MAX_SHOTS) items += BarItem("+ Экран") { clean.addShot { takeShot(numberLines = false) } }
+                val pages = if (notebookReady) notebook.size else 0
+                if (!s.capturing && n <= 1 && pages >= 2) {
+                    items += BarItem("Весь конспект ($pages)") {
+                        lifecycleScope.launch {
+                            val images = withContext(nb) { notebook.pages.map { it.image } }
+                            // Снимок текущего экрана остаётся, к нему — все страницы по порядку (повторы модель склеит).
+                            clean.addImages(images)
+                        }
+                    }
+                }
                 if (!s.capturing && n > 0) items += BarItem("Собрать", primary = true) { clean.build() }
                 items += BarItem("Отмена") { clean.cancel() }
                 message(BarOwner.CLEAN, text, items, busy = s.capturing)
@@ -691,8 +735,8 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
         }
     }
 
-    /** Снимок без наших окон, без системных панелей, не больше 1500 px и 1,15 Мп, JPEG 85%. */
-    private suspend fun takeShot(numberLines: Boolean = true): ShotResult {
+    /** Снимок без наших окон, без системных панелей, не больше 1500 px и 1,15 Мп, JPEG 85%. [contextPages] — сколько страниц конспекта приложить. */
+    private suspend fun takeShot(numberLines: Boolean = true, contextPages: Int = CONTEXT_PAGES): ShotResult {
         if (!ensureProjection()) {
             return ShotResult.Failed(
                 "Нет разрешения на снимок экрана — без него наставник не видит записи. Нажми кнопку ещё раз и выбери «Весь экран».",
@@ -724,7 +768,8 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
                 val r = prepared.screenRect
                 val geometry = ShotGeometry(IRect(r.left, r.top, r.right, r.bottom), prepared.width, prepared.height, prepared.gutter, prepared.lines, prepared.luma)
                 if (numberLines) ShotGeometry.last = geometry
-                return ShotResult.Ok(prepared.jpeg, geometry, thumb)
+                val context = if (numberLines && contextPages > 0) rememberAskedPage(full, thumb, contextPages) else emptyList()
+                return ShotResult.Ok(prepared.jpeg, geometry, thumb, context)
             } finally {
                 full.recycle()
             }
@@ -750,7 +795,7 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
      */
     private suspend fun watchLoop() {
         while (lifecycleScope.isActive) {
-            delay(TICK_MS)
+            delay(if (readingMode) READING_TICK_MS else TICK_MS)
             // Сбой одного кадра (экран повернули посреди снимка и т. п.) не должен ронять наставника.
             try {
                 watchStep()
@@ -767,8 +812,10 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
         val s = settings ?: return
         val tracking = overlay.isShowing && trackRef != null
         val watching = s.watchPauseSec > 0 && shownSilentError == null
-        if ((!tracking && !watching) || !capturer.isActive || capturing || askBar.isShowing || !power.isInteractive) {
+        val collecting = s.seeNotebook && notebookReady && (chainActive || readingMode)
+        if ((!tracking && !watching && !collecting) || !capturer.isActive || capturing || askBar.isShowing || !power.isInteractive) {
             prevThumb = null
+            chainPrev = null
             return
         }
         val thumb = grabThumb() ?: return
@@ -813,6 +860,178 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
             prevTrackThumb = thumb
         }
         if (watching) watchTick(thumb, mask, s.watchPauseSec * 1000L)
+        if (collecting) collectPage(thumb, mask, thumb.rowMaskOf(rects), area, rects)
+    }
+
+    // ---------------- весь конспект ----------------
+
+    /**
+     * Страница, на которой студент спросил: запоминаем её (или обновляем) и с неё начинаем следить за
+     * пролистыванием. Возвращает остальные страницы конспекта по порядку — они уйдут вместе с вопросом.
+     */
+    private suspend fun rememberAskedPage(full: android.graphics.Bitmap, thumb: Thumb, limit: Int): List<ByteArray> {
+        val s = settings ?: return emptyList()
+        if (!s.seeNotebook || !notebookReady) return emptyList()
+        val area = OverlayWindows.contentRect(this)
+        return withContext(nb) {
+            runCatching {
+                val shot = ImageUtils.notebookShot(full, area)
+                val now = System.currentTimeMillis()
+                val page = when (val m = notebook.match(thumb, null, null, area.top, area.bottom)) {
+                    PageMatch.New -> {
+                        chainId = now
+                        chainY = 0
+                        notebook.add(shot.image, shot.small, thumb, chainId, 0, now)
+                    }
+                    is PageMatch.Same -> {
+                        notebook.positionOf(m.index, m.dy).let { (c, y) -> chainId = c; chainY = y }
+                        notebook.replace(m.index, shot.image, shot.small, thumb, now)
+                    }
+                    is PageMatch.Overlap -> {
+                        notebook.positionOf(m.index, m.dy).let { (c, y) -> chainId = c; chainY = y }
+                        notebook.add(shot.image, shot.small, thumb, chainId, chainY, now)
+                    }
+                }
+                chainActive = true
+                chainPrev = thumb
+                pageCheckPending = false
+                jumped = false
+                notebookPages = notebook.size
+                notebook.context(page.id, limit)
+            }.getOrDefault(emptyList())
+        }
+    }
+
+    /**
+     * Между вопросами: студент листает тетрадь. Пока страница едет — копим сдвиг; как только остановилась —
+     * сравниваем с запомненными и, если на экране новое, запоминаем. Ушёл в другое приложение или на другую
+     * страницу (всё сменилось и ничего не узнали) — перестаём, пока снова не спросит. В режиме чтения
+     * запоминаем и после перелистывания.
+     */
+    private suspend fun collectPage(thumb: Thumb, mask: BooleanArray, rowMask: BooleanArray, area: android.graphics.Rect, rects: List<IRect>) {
+        val added = withContext(nb) {
+            val prev = chainPrev
+            chainPrev = thumb
+            if (prev == null) return@withContext false
+            when (val step = ScreenMotion.estimate(prev, thumb, mask, rowMask, area.top, area.bottom)) {
+                is Motion.Moved -> {
+                    chainY -= step.dy
+                    pageCheckPending = true
+                    return@withContext false
+                }
+                Motion.Replaced -> {
+                    jumped = true
+                    pageCheckPending = true
+                    return@withContext false
+                }
+                is Motion.Same -> if (step.changedCells > 2) {
+                    pageCheckPending = true
+                    return@withContext false
+                }
+            }
+            // Экран спокоен.
+            if (!pageCheckPending) return@withContext false
+            pageCheckPending = false
+            val wasJump = jumped
+            jumped = false
+            when (val m = notebook.match(thumb, mask, rowMask, area.top, area.bottom)) {
+                is PageMatch.Same -> {
+                    notebook.positionOf(m.index, m.dy).let { (c, y) -> chainId = c; chainY = y }
+                    chainActive = true
+                    false
+                }
+                is PageMatch.Overlap -> {
+                    notebook.positionOf(m.index, m.dy).let { (c, y) -> chainId = c; chainY = y }
+                    chainActive = true
+                    false
+                }
+                PageMatch.New -> {
+                    if (wasJump && !readingMode) {
+                        // Другая страница или другое приложение — не запоминаем без спроса.
+                        chainActive = false
+                        return@withContext false
+                    }
+                    if (wasJump) {
+                        chainId = System.currentTimeMillis()
+                        chainY = 0
+                    }
+                    true
+                }
+            }
+        }
+        if (!added) return
+        // Новая страница: свежий кадр в полном размере, наши окна закрашиваем цветом листа.
+        val full = try {
+            capturer.capture()
+        } catch (_: CaptureException) {
+            return
+        }
+        try {
+            val cover = rects.map { android.graphics.Rect(it.left, it.top, it.right, it.bottom) }
+            withContext(nb) {
+                val shot = ImageUtils.notebookShot(full, area, cover)
+                notebook.add(shot.image, shot.small, thumb, chainId, chainY, System.currentTimeMillis())
+            }
+        } finally {
+            full.recycle()
+        }
+        notebookPages = notebook.size
+        if (BuildConfig.DEBUG) Log.i(TAG, "notebook: ${notebook.size} pages")
+        if (readingMode) showReading()
+    }
+
+    private fun startReading() {
+        if (!canRead()) return
+        readingMode = true
+        chainPrev = null
+        pageCheckPending = true
+        jumped = true
+        showReading()
+    }
+
+    private fun stopReading() {
+        readingMode = false
+        dismissBar(BarOwner.NOTEBOOK)
+        val n = if (notebookReady) notebook.size else 0
+        notice("Запомнил страниц конспекта: $n. Наставник будет видеть их, когда спросишь.")
+    }
+
+    private fun showReading() {
+        val n = if (notebookReady) notebook.size else 0
+        message(
+            BarOwner.NOTEBOOK,
+            "Листай конспект от начала до конца — на каждом экране задержись на секунду.\nЗапомнено страниц: $n",
+            listOf(
+                BarItem("Готово", primary = true) { stopReading() },
+                BarItem("Забыть всё") { forgetNotebook() },
+            ),
+            busy = true,
+        )
+    }
+
+    private fun forgetNotebook() {
+        lifecycleScope.launch {
+            withContext(nb) {
+                notebook.clear()
+                chainActive = false
+                chainPrev = null
+            }
+            if (readingMode) showReading() else notice("Конспект забыт. Начну запоминать с того места, где спросишь.")
+        }
+    }
+
+    /** Читать конспект можно, только если он включён в настройках и есть разрешение на снимки экрана. */
+    private fun canRead(): Boolean {
+        val s = settings ?: return false
+        if (!s.seeNotebook) {
+            message(BarOwner.ERROR, "Включи «Весь конспект» в настройках, чтобы наставник видел все страницы.", listOf(BarItem("Настройки", primary = true) { bar.dismiss(); openSettings() }))
+            return false
+        }
+        if (!capturer.isActive) {
+            lifecycleScope.launch { if (ensureProjection()) startReading() }
+            return false
+        }
+        return true
     }
 
     /**
@@ -885,7 +1104,7 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
         ) {
             dirty = false
             lastWatchAt = now
-            mentor.ask(Prompts.WATCH_PROMPT, AskKind.WATCH) { takeShot() }
+            mentor.ask(Prompts.WATCH_PROMPT, AskKind.WATCH) { takeShot(contextPages = WATCH_CONTEXT_PAGES) }
         }
     }
 
@@ -950,6 +1169,11 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
         private const val AFTER_PERMISSION_DELAY_MS = 600L
         private const val PERMISSION_TIMEOUT_MS = 120_000L
         private const val TICK_MS = 2000L
+        private const val READING_TICK_MS = 900L
+
+        /** Сколько других страниц конспекта прикладывать к вопросу и к тихой проверке. */
+        private const val CONTEXT_PAGES = 8
+        private const val WATCH_CONTEXT_PAGES = 4
         private const val MIN_WATCH_GAP_MS = 45_000L
 
         /** Если изменилось больше этой доли экрана, а сдвига нет — страницу увеличили или сменили. */
@@ -957,6 +1181,11 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
 
         @Volatile
         var running = false
+            private set
+
+        /** Сколько страниц конспекта запомнено — для тестов. */
+        @Volatile
+        var notebookPages = 0
             private set
 
         fun start(context: Context) {

@@ -98,7 +98,13 @@ data class ShotGeometry(
 
 sealed interface ShotResult {
     /** [thumb] — уменьшенный кадр всего экрана в момент снимка (для слежения за прокруткой). */
-    class Ok(val jpeg: ByteArray, val geometry: ShotGeometry, val thumb: Thumb? = null) : ShotResult
+    class Ok(
+        val jpeg: ByteArray,
+        val geometry: ShotGeometry,
+        val thumb: Thumb? = null,
+        /** Другие страницы конспекта по порядку — чтобы наставник видел условие, определения и прошлые шаги. */
+        val context: List<ByteArray> = emptyList(),
+    ) : ShotResult
     data object Cancelled : ShotResult
     data class Failed(val message: String) : ShotResult
 }
@@ -240,7 +246,7 @@ class MentorSession(private val app: NastavnikApp, private val scope: CoroutineS
         }
         val g = shot.geometry
         val mode = settings.provider.coordMode(settings.model)
-        val turns = history + ChatTurn(Role.USER, Prompts.withShotSize(base.question, g.sentW, g.imageH), hadImage = true)
+        val turns = history + ChatTurn(Role.USER, Prompts.withShotSize(base.question, g.sentW, g.imageH, shot.context.size), hadImage = true)
 
         val raw = StringBuilder()
         var lastEmit = 0L
@@ -256,7 +262,8 @@ class MentorSession(private val app: NastavnikApp, private val scope: CoroutineS
                 modelId = settings.model,
                 system = Prompts.mentorSystem(settings.strictness, mode),
                 turns = turns,
-                images = listOf(ImagePart(shot.jpeg)),
+                // Сначала страницы всего конспекта, последним — текущий экран с номерами строк.
+                images = shot.context.map { ImagePart(it) } + ImagePart(shot.jpeg),
                 maxTokens = MAX_TOKENS,
             )
             val stop = app.ai(settings).stream(app.settings.apiKey(settings.provider), request) { update ->

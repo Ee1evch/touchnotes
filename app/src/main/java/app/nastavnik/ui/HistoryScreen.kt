@@ -119,7 +119,7 @@ private fun ConversationList(onOpen: (Long) -> Unit) {
         Column(
             Modifier
                 .fillMaxWidth()
-                .softCard(color = MaterialTheme.colorScheme.surface),
+                .glass(),
         ) {
             group.forEachIndexed { i, c: ConversationSummary ->
                 val current = c.id == active
@@ -169,7 +169,7 @@ private fun Empty(icon: Int, title: String, text: String) {
     Column(
         Modifier
             .fillMaxWidth()
-            .softCard(color = MaterialTheme.colorScheme.surface)
+            .glass()
             .padding(horizontal = 28.dp, vertical = 36.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -245,10 +245,11 @@ private fun ConversationDetail(id: Long, onBack: () -> Unit) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
-                    .softCard(color = Brand.Paper),
+                    .glass(),
                 factory = { ctx ->
                     WebView(ctx).apply {
                         WebViews.setupLocal(this)
+                        setBackgroundColor(android.graphics.Color.TRANSPARENT)
                         addJavascriptInterface(object {
                             @JavascriptInterface
                             fun onReady() {
@@ -299,7 +300,7 @@ private fun CleanNoteList() {
         Column(
             Modifier
                 .fillMaxWidth()
-                .softCard(color = MaterialTheme.colorScheme.surface)
+                .glass()
                 .padding(18.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {

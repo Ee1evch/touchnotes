@@ -89,6 +89,25 @@ class ScreenAnswerParserTest {
     }
 
     @Test
+    fun shortHintAndDetailAreSplit() {
+        val raw = "@@ error стр 4\nПроверь знак.\n@@ подробнее\nМинус перед скобкой меняет знак.\nЧему равно ${'$'}-(x-3)${'$'}?\n@@ hint после 5\nНайди производную."
+        val a = ScreenAnswerParser.parse(raw, CoordMode.PIXELS_XY, 1000, 800)
+        assertEquals(2, a.marks.size)
+        assertEquals("Проверь знак.", a.marks[0].text)
+        assertEquals("Минус перед скобкой меняет знак.\nЧему равно ${'$'}-(x-3)${'$'}?", a.marks[0].detail)
+        assertEquals(null, a.marks[1].detail)
+        // В истории — обе части.
+        assertTrue(ScreenAnswerParser.toPlain(a).contains("Минус перед скобкой"))
+        // Модель дала только «подробнее» — короткой становится первая фраза.
+        val b = ScreenAnswerParser.parse("@@ hint после 2\n@@ подробнее\nВозьми ${'$'}x = 1.5${'$'} и подставь. Что выйдет?", CoordMode.PIXELS_XY, 1000, 800)
+        assertEquals("Возьми ${'$'}x = 1.5${'$'} и подставь.", b.marks[0].text)
+        // Пока «подробнее» печатается, короткая часть уже видна.
+        val c = ScreenAnswerParser.parse("@@ error стр 1\nПроверь знак.\n@@ подроб", CoordMode.PIXELS_XY, 1000, 800, streaming = true)
+        assertEquals("Проверь знак.", c.marks[0].text)
+        assertEquals(null, c.marks[0].detail)
+    }
+
+    @Test
     fun topicLineNamesTheTaskAndIsNotShown() {
         val a = ScreenAnswerParser.parse("@@ тема Экстремумы функции\n@@ error стр 2\nПроверь знак.", CoordMode.PIXELS_XY, 1000, 800)
         assertEquals("Экстремумы функции", a.topic)
@@ -142,6 +161,11 @@ class ScreenAnswerParserTest {
         val g = Prompts.mentorSystem(Strictness.HINTS, CoordMode.NORM_YX)
         assertTrue(g.contains("box_2d"))
         assertEquals("Вопрос\n\n[Снимок экрана: 1383×864 пикселей]", Prompts.withShotSize("Вопрос", 1383, 864))
+        // С конспектом: модель знает, что последний снимок — текущий экран, и размер — его.
+        val withNotebook = Prompts.withShotSize("Вопрос", 1383, 864, contextPages = 3)
+        assertTrue(withNotebook.contains("Снимки 1–3"))
+        assertTrue(withNotebook.contains("Последний снимок — текущий экран, 1383×864"))
+        assertTrue(Prompts.mentorSystem(Strictness.HINTS).contains("другие страницы конспекта"))
     }
 
     @Test

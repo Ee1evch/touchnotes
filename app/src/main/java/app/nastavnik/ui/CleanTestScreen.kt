@@ -93,7 +93,7 @@ fun CleanTestScreen(onBack: () -> Unit) {
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
-                .softCard(RoundedCornerShape(24.dp), 10.dp, Color(0xFFECE9E3)),
+                .glass(RoundedCornerShape(24.dp)),
             factory = { ctx ->
                 FrameLayout(ctx).also { frame ->
                     val web = WebView(ctx)

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- «Чернила и бумага»: тёплый фон, графитовый текст, один яркий фиолетово-синий акцент -->
+    <!-- «Чернила, бумага и стекло»: тёплый фон, графитовый текст, полупрозрачные стеклянные пластины вместо цветного акцента -->
     <color name="paper">#F4F2EE</color>
     <color name="surface">#FFFFFF</color>
     <color name="surface_alt">#F1EFEA</color>
@@ -8,22 +8,23 @@
     <color name="ink_soft">#5E5D66</color>
     <color name="line">#E6E2DB</color>
 
-    <color name="accent">#5B4CF0</color>
-    <color name="accent_2">#8E5CF7</color>
-    <color name="accent_soft">#ECEAFE</color>
+    <color name="accent">#16161A</color>
+    <color name="glass">#C8FFFFFF</color>
+    <color name="glass_rim">#F2FFFFFF</color>
 
     <!-- Виды заметок -->
     <color name="kind_error">#E5484D</color>
     <color name="kind_ok">#1F9D60</color>
     <color name="kind_theory">#D9822B</color>
-    <color name="kind_hint">#5B4CF0</color>
+    <color name="kind_hint">#3A3A42</color>
 
-    <!-- Светлые варианты значков в тёмном меню у кнопки -->
-    <color name="menu_hint">#A99BFF</color>
-    <color name="menu_error">#FF8A8F</color>
-    <color name="menu_theory">#F5B26B</color>
-    <color name="menu_ok">#5FD49A</color>
+    <!-- Значки в стеклянном меню у кнопки -->
+    <color name="menu_hint">#3A3A42</color>
+    <color name="menu_error">#E5484D</color>
+    <color name="menu_theory">#D9822B</color>
+    <color name="menu_ok">#1F9D60</color>
+    <color name="menu_neutral">#6B6A73</color>
 
     <color name="text_main">#16161A</color>
-    <color name="ic_launcher_background">#5B4CF0</color>
+    <color name="ic_launcher_background">#EEF0F4</color>
 </resources>

@@ -17,16 +17,17 @@ import androidx.compose.ui.unit.sp
 import app.nastavnik.R
 
 /**
- * Фирменные цвета: «чернила и бумага». Тёплый фон, графитовый текст и один яркий
- * фиолетово-синий акцент; у видов заметок — свои спокойные цвета.
+ * Фирменные цвета: «чернила, бумага и стекло». Тёплый фон с мягкими цветными пятнами, графитовый текст
+ * и полупрозрачные стеклянные пластины вместо яркого акцента; у видов заметок — свои спокойные цвета.
  */
 object Brand {
     val Ink = Color(0xFF16161A)
     val InkSoft = Color(0xFF5E5D66)
     val Paper = Color(0xFFF4F2EE)
-    val Accent = Color(0xFF5B4CF0)
-    val Accent2 = Color(0xFF8E5CF7)
-    val AccentSoft = Color(0xFFECEAFE)
+
+    /** «Акцент» — графит: выделение делают стекло и контраст, а не цвет. */
+    val Accent = Color(0xFF2C2C33)
+    val AccentSoft = Color(0xFFE9E9EE)
     val Error = Color(0xFFE5484D)
     val ErrorSoft = Color(0xFFFDECEC)
     val Ok = Color(0xFF1F9D60)
@@ -34,8 +35,10 @@ object Brand {
     val Theory = Color(0xFFD9822B)
     val TheorySoft = Color(0xFFFCF0E3)
 
-    /** Значок приложения и главные акценты. */
-    val gradient = Brush.linearGradient(listOf(Color(0xFF4A3BE6), Accent, Color(0xFFB15CF2)))
+    /** Мягкие пятна фона под стеклом: без них прозрачная пластина на ровной бумаге не читается как стекло. */
+    val BlobCool = Color(0xFFD5E2F3)
+    val BlobWarm = Color(0xFFF5DECD)
+    val BlobMint = Color(0xFFD5ECE1)
 }
 
 val Onest = FontFamily(

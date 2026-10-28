@@ -4,9 +4,9 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
-import android.graphics.Matrix
+import android.graphics.LinearGradient
 import android.graphics.Paint
-import android.graphics.SweepGradient
+import android.graphics.Shader
 import android.animation.ValueAnimator
 import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
@@ -34,30 +34,32 @@ class BubbleView(context: Context, private val listener: Listener) : View(contex
     }
 
     private val density = resources.displayMetrics.density
-    // Графитовый круг с мягкой тенью — хорошо виден на белом листе и не спорит с записями.
+    // Стеклянный круг: светлый, полупрозрачный, с бликом сверху, светлой кромкой и мягкой тенью.
     private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = 0xFF16161A.toInt()
-        setShadowLayer(6 * density, 0f, 2.5f * density, 0x5516161A)
+        setShadowLayer(7 * density, 0f, 2.5f * density, 0x3316161A)
     }
     private val ring = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
-        strokeWidth = 2.2f * density
+        strokeWidth = 1.4f * density
     }
-    // Светящаяся дуга, которая бежит по кольцу, пока наставник думает.
+    private val hairline = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = 0.9f * density
+        color = Color.argb(40, 20, 20, 30)
+    }
+    // Графитовая дуга бежит по кромке, пока наставник думает.
     private val arc = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
-        strokeWidth = 3f * density
+        strokeWidth = 2.6f * density
         strokeCap = Paint.Cap.ROUND
-        color = Color.WHITE
+        color = 0xFF16161A.toInt()
     }
     private val arcRect = android.graphics.RectF()
-    private val icon = ContextCompat.getDrawable(context, R.drawable.ic_sparkle)!!.mutate().apply { setTint(Color.WHITE) }
-    private val ringMatrix = Matrix()
-    private var ringShader: SweepGradient? = null
+    private val icon = ContextCompat.getDrawable(context, R.drawable.ic_sparkle)!!.mutate().apply { setTint(0xFF16161A.toInt()) }
     private var angle = 0f
     private var spinner: ValueAnimator? = null
 
-    /** Пока нейросеть думает, радужное кольцо вращается. */
+    /** Пока нейросеть думает, по кромке бежит дуга. */
     var busy: Boolean = false
         set(value) {
             if (field == value) return
@@ -117,8 +119,10 @@ class BubbleView(context: Context, private val listener: Listener) : View(contex
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
-        ringShader = SweepGradient(w / 2f, h / 2f, Rainbow.BRAND, null)
-        ring.shader = ringShader
+        val top = h * 0.1f
+        val bottom = h * 0.9f
+        fill.shader = LinearGradient(0f, top, 0f, bottom, Color.argb(235, 255, 255, 255), Color.argb(190, 246, 246, 250), Shader.TileMode.CLAMP)
+        ring.shader = LinearGradient(0f, top, 0f, bottom, Color.argb(255, 255, 255, 255), Color.argb(70, 255, 255, 255), Shader.TileMode.CLAMP)
     }
 
     override fun onDetachedFromWindow() {
@@ -133,19 +137,18 @@ class BubbleView(context: Context, private val listener: Listener) : View(contex
         val cx = width / 2f
         val cy = height / 2f
         canvas.drawCircle(cx, cy, r, fill)
+        canvas.drawCircle(cx, cy, r, hairline)
         if (System.currentTimeMillis() < flashUntil) {
             canvas.drawCircle(cx, cy, r - flashRing.strokeWidth / 2, flashRing)
         } else {
-            ringMatrix.setRotate(angle, cx, cy)
-            ringShader?.setLocalMatrix(ringMatrix)
-            canvas.drawCircle(cx, cy, r - ring.strokeWidth / 2, ring)
+            canvas.drawCircle(cx, cy + 0.6f * density, r - ring.strokeWidth, ring)
             if (busy) {
                 val ar = r - arc.strokeWidth / 2
                 arcRect.set(cx - ar, cy - ar, cx + ar, cy + ar)
                 canvas.drawArc(arcRect, angle - 90f, 70f, false, arc)
             }
         }
-        val s = (r * 0.92f).toInt()
+        val s = (r * 0.86f).toInt()
         icon.setBounds((cx - s / 2).toInt(), (cy - s / 2).toInt(), (cx + s / 2).toInt(), (cy + s / 2).toInt())
         icon.draw(canvas)
         if (watching) {

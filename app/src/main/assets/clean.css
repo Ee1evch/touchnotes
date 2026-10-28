@@ -11,10 +11,10 @@
   --ink: #16161a;
   --muted: #6b6a72;
   --rule: #e6e2db;
-  --accent: #4b3fd9;
-  --accent-soft: #eeecfd;
-  --thm: #7a4bd8;
-  --thm-soft: #f6f1ff;
+  --accent: #2c2c33;
+  --accent-soft: #f1f1f4;
+  --thm: #4a4a55;
+  --thm-soft: #f4f4f7;
   --note: #c98a00;
   --note-soft: #fff7e0;
   --check: #d23a3a;
@@ -32,7 +32,7 @@ body {
   -webkit-text-size-adjust: 100%;
   -webkit-font-smoothing: antialiased;
 }
-body.preview { background: #ece9e3; padding: 12px 0 24px; }
+body.preview { background: transparent; padding: 12px 0 24px; }
 body.export { background: #fff; }
 
 #staging { position: absolute; left: -10000px; top: 0; width: calc(var(--page-w) - 2 * var(--pad-side)); visibility: hidden; }

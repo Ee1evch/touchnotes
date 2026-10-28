@@ -67,7 +67,7 @@ fun ProgressScreen(onBack: () -> Unit, onReview: () -> Unit) {
             Column(
                 Modifier
                     .fillMaxWidth()
-                    .softCard(color = MaterialTheme.colorScheme.surface)
+                    .glass()
                     .padding(28.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
@@ -99,7 +99,7 @@ private fun StreakCard(s: ProgressSummary, todayActive: Boolean) {
     Row(
         Modifier
             .fillMaxWidth()
-            .softCard(RoundedCornerShape(28.dp), 18.dp, Brand.Ink)
+            .glass(RoundedCornerShape(28.dp), 14.dp)
             .padding(26.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(20.dp),
@@ -108,7 +108,7 @@ private fun StreakCard(s: ProgressSummary, todayActive: Boolean) {
             Modifier
                 .size(64.dp)
                 .clip(RoundedCornerShape(20.dp))
-                .background(Color(0x33FF9F43)),
+                .background(Color(0x26FF9F43)),
             contentAlignment = Alignment.Center,
         ) {
             Icon(painterResource(R.drawable.ic_flame), contentDescription = null, tint = if (s.streak > 0) Color(0xFFFF9F43) else Color(0xFF8E8D98), modifier = Modifier.size(34.dp))
@@ -117,7 +117,6 @@ private fun StreakCard(s: ProgressSummary, todayActive: Boolean) {
             Text(
                 if (s.streak > 0) "${s.streak} ${ruPlural(s.streak, "день", "дня", "дней")} подряд" else "Начни новую серию",
                 style = MaterialTheme.typography.headlineMedium,
-                color = Color.White,
             )
             Text(
                 when {
@@ -126,7 +125,7 @@ private fun StreakCard(s: ProgressSummary, todayActive: Boolean) {
                     else -> "Сегодня уже занимался. Так держать!"
                 } + if (s.bestStreak > 1) " Лучшая серия: ${s.bestStreak} ${ruPlural(s.bestStreak, "день", "дня", "дней")}." else "",
                 style = MaterialTheme.typography.bodyMedium,
-                color = Color(0xFFB7B6C2),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }
@@ -151,7 +150,7 @@ private fun ActivityChart(days: List<Int>, now: Long) {
     Column(
         Modifier
             .fillMaxWidth()
-            .softCard(color = MaterialTheme.colorScheme.surface)
+            .glass()
             .padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
@@ -215,7 +214,7 @@ private fun ActivityChart(days: List<Int>, now: Long) {
 private fun Stat(value: String, label: String, icon: Int, tint: Color, modifier: Modifier, onClick: (() -> Unit)? = null) {
     Column(
         modifier
-            .softCard(color = MaterialTheme.colorScheme.surface)
+            .glass()
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
             .padding(18.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),

@@ -40,22 +40,11 @@ data class BarItem(
     val action: () -> Unit,
 )
 
-/** Светлая карточка (строка вопроса). */
-private fun card(ctx: Context, radius: Float): GradientDrawable = GradientDrawable().apply {
-    setColor(Color.WHITE)
-    cornerRadius = radius
-    setStroke(OverlayWindows.dp(ctx, 1f), 0x14000000)
-}
+/** Стеклянная карточка: меню, сообщения и строка вопроса у кнопки. */
+private fun card(ctx: Context, radius: Float, opacity: Float = 0.84f): GlassDrawable = GlassDrawable(ctx, radius, opacity)
 
-/** Тёмная «графитовая» карточка: меню и сообщения у кнопки хорошо видны на белом листе. */
-private fun darkCard(ctx: Context, radius: Float): GradientDrawable = GradientDrawable().apply {
-    setColor(0xFA16161A.toInt())
-    cornerRadius = radius
-    setStroke(OverlayWindows.dp(ctx, 1f), 0x1AFFFFFF)
-}
-
-private const val ON_DARK = 0xFFF4F4F6.toInt()
-private const val ON_DARK_MUTED = 0xFF8E8D98.toInt()
+private const val ON_GLASS = GlassInk.TEXT
+private const val ON_GLASS_MUTED = GlassInk.MUTED
 
 /**
  * Небольшие всплывающие элементы рядом с кнопкой: список действий («Подсказка», «Где ошибка?»…)
@@ -82,16 +71,16 @@ class BubbleBar(baseContext: Context, private val wm: WindowManager) {
     private fun dp(v: Float) = OverlayWindows.dp(ctx, v)
 
     /** Меню у кнопки: одна карточка, в ней строки со значками в цветных кружках. */
-    fun showActions(anchor: BubbleAnchor, items: List<BarItem>) {
+    fun showActions(anchor: BubbleAnchor, items: List<BarItem>, title: String = "НАСТАВНИК") {
         val col = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
-            background = darkCard(ctx, dp(22f).toFloat())
+            background = card(ctx, dp(22f).toFloat())
             elevation = dp(12f).toFloat()
             setPadding(dp(8f), dp(10f), dp(8f), dp(8f))
         }
         val head = TextView(ctx).apply {
-            text = "НАСТАВНИК"
-            setTextColor(ON_DARK_MUTED)
+            text = title
+            setTextColor(ON_GLASS_MUTED)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f)
             typeface = Fonts.semibold(ctx)
             letterSpacing = 0.08f
@@ -116,7 +105,7 @@ class BubbleBar(baseContext: Context, private val wm: WindowManager) {
     fun showMessage(anchor: BubbleAnchor, text: String, items: List<BarItem> = emptyList(), busy: Boolean = false, autoHideMs: Long = 0, outside: Boolean = false) {
         val box = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
-            background = darkCard(ctx, dp(22f).toFloat())
+            background = card(ctx, dp(22f).toFloat())
             setPadding(dp(18f), dp(14f), dp(12f), dp(14f))
             elevation = dp(12f).toFloat()
         }
@@ -127,13 +116,13 @@ class BubbleBar(baseContext: Context, private val wm: WindowManager) {
         if (busy) {
             val pb = ProgressBar(ctx).apply {
                 isIndeterminate = true
-                indeterminateTintList = ColorStateList.valueOf(0xFFA99BFF.toInt())
+                indeterminateTintList = ColorStateList.valueOf(ON_GLASS)
             }
             row.addView(pb, LinearLayout.LayoutParams(dp(20f), dp(20f)).apply { marginEnd = dp(10f) })
         }
         val tv = TextView(ctx).apply {
             this.text = text
-            setTextColor(ON_DARK)
+            setTextColor(ON_GLASS)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
             typeface = Fonts.regular(ctx)
             setLineSpacing(0f, 1.12f)
@@ -143,7 +132,7 @@ class BubbleBar(baseContext: Context, private val wm: WindowManager) {
         row.addView(tv, LinearLayout.LayoutParams(minOf(natural, dp(360f)), LinearLayout.LayoutParams.WRAP_CONTENT))
         val close = ImageView(ctx).apply {
             setImageResource(R.drawable.ic_close)
-            setColorFilter(ON_DARK_MUTED)
+            setColorFilter(ON_GLASS_MUTED)
             setPadding(dp(5f), dp(5f), dp(5f), dp(5f))
             contentDescription = "Закрыть"
             setOnClickListener { dismiss() }
@@ -159,8 +148,8 @@ class BubbleBar(baseContext: Context, private val wm: WindowManager) {
                     gravity = Gravity.CENTER
                     setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
                     typeface = Fonts.semibold(ctx)
-                    setTextColor(if (item.primary) 0xFF16161A.toInt() else ON_DARK)
-                    setBackgroundResource(if (item.primary) R.drawable.light_btn_bg else R.drawable.ghost_dark_btn_bg)
+                    setTextColor(if (item.primary) Color.WHITE else ON_GLASS)
+                    setBackgroundResource(if (item.primary) R.drawable.primary_btn_bg else R.drawable.glass_btn_bg)
                     setPadding(dp(16f), 0, dp(16f), 0)
                     setOnClickListener { item.action() }
                 }
@@ -184,7 +173,7 @@ class BubbleBar(baseContext: Context, private val wm: WindowManager) {
             contentDescription = item.label
         }
         item.icon?.let {
-            val tint = item.tint ?: ON_DARK
+            val tint = item.tint ?: ON_GLASS
             val iv = ImageView(ctx).apply {
                 setImageResource(it)
                 imageTintList = ColorStateList.valueOf(tint)
@@ -192,14 +181,14 @@ class BubbleBar(baseContext: Context, private val wm: WindowManager) {
                 // Скруглённый квадрат цвета значка.
                 background = GradientDrawable().apply {
                     cornerRadius = dp(10f).toFloat()
-                    setColor(Color.argb(46, Color.red(tint), Color.green(tint), Color.blue(tint)))
+                    setColor(Color.argb(30, Color.red(tint), Color.green(tint), Color.blue(tint)))
                 }
             }
             row.addView(iv, LinearLayout.LayoutParams(dp(32f), dp(32f)).apply { marginEnd = dp(12f) })
         }
         val tv = TextView(ctx).apply {
             text = item.label
-            setTextColor(ON_DARK)
+            setTextColor(ON_GLASS)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 15.5f)
             typeface = Fonts.medium(ctx)
         }

@@ -67,7 +67,7 @@ sealed interface CleanState {
     ) : CleanState
 
     companion object {
-        const val MAX_SHOTS = 5
+        const val MAX_SHOTS = 8
     }
 }
 
@@ -105,6 +105,14 @@ class CleanSession(private val app: NastavnikApp, private val scope: CoroutineSc
                 is ShotResult.Failed -> if (shots.isEmpty()) CleanState.Failed(emptyList(), r.message) else CleanState.Collecting(shots, message = r.message)
             }
         }
+    }
+
+    /** Добавить готовые снимки — например, все запомненные страницы конспекта. */
+    fun addImages(images: List<ByteArray>) {
+        val shots = _state.value.shots
+        val room = CleanState.MAX_SHOTS - shots.size
+        if (room <= 0 || images.isEmpty()) return
+        _state.value = CleanState.Collecting(shots + images.take(room))
     }
 
     fun removeLastShot() {

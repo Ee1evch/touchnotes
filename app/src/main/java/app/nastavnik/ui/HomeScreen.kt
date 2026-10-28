@@ -72,11 +72,10 @@ fun HomeScreen(resumeTick: Int, go: (String) -> Unit) {
             Box(
                 Modifier
                     .size(42.dp)
-                    .softCard(RoundedCornerShape(14.dp), 10.dp)
-                    .background(Brand.gradient),
+                    .glass(RoundedCornerShape(14.dp), 6.dp, strong = true),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(painterResource(R.drawable.ic_sparkle), contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+                Icon(painterResource(R.drawable.ic_sparkle), contentDescription = null, tint = Brand.Ink, modifier = Modifier.size(20.dp))
             }
             Text("Наставник", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(start = 12.dp).weight(1f))
             RoundIconButton(R.drawable.ic_tune, "Настройки") { go(MainActivity.SCREEN_SETTINGS) }
@@ -99,10 +98,10 @@ fun HomeScreen(resumeTick: Int, go: (String) -> Unit) {
             onStop = { BubbleService.stop(context); tick++ },
             onOpenTouchnotes = { touchnotes?.let { openApp(context, it.packageName) } },
         ) {
-            StatusPill(provider, notReady == null, onDark = true)
-            StatusPill("Уведомления", notif, onDark = true)
-            StatusPill("Микрофон", mic, onDark = true)
-            StatusPill(if (touchnotes != null) "Touchnotes" else "Touchnotes не найден", touchnotes != null, onDark = true)
+            StatusPill(provider, notReady == null)
+            StatusPill("Уведомления", notif)
+            StatusPill("Микрофон", mic)
+            StatusPill(if (touchnotes != null) "Touchnotes" else "Touchnotes не найден", touchnotes != null)
         }
 
         if (!overlay) {
@@ -145,7 +144,7 @@ fun HomeScreen(resumeTick: Int, go: (String) -> Unit) {
         Column(
             Modifier
                 .fillMaxWidth()
-                .softCard(color = MaterialTheme.colorScheme.surface)
+                .glass()
                 .padding(horizontal = 20.dp, vertical = 6.dp),
         ) {
             val steps = listOf(
@@ -173,7 +172,7 @@ fun HomeScreen(resumeTick: Int, go: (String) -> Unit) {
     }
 }
 
-/** Тёмная карточка состояния с фиолетовым свечением и главной кнопкой. */
+/** Стеклянная карточка состояния с главной кнопкой. */
 @Composable
 private fun Hero(
     running: Boolean,
@@ -187,19 +186,7 @@ private fun Hero(
     Column(
         Modifier
             .fillMaxWidth()
-            .softCard(RoundedCornerShape(28.dp), 18.dp, Brand.Ink)
-            .drawBehind {
-                drawCircle(
-                    Brush.radialGradient(listOf(Color(0xA68E5CF7), Color(0x008E5CF7)), center = Offset(size.width * 0.86f, size.height * 0.12f), radius = size.height * 0.95f),
-                    radius = size.height * 0.95f,
-                    center = Offset(size.width * 0.86f, size.height * 0.12f),
-                )
-                drawCircle(
-                    Brush.radialGradient(listOf(Color(0x735B4CF0), Color(0x005B4CF0)), center = Offset(size.width * 0.08f, size.height * 1.05f), radius = size.height * 0.8f),
-                    radius = size.height * 0.8f,
-                    center = Offset(size.width * 0.08f, size.height * 1.05f),
-                )
-            }
+            .glass(RoundedCornerShape(28.dp), 14.dp)
             .padding(26.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
@@ -208,34 +195,33 @@ private fun Hero(
                 Modifier
                     .size(10.dp)
                     .clip(CircleShape)
-                    .background(if (running) Color(0xFF4ADE80) else Color(0xFF8E8D98)),
+                    .background(if (running) Brand.Ok else Color(0xFFA3A2AB)),
             )
             Text(
                 if (running) "Работает поверх Touchnotes" else "Сейчас выключен",
                 style = MaterialTheme.typography.labelMedium,
-                color = Color(0xFFC9C8D3),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(
                 if (running) "Наставник включён" else "Включи наставника",
                 style = MaterialTheme.typography.headlineMedium,
-                color = Color.White,
             )
             Text(
                 if (running) "Кнопка ждёт у края экрана. Нажми её пальцем — выбери подсказку, проверку или вопрос."
                 else "Поверх записей появится небольшая кнопка. Стилусу она не мешает.",
                 style = MaterialTheme.typography.bodyMedium,
-                color = Color(0xFFB7B6C2),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
             if (running) {
-                if (touchnotesLabel != null) InkButton("Открыть $touchnotesLabel", light = true, icon = R.drawable.ic_open, onClick = onOpenTouchnotes)
-                SoftButton("Выключить", onDark = true, icon = R.drawable.ic_power, onClick = onStop)
+                if (touchnotesLabel != null) InkButton("Открыть $touchnotesLabel", icon = R.drawable.ic_open, onClick = onOpenTouchnotes)
+                SoftButton("Выключить", icon = R.drawable.ic_power, onClick = onStop)
             } else {
-                InkButton("Запустить наставника", light = true, enabled = canStart, icon = R.drawable.ic_power, onClick = onStart)
-                if (touchnotesLabel != null) SoftButton("Открыть $touchnotesLabel", onDark = true, onClick = onOpenTouchnotes)
+                InkButton("Запустить наставника", enabled = canStart, icon = R.drawable.ic_power, onClick = onStart)
+                if (touchnotesLabel != null) SoftButton("Открыть $touchnotesLabel", onClick = onOpenTouchnotes)
             }
         }
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) { pills() }
@@ -248,7 +234,7 @@ private fun Today(due: Int, streak: Int, onReview: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
-            .softCard(RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.surface)
+            .glass(RoundedCornerShape(24.dp))
             .clickable(onClick = onReview)
             .padding(18.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -258,7 +244,7 @@ private fun Today(due: Int, streak: Int, onReview: () -> Unit) {
             Modifier
                 .size(52.dp)
                 .clip(RoundedCornerShape(16.dp))
-                .background(Brand.gradient),
+                .background(Brand.Ink),
             contentAlignment = Alignment.Center,
         ) {
             Text(due.toString(), color = Color.White, style = MaterialTheme.typography.titleLarge)
@@ -309,7 +295,7 @@ private fun Attention(title: String, text: String, action: String, onAction: () 
 private fun Tile(icon: Int, tint: Color, title: String, caption: String, modifier: Modifier, onClick: () -> Unit) {
     Column(
         modifier
-            .softCard(color = MaterialTheme.colorScheme.surface)
+            .glass()
             .clickable(onClick = onClick)
             .padding(18.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),

@@ -159,6 +159,45 @@ object ImageUtils {
         return Page(app.nastavnik.geom.PageImage(px, w, h, InkLines.detect(px, w, h)), k)
     }
 
+    /**
+     * Страница конспекта из кадра экрана: область записей [area] в двух размерах — [NotebookShot.image] для
+     * чистовика (до 1,15 Мп) и [NotebookShot.small] для вопросов наставнику (до 0,55 Мп, дешевле).
+     * Наши окна, попавшие в кадр ([cover], в координатах экрана), закрашиваются цветом листа.
+     */
+    class NotebookShot(val image: ByteArray, val small: ByteArray)
+
+    fun notebookShot(full: Bitmap, area: Rect, cover: List<Rect> = emptyList()): NotebookShot {
+        val cropped = crop(full, area)
+        val own = if (cover.isEmpty()) cropped else cropped.copy(Bitmap.Config.ARGB_8888, true).also { b ->
+            val c = Canvas(b)
+            val paint = Paint()
+            val ox = if (cropped === full) 0 else area.left.coerceAtLeast(0)
+            val oy = if (cropped === full) 0 else area.top.coerceAtLeast(0)
+            for (r in cover) {
+                val rr = Rect(r.left - ox, r.top - oy, r.right - ox, r.bottom - oy)
+                if (!rr.intersect(0, 0, b.width, b.height)) continue
+                // Цвет листа — чуть левее или выше окна; у самого края — белый.
+                val sx = (rr.left - 4).takeIf { it >= 0 } ?: (rr.right + 4).coerceAtMost(b.width - 1)
+                val sy = rr.centerY().coerceIn(0, b.height - 1)
+                paint.color = b.getPixel(sx, sy)
+                c.drawRect(rr, paint)
+            }
+        }
+        fun jpegAt(maxPixels: Int, quality: Int): ByteArray {
+            val scaled = scaleDown(own, MAX_LONG_SIDE, maxPixels)
+            val bytes = toJpeg(scaled, quality)
+            if (scaled !== own) scaled.recycle()
+            return bytes
+        }
+        val result = NotebookShot(jpegAt(MAX_PIXELS, 82), jpegAt(SMALL_PIXELS, 78))
+        if (own !== cropped) own.recycle()
+        if (cropped !== full) cropped.recycle()
+        return result
+    }
+
+    /** Размер страниц конспекта, которые уходят наставнику вместе с вопросом. */
+    const val SMALL_PIXELS = 550_000
+
     /** Серая уменьшенная копия всего экрана — для слежения за прокруткой и письмом. */
     fun thumb(full: Bitmap): app.nastavnik.geom.Thumb {
         val b = app.nastavnik.geom.ThumbBuilder(full.width, full.height)

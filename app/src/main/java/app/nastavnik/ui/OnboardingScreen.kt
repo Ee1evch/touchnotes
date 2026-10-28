@@ -141,18 +141,17 @@ fun OnboardingScreen(resumeTick: Int, onDone: () -> Unit, onSkip: () -> Unit) {
         Column(
             Modifier
                 .fillMaxWidth()
-                .softCard(RoundedCornerShape(28.dp), color = MaterialTheme.colorScheme.surface)
+                .glass(RoundedCornerShape(28.dp))
                 .padding(26.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Box(
                 Modifier
                     .size(56.dp)
-                    .clip(RoundedCornerShape(18.dp))
-                    .background(Brand.gradient),
+                    .glass(RoundedCornerShape(18.dp), 4.dp, strong = true),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(painterResource(icons[index.coerceIn(0, icons.lastIndex)]), contentDescription = null, tint = Color.White, modifier = Modifier.size(26.dp))
+                Icon(painterResource(icons[index.coerceIn(0, icons.lastIndex)]), contentDescription = null, tint = Brand.Ink, modifier = Modifier.size(26.dp))
             }
             Text(step.title, style = MaterialTheme.typography.headlineMedium)
             Text(step.why, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)

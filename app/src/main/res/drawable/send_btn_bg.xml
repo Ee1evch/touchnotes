@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Кнопка «Отправить»: фирменный градиент -->
+<!-- Кнопка «Отправить»: графитовый круг -->
 <ripple xmlns:android="http://schemas.android.com/apk/res/android" android:color="#44FFFFFF">
     <item>
         <shape android:shape="oval">
-            <gradient android:angle="315" android:startColor="@color/accent" android:endColor="@color/accent_2" android:type="linear" />
+            <solid android:color="@color/ink" />
         </shape>
     </item>
 </ripple>
