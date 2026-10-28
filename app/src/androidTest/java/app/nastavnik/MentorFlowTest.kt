@@ -230,7 +230,8 @@ class MentorFlowTest {
         val msgs = first["messages"]!!.jsonArray
         val lastContent = msgs.last().jsonObject["content"] as JsonArray
         assertEquals("image", (lastContent[0].jsonObject["type"] as JsonPrimitive).content)
-        assertTrue(bodies.first().contains("[Снимок экрана:"))
+        // Размер снимка всегда в тексте; если запомнены другие страницы конспекта — с пояснением про них.
+        assertTrue(bodies.first().contains("[Снимок экрана:") || bodies.first().contains("Последний снимок — текущий экран"))
         val system = (first["system"] as JsonPrimitive).content
         assertTrue(system.contains("Ты — наставник"))
         assertTrue(system.contains("в пикселях"))

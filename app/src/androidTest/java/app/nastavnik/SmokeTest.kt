@@ -277,7 +277,8 @@ class SmokeTest {
 
         // 6. Чистовик из меню: снимок → «Собрать» → понятная ошибка ключа, без падения.
         tapBubble()
-        device.wait(Until.findObject(By.text("Чистовик")), 5000)!!.click()
+        // Пункт меню у кнопки (по описанию): плитка «Чистовик» на главном экране тоже подписана так.
+        device.wait(Until.findObject(By.desc("Чистовик")), 5000)!!.click()
         assertNotNull("нет кнопки «Собрать»", device.wait(Until.findObject(By.text("Собрать")), 15000))
         screenshot("clean_collecting")
         device.findObject(By.text("Собрать")).click()
