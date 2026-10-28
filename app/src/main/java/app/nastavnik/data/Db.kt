@@ -12,6 +12,9 @@ import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.Update
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.flow.Flow
 
 @Entity(tableName = "conversations")
@@ -62,6 +65,35 @@ data class CleanNoteEntity(
     /** Куда файл сохранён в общих «Документах» (для показа пользователю). */
     @ColumnInfo(name = "public_path") val publicPath: String?,
     @ColumnInfo(name = "created_at") val createdAt: Long,
+)
+
+/** Карточка интервального повторения (из чистовика или встроенного примера). */
+@Entity(tableName = "cards")
+data class CardEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    /** Из какого чистовика; null — пример или чистовик уже удалён. */
+    @ColumnInfo(name = "note_id") val noteId: Long?,
+    val subject: String,
+    val topic: String,
+    val front: String,
+    val back: String,
+    /** Коробка Лейтнера: 0 — новая или забытая, 5 — давно выученная. */
+    val box: Int = 0,
+    @ColumnInfo(name = "due_at") val dueAt: Long,
+    @ColumnInfo(name = "created_at") val createdAt: Long,
+    val reviews: Int = 0,
+    val lapses: Int = 0,
+)
+
+/** Учебное событие для «Прогресса»: ответ наставника, тихая проверка, чистовик, повторённая карточка. */
+@Entity(tableName = "activity")
+data class ActivityEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val kind: String,
+    val topic: String,
+    /** Сколько ошибок нашлось (для карточки — 1, если её забыли). */
+    val errors: Int,
+    val at: Long,
 )
 
 data class ConversationSummary(
@@ -130,20 +162,83 @@ interface CleanNoteDao {
     suspend fun delete(id: Long)
 }
 
+@Dao
+interface CardDao {
+    @Insert
+    suspend fun insertAll(cards: List<CardEntity>)
+
+    @Update
+    suspend fun update(card: CardEntity)
+
+    @Query("SELECT * FROM cards WHERE due_at <= :now ORDER BY box, due_at LIMIT :limit")
+    suspend fun due(now: Long, limit: Int): List<CardEntity>
+
+    @Query("SELECT COUNT(*) FROM cards WHERE due_at <= :now")
+    fun observeDueCount(now: Long): Flow<Int>
+
+    @Query("SELECT COUNT(*) FROM cards")
+    fun observeCount(): Flow<Int>
+
+    @Query("SELECT COUNT(*) FROM cards WHERE box >= :box")
+    fun observeLearned(box: Int): Flow<Int>
+
+    @Query("SELECT MIN(due_at) FROM cards WHERE due_at > :now")
+    suspend fun nextDue(now: Long): Long?
+
+    @Query("SELECT COUNT(*) FROM cards WHERE note_id = :noteId")
+    fun observeForNote(noteId: Long): Flow<Int>
+
+    @Query("DELETE FROM cards WHERE note_id = :noteId")
+    suspend fun deleteForNote(noteId: Long)
+
+    @Query("DELETE FROM cards WHERE note_id IS NULL AND topic = :topic")
+    suspend fun deleteLoose(topic: String)
+}
+
+@Dao
+interface ActivityDao {
+    @Insert
+    suspend fun insert(a: ActivityEntity)
+
+    @Query("SELECT * FROM activity ORDER BY at")
+    fun observeAll(): Flow<List<ActivityEntity>>
+}
+
 @Database(
-    entities = [Conversation::class, Message::class, CleanNoteEntity::class],
-    version = 1,
+    entities = [Conversation::class, Message::class, CleanNoteEntity::class, CardEntity::class, ActivityEntity::class],
+    version = 2,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun conversations(): ConversationDao
     abstract fun messages(): MessageDao
     abstract fun cleanNotes(): CleanNoteDao
+    abstract fun cards(): CardDao
+    abstract fun activity(): ActivityDao
 
     companion object {
+        /** Карточки и учебные события. История задач и чистовики при обновлении сохраняются. */
+        val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `cards` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `note_id` INTEGER, " +
+                        "`subject` TEXT NOT NULL, `topic` TEXT NOT NULL, `front` TEXT NOT NULL, `back` TEXT NOT NULL, " +
+                        "`box` INTEGER NOT NULL, `due_at` INTEGER NOT NULL, `created_at` INTEGER NOT NULL, " +
+                        "`reviews` INTEGER NOT NULL, `lapses` INTEGER NOT NULL)",
+                )
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `activity` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`kind` TEXT NOT NULL, `topic` TEXT NOT NULL, `errors` INTEGER NOT NULL, `at` INTEGER NOT NULL)",
+                )
+            }
+        }
+
         fun create(context: Context): AppDatabase =
-            Room.databaseBuilder(context, AppDatabase::class.java, "nastavnik.db")
+            Room.databaseBuilder(context, AppDatabase::class.java, DB_NAME)
+                .addMigrations(MIGRATION_1_2)
                 .fallbackToDestructiveMigration(dropAllTables = true)
                 .build()
+
+        const val DB_NAME = "nastavnik.db"
     }
 }

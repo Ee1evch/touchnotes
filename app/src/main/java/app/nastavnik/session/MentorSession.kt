@@ -21,6 +21,7 @@ import app.nastavnik.geom.LineMap
 import app.nastavnik.geom.PageImage
 import app.nastavnik.geom.PlaceRef
 import app.nastavnik.geom.Thumb
+import app.nastavnik.study.Progress
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -303,6 +304,13 @@ class MentorSession(private val app: NastavnikApp, private val scope: CoroutineS
                 db.conversations().touch(convId, System.currentTimeMillis())
                 final.topic?.let { nameConversation(convId, base.question, it) }
             }
+            // Для «Прогресса»: тема задачи и сколько ошибок нашёл наставник.
+            val topic = (if (convId != 0L) db.conversations().get(convId)?.title else null) ?: final.topic.orEmpty()
+            app.study.record(
+                if (silent) Progress.KIND_WATCH else Progress.KIND_ASK,
+                topic,
+                final.marks.count { it.kind == MarkKind.ERROR },
+            )
             _state.update {
                 it.copy(answer = base.copy(marks = final.marks, streaming = false, status = null, done = final.done, allGood = final.allGood))
             }

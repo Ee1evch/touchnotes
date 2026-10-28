@@ -275,11 +275,12 @@ private fun CleanNoteList() {
     toDelete?.let { n ->
         ConfirmDelete(
             "Удалить чистовик?",
-            "«${n.title}» пропадёт из истории приложения. Копия в «Документы/Конспекты» и в Touchnotes останется.",
+            "«${n.title}» пропадёт из истории приложения. Его карточки уйдут из повторения. Копия в «Документы/Конспекты» и в Touchnotes останется.",
             onConfirm = {
                 toDelete = null
                 scope.launch {
                     db.cleanNotes().delete(n.id)
+                    db.cards().deleteForNote(n.id)
                     n.pdfPath?.let(::File)?.parentFile?.deleteRecursively()
                 }
             },
@@ -306,8 +307,11 @@ private fun CleanNoteList() {
                 IconBadge(R.drawable.ic_note, Brand.Ok)
                 Column(Modifier.weight(1f)) {
                     Text(n.title, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    val cardCount by remember(n.id) { db.cards().observeForNote(n.id) }.collectAsStateWithLifecycle(initialValue = 0)
                     Text(
-                        listOf(n.subject, dayLabel(n.createdAt) + ", " + timeFmt.format(Date(n.createdAt))).filter { it.isNotBlank() }.joinToString(" · "),
+                        (listOf(n.subject, dayLabel(n.createdAt) + ", " + timeFmt.format(Date(n.createdAt))) +
+                            listOfNotNull(cardCount.takeIf { it > 0 }?.let { plural(it, "карточка", "карточки", "карточек") }))
+                            .filter { it.isNotBlank() }.joinToString(" · "),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

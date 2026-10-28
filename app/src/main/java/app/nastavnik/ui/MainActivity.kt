@@ -12,6 +12,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import app.nastavnik.app
+import app.nastavnik.overlay.BubbleService
 
 class MainActivity : ComponentActivity() {
     private var screen by mutableStateOf(SCREEN_HOME)
@@ -28,7 +29,7 @@ class MainActivity : ComponentActivity() {
         val bars = SystemBarStyle.light(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT)
         enableEdgeToEdge(statusBarStyle = bars, navigationBarStyle = bars)
         screen = savedInstanceState?.getString(KEY_SCREEN)
-            ?: intent.getStringExtra(EXTRA_SCREEN)?.also { fromOverlay = true }
+            ?: screenFrom(intent)
             ?: if (app.settings.load().onboardingDone) SCREEN_HOME else SCREEN_ONBOARDING
         setContent {
             NastavnikTheme {
@@ -47,6 +48,8 @@ class MainActivity : ComponentActivity() {
                     SCREEN_SETTINGS -> SettingsScreen(onBack = home)
                     SCREEN_HISTORY -> HistoryScreen(onBack = home)
                     SCREEN_CLEAN_TEST -> CleanTestScreen(onBack = { go(SCREEN_CLEAN) })
+                    SCREEN_REVIEW -> ReviewScreen(onBack = home, onExample = { go(SCREEN_CLEAN_TEST) })
+                    SCREEN_PROGRESS -> ProgressScreen(onBack = home, onReview = { go(SCREEN_REVIEW) })
                     SCREEN_CLEAN -> CleanScreen(
                         // Чистовик открыла кнопка наставника — закрыв его, возвращаемся в Touchnotes.
                         onClose = home,
@@ -61,10 +64,24 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        intent.getStringExtra(EXTRA_SCREEN)?.let {
-            screen = it
-            fromOverlay = true
+        screenFrom(intent)?.let { screen = it }
+    }
+
+    /**
+     * Какой экран открыть по интенту. Экран, открытый кнопкой поверх Touchnotes, по «Назад» возвращает туда.
+     * Ярлык «Запустить наставника» включает его и сразу уходит в фон — к Touchnotes.
+     */
+    private fun screenFrom(intent: Intent): String? {
+        val s = intent.getStringExtra(EXTRA_SCREEN) ?: return null
+        fromOverlay = intent.getBooleanExtra(EXTRA_FROM_OVERLAY, false)
+        if (s == ACTION_START_MENTOR) {
+            if (Permissions.overlay(this)) {
+                BubbleService.start(this)
+                moveTaskToBack(true)
+            }
+            return SCREEN_HOME
         }
+        return s
     }
 
     override fun onResume() {
@@ -85,6 +102,12 @@ class MainActivity : ComponentActivity() {
         const val SCREEN_ONBOARDING = "onboarding"
         const val SCREEN_CLEAN_TEST = "clean_test"
         const val SCREEN_CLEAN = "clean"
+        const val SCREEN_REVIEW = "review"
+        const val SCREEN_PROGRESS = "progress"
+        const val EXTRA_FROM_OVERLAY = "from_overlay"
+
+        /** Ярлык на значке приложения: включить наставника. */
+        const val ACTION_START_MENTOR = "start"
         private const val KEY_SCREEN = "screen"
     }
 }

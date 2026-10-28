@@ -20,8 +20,10 @@ import app.nastavnik.notes.CleanNoteParser
 import app.nastavnik.notes.NoteStorage
 import app.nastavnik.notes.PdfExporter
 import app.nastavnik.overlay.BubbleService
+import app.nastavnik.study.Progress
 import app.nastavnik.ui.MainActivity
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import org.junit.After
@@ -124,6 +126,43 @@ class SmokeTest {
             screenshot("screen_$screen")
             scenario.close()
         }
+    }
+
+    /** Повторение на встроенном примере: вопрос → ответ → «Помню»; затем экран прогресса. */
+    @Test
+    fun reviewCardsAndProgress() {
+        shell("settings put global hide_error_dialogs 1")
+        ctx.app.settings.setOnboardingDone(true)
+        runBlocking { ctx.app.study.addSample() }
+        val scenario = ActivityScenario.launch<MainActivity>(
+            Intent(ctx, MainActivity::class.java).putExtra(MainActivity.EXTRA_SCREEN, MainActivity.SCREEN_REVIEW),
+        )
+        dismissSystemAnr()
+        assertNotNull("нет карточки", device.wait(Until.findObject(By.text("Показать ответ")), 8000))
+        SystemClock.sleep(1500)
+        screenshot("review_question")
+        device.findObject(By.text("Показать ответ")).click()
+        assertNotNull("нет кнопки «Помню»", device.wait(Until.findObject(By.text("Помню")), 4000))
+        SystemClock.sleep(1500)
+        screenshot("review_answer")
+        device.findObject(By.text("Помню")).click()
+        SystemClock.sleep(1000)
+        val events = runBlocking { ctx.app.db.activity().observeAll().first() }
+        assertTrue("повторение не записалось", events.any { it.kind == Progress.KIND_CARD })
+        scenario.close()
+
+        val progress = ActivityScenario.launch<MainActivity>(
+            Intent(ctx, MainActivity::class.java).putExtra(MainActivity.EXTRA_SCREEN, MainActivity.SCREEN_PROGRESS),
+        )
+        assertNotNull("нет серии", device.wait(Until.findObject(By.textContains("подряд")), 6000))
+        SystemClock.sleep(1500)
+        screenshot("screen_progress")
+        progress.close()
+
+        val home = ActivityScenario.launch<MainActivity>(Intent(ctx, MainActivity::class.java).putExtra(MainActivity.EXTRA_SCREEN, MainActivity.SCREEN_HOME))
+        SystemClock.sleep(2500)
+        screenshot("home_with_cards")
+        home.close()
     }
 
     private fun stylusTap(x: Float, y: Float) {

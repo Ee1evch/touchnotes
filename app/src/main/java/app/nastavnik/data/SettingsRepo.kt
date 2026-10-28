@@ -35,6 +35,8 @@ data class AppSettings(
     val watchPauseSec: Int,
     /** Насколько прозрачными становятся заметки, когда к ним подносят стилус (0.15…0.8). */
     val noteFadeAlpha: Float,
+    /** Во сколько напомнить о карточках (час, -1 — не напоминать). */
+    val reminderHour: Int,
     val strictness: Strictness,
     val bubbleAlpha: Float,
     val bubbleSizeDp: Int,
@@ -78,6 +80,7 @@ class SettingsRepo(private val context: Context) {
         authMode = AuthMode.byName(prefs.getString(K_AUTH_MODE, null)),
         watchPauseSec = prefs.getInt(K_WATCH_PAUSE, 0).coerceAtLeast(0),
         noteFadeAlpha = prefs.getFloat(K_NOTE_FADE, 0.35f).coerceIn(0.15f, 0.8f),
+        reminderHour = prefs.getInt(K_REMINDER, DEFAULT_REMINDER_HOUR).coerceIn(-1, 23),
         strictness = runCatching { Strictness.valueOf(prefs.getString(K_STRICTNESS, null)!!) }.getOrDefault(Strictness.HINTS),
         bubbleAlpha = prefs.getFloat(K_ALPHA, 0.7f).coerceIn(MIN_ALPHA, MAX_ALPHA),
         bubbleSizeDp = prefs.getInt(K_SIZE, 56).coerceIn(40, 72),
@@ -105,6 +108,7 @@ class SettingsRepo(private val context: Context) {
     fun setAuthMode(m: AuthMode) = prefs.edit { putString(K_AUTH_MODE, m.name) }
     fun setWatchPauseSec(sec: Int) = prefs.edit { putInt(K_WATCH_PAUSE, sec.coerceAtLeast(0)) }
     fun setNoteFadeAlpha(a: Float) = prefs.edit { putFloat(K_NOTE_FADE, a.coerceIn(0.15f, 0.8f)) }
+    fun setReminderHour(h: Int) = prefs.edit { putInt(K_REMINDER, h.coerceIn(-1, 23)) }
 
     /** Подставить настройки, вставленные из прокси (Claudex и т.п.). */
     fun apply(c: ProxyConfig) {
@@ -225,6 +229,8 @@ class SettingsRepo(private val context: Context) {
         private const val K_AUTH_MODE = "anthropic_compat_auth"
         private const val K_WATCH_PAUSE = "watch_pause_sec"
         private const val K_NOTE_FADE = "note_fade_alpha"
+        private const val K_REMINDER = "reminder_hour"
+        const val DEFAULT_REMINDER_HOUR = 18
         private const val K_MODEL = "model"
         private const val K_CLEAN_MODEL = "clean_model"
         private const val K_STRICTNESS = "strictness"

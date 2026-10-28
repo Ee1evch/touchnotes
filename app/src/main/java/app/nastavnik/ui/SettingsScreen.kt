@@ -35,6 +35,7 @@ import app.nastavnik.ai.Strictness
 import app.nastavnik.data.BubbleSide
 import app.nastavnik.data.SettingsRepo
 import app.nastavnik.notes.TouchnotesSender
+import app.nastavnik.study.Reminders
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
@@ -71,6 +72,17 @@ fun SettingsScreen(onBack: () -> Unit) {
             )
             Segmented(listOf(0 to "Выкл.", 5 to "через 5 с", 10 to "через 10 с", 20 to "через 20 с"), s.watchPauseSec) {
                 repo.setWatchPauseSec(it)
+            }
+        }
+
+        SectionCard("Повторение") {
+            FieldLabel(
+                "Напоминать о карточках",
+                "Раз в день, только если есть что повторить и сегодня ты ещё не занимался.",
+            )
+            Segmented(listOf(-1 to "Не напоминать", 9 to "в 9:00", 18 to "в 18:00", 21 to "в 21:00"), s.reminderHour) {
+                repo.setReminderHour(it)
+                Reminders.schedule(context)
             }
         }
 

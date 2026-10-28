@@ -8,6 +8,23 @@ import org.junit.Test
 class CleanNoteParserTest {
 
     @Test
+    fun cardsAreTrimmedDedupedAndCapped() {
+        val many = (1..20).joinToString(",") { "{\"q\":\"Вопрос $it\",\"a\":\"Ответ\"}" }
+        val raw = """{"title":"Тема","blocks":[{"type":"p","text":"x"}],"cards":[
+            {"q":"  Что такое ${'$'}\\lim${'$'}?  ","a":" Предел "},
+            {"q":"Что такое ${'$'}\\lim${'$'}?","a":"дубль"},
+            {"q":"Без ответа","a":""},
+            $many]}"""
+        val note = CleanNoteParser.parse(raw)
+        assertEquals(CleanNoteParser.MAX_CARDS, note.cards.size)
+        assertEquals("Что такое ${'$'}\\lim${'$'}?", note.cards[0].q)
+        assertEquals("Предел", note.cards[0].a)
+        assertTrue(note.cards.none { it.q == "Без ответа" })
+        // Старые чистовики без карточек читаются как раньше.
+        assertTrue(CleanNoteParser.fromStoredJson("""{"title":"Т"}""").cards.isEmpty())
+    }
+
+    @Test
     fun parsesJsonWrappedInMarkdownFence() {
         val raw = """
             Вот чистовик:

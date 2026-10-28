@@ -125,6 +125,7 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
     override fun onCreate() {
         super.onCreate()
         running = true
+        MentorTileService.update(this)
         napp = app
         capturer = ScreenCapturer(this)
         startForegroundCompat()
@@ -214,6 +215,7 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
 
     override fun onDestroy() {
         running = false
+        MentorTileService.update(this)
         main.removeCallbacksAndMessages(null)
         if (ready) {
             speech.destroy()
@@ -393,6 +395,7 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
         items += BarItem(QuickAction.NEXT_STEP.short, R.drawable.ic_bulb, color(R.color.menu_hint)) { quick(QuickAction.NEXT_STEP) }
         items += BarItem(QuickAction.FIND_ERROR.short, R.drawable.ic_search, color(R.color.menu_error)) { quick(QuickAction.FIND_ERROR) }
         items += BarItem(QuickAction.THEORY.short, R.drawable.ic_book, color(R.color.menu_theory)) { quick(QuickAction.THEORY) }
+        items += BarItem(QuickAction.SIMILAR.short, R.drawable.ic_refresh, color(R.color.menu_hint)) { quick(QuickAction.SIMILAR) }
         items += BarItem("Спросить…", R.drawable.ic_mic, 0xFFF4F4F6.toInt()) { askBar.show(anchor()) }
         items += BarItem("Чистовик", R.drawable.ic_note, color(R.color.menu_ok)) { startClean() }
         if (overlay.isShowing) {
@@ -427,6 +430,7 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
                     notice("Начинаю новую задачу.")
                 },
                 "История" to { openScreen(MainActivity.SCREEN_HISTORY) },
+                "Повторить карточки" to { openScreen(MainActivity.SCREEN_REVIEW) },
                 "Настройки" to { openSettings() },
                 "Спрятать на 10 минут" to { hideFor(10 * 60 * 1000L) },
                 "Выключить" to { stopSelf() },
@@ -574,6 +578,8 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
     override fun onAllClosed() = mentor.dismiss()
 
     override fun onMore() = quick(QuickAction.NEXT_STEP)
+
+    override fun onSimilar() = quick(QuickAction.SIMILAR)
 
     private fun toggleRegion() {
         regionMode = !regionMode
@@ -906,6 +912,7 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
         startActivity(
             Intent(this, MainActivity::class.java)
                 .putExtra(MainActivity.EXTRA_SCREEN, screen)
+                .putExtra(MainActivity.EXTRA_FROM_OVERLAY, true)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
         )
     }

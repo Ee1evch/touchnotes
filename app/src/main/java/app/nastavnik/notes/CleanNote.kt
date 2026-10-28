@@ -26,6 +26,10 @@ data class NoteBlock(
     val rows: List<List<String>>? = null,
 )
 
+/** Карточка для повторения: вопрос и короткий ответ, формулы в `$…$`. */
+@Serializable
+data class StudyCard(val q: String = "", val a: String = "")
+
 @Serializable
 data class CleanNote(
     val subject: String = "",
@@ -33,6 +37,8 @@ data class CleanNote(
     val blocks: List<NoteBlock> = emptyList(),
     val summary: List<String> = emptyList(),
     val questions: List<String> = emptyList(),
+    /** Карточки «вопрос — ответ» по конспекту: после сохранения попадают в «Повторение». */
+    val cards: List<StudyCard> = emptyList(),
     /** Дата для шапки листа — ставит приложение, а не модель. */
     val date: String? = null,
 )
@@ -47,6 +53,7 @@ class CleanNoteParseException(message: String) : Exception(message)
  */
 @OptIn(ExperimentalSerializationApi::class)
 object CleanNoteParser {
+    const val MAX_CARDS = 12
     val KNOWN_TYPES = setOf("h", "p", "def", "thm", "formula", "steps", "plot", "table", "note")
 
     private val json = Json {
@@ -79,6 +86,11 @@ object CleanNoteParser {
             blocks = note.blocks.filter { it.type in KNOWN_TYPES && it.hasContent() },
             summary = note.summary.filter { it.isNotBlank() },
             questions = note.questions.filter { it.isNotBlank() },
+            cards = note.cards
+                .map { StudyCard(it.q.trim(), it.a.trim()) }
+                .filter { it.q.isNotEmpty() && it.a.isNotEmpty() }
+                .distinctBy { it.q }
+                .take(MAX_CARDS),
         )
         if (cleaned.title.isBlank() && cleaned.blocks.isEmpty()) {
             throw CleanNoteParseException("в JSON нет ни темы, ни блоков")

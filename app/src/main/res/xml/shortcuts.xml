@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Ярлыки по долгому нажатию на значок приложения -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="start"
+        android:enabled="true"
+        android:icon="@drawable/shortcut_start"
+        android:shortcutShortLabel="@string/shortcut_start">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="app.nastavnik"
+            android:targetClass="app.nastavnik.ui.MainActivity">
+            <extra android:name="screen" android:value="start" />
+        </intent>
+    </shortcut>
+    <shortcut
+        android:shortcutId="review"
+        android:enabled="true"
+        android:icon="@drawable/shortcut_review"
+        android:shortcutShortLabel="@string/shortcut_review">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="app.nastavnik"
+            android:targetClass="app.nastavnik.ui.MainActivity">
+            <extra android:name="screen" android:value="review" />
+        </intent>
+    </shortcut>
+    <shortcut
+        android:shortcutId="progress"
+        android:enabled="true"
+        android:icon="@drawable/shortcut_progress"
+        android:shortcutShortLabel="@string/shortcut_progress">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="app.nastavnik"
+            android:targetClass="app.nastavnik.ui.MainActivity">
+            <extra android:name="screen" android:value="progress" />
+        </intent>
+    </shortcut>
+</shortcuts>

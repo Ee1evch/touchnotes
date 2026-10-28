@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Плитка в шторке: искра наставника, одноцветная -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
+    <path android:fillColor="#FFFFFFFF"
+        android:pathData="M12,2.5C12.6,7.6 14.4,9.4 19.5,10C14.4,10.6 12.6,12.4 12,17.5C11.4,12.4 9.6,10.6 4.5,10C9.6,9.4 11.4,7.6 12,2.5z" />
+    <path android:fillColor="#FFFFFFFF"
+        android:pathData="M18,15C18.3,17.2 18.8,17.7 21,18C18.8,18.3 18.3,18.8 18,21C17.7,18.8 17.2,18.3 15,18C17.2,17.7 17.7,17.2 18,15z" />
+</vector>

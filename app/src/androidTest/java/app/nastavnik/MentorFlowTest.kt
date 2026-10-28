@@ -251,6 +251,9 @@ class MentorFlowTest {
         Log.i("MentorFlowTest", "saved: title=${n.title} public=${n.publicPath} pdf=${n.pdfPath}")
         assertTrue(File(n.pdfPath!!).length() > 20_000)
         assertNotNull(n.publicPath)
+        // Карточки из чистовика попали в повторение.
+        val cardCount = runBlocking { ctx.app.db.cards().observeForNote(n.id).first() }
+        assertEquals("карточки не добавились", 5, cardCount)
         device.pressBack()
         scenario.close()
     }

@@ -45,6 +45,9 @@ class AnswerOverlay(baseContext: Context, private val wm: WindowManager, private
         /** «Ещё подсказка» под заметкой. */
         fun onMore()
 
+        /** «Похожая задача» под заметкой с верным решением. */
+        fun onSimilar()
+
         /** Студент закрыл все заметки. */
         fun onAllClosed()
     }
@@ -506,7 +509,7 @@ class AnswerOverlay(baseContext: Context, private val wm: WindowManager, private
             web.evaluateJavascript("Note.set(${JsonPrimitive(text)}, $streaming)", null)
         }
 
-        /** Кнопки под последней заметкой: «Сделать чистовик» или «Ещё подсказка», и «Понятно». */
+        /** Кнопки под последней заметкой: «Ещё подсказка» и «Понятно», а у верного решения — «Похожая задача» и «Сделать чистовик». */
         fun setActions(show: Boolean, done: Boolean) {
             val wasVisible = actions.isVisible
             actions.isVisible = show
@@ -518,8 +521,14 @@ class AnswerOverlay(baseContext: Context, private val wm: WindowManager, private
                     primary.text = "Ещё подсказка"
                     primary.setOnClickListener { listener.onMore() }
                 }
-                secondary.text = "Понятно"
-                secondary.setOnClickListener { clear(); listener.onAllClosed() }
+                if (done) {
+                    // Решено — можно закрепить на похожей задаче; закрыть заметку можно крестиком.
+                    secondary.text = "Похожая задача"
+                    secondary.setOnClickListener { listener.onSimilar() }
+                } else {
+                    secondary.text = "Понятно"
+                    secondary.setOnClickListener { clear(); listener.onAllClosed() }
+                }
             }
             if (wasVisible != show) relayout()
         }

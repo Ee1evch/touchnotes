@@ -14,6 +14,15 @@
         <item name="android:windowAnimationStyle">@android:style/Animation.Dialog</item>
     </style>
 
+    <!-- Окно без интерфейса: только переключает наставника и сразу закрывается -->
+    <style name="Theme.Nastavnik.Invisible" parent="Theme.Nastavnik">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:backgroundDimEnabled">false</item>
+        <item name="android:windowAnimationStyle">@null</item>
+        <item name="android:windowNoTitle">true</item>
+    </style>
+
     <!-- Тема для окон поверх других приложений (контекст сервиса) -->
     <style name="Theme.Nastavnik.Overlay" parent="android:Theme.Material.Light.NoActionBar">
         <item name="android:colorAccent">@color/accent</item>

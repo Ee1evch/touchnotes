@@ -25,6 +25,7 @@
   #t ul, #t ol { margin: 0.25em 0; padding-left: 1.3em; }
   #t code { background: #f1efea; padding: 0 4px; border-radius: 4px; font-size: 0.92em; }
   .math-block { overflow-x: auto; overflow-y: hidden; margin: 0.35em 0; }
+  #t[style*="center"] ul, #t[style*="center"] ol { text-align: left; display: inline-block; }
   .katex-display { margin: 0.25em 0; }
   .katex { font-size: 1.08em; }
   .typing::after {
@@ -57,6 +58,12 @@
     set: function (text, streaming) {
       t.innerHTML = Rich.render(text || '', false);
       t.className = streaming ? 'typing' : '';
+      report();
+    },
+    /* Крупный текст по центру — для карточек повторения. */
+    style: function (sizePx, center) {
+      document.body.style.fontSize = sizePx + 'px';
+      t.style.textAlign = center ? 'center' : '';
       report();
     }
   };

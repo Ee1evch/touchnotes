@@ -14,6 +14,8 @@ import app.nastavnik.data.AppDatabase
 import app.nastavnik.data.AppSettings
 import app.nastavnik.data.SettingsRepo
 import app.nastavnik.session.CleanSession
+import app.nastavnik.study.Reminders
+import app.nastavnik.study.StudyRepo
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.MainScope
 
@@ -32,6 +34,9 @@ class NastavnikApp : Application() {
     /** Живёт, пока живёт процесс: чистовик продолжает сохраняться, даже если экран закрыли. */
     val appScope: CoroutineScope = MainScope()
 
+    /** Карточки повторения и учебные события для «Прогресса». */
+    val study: StudyRepo by lazy { StudyRepo(this) }
+
     /** Чистовик общий для кнопки поверх Touchnotes и экрана предпросмотра. */
     val clean: CleanSession by lazy { CleanSession(this, appScope) }
 
@@ -49,6 +54,7 @@ class NastavnikApp : Application() {
         // WebView рисует только видимую часть страницы.
         WebView.enableSlowWholeDocumentDraw()
         createChannels()
+        Reminders.schedule(this)
     }
 
     private fun createChannels() {
@@ -62,10 +68,16 @@ class NastavnikApp : Application() {
             setShowBadge(false)
         }
         nm.createNotificationChannel(channel)
+        nm.createNotificationChannel(
+            NotificationChannel(CHANNEL_REMINDERS, "Повторение карточек", NotificationManager.IMPORTANCE_DEFAULT).apply {
+                description = "Раз в день вечером, если есть карточки к повторению и ты ещё не занимался"
+            },
+        )
     }
 
     companion object {
         const val CHANNEL_SERVICE = "service"
+        const val CHANNEL_REMINDERS = "reminders"
     }
 }
 

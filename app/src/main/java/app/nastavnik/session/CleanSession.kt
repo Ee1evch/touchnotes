@@ -172,7 +172,7 @@ class CleanSession(private val app: NastavnikApp, private val scope: CoroutineSc
                 val result = PdfExporter(app).export(host, s.json, dir, NoteStorage.fileBase(s.note.title))
                 val subject = s.note.subject.ifBlank { "Конспекты" }
                 val published = withContext(Dispatchers.IO) { storage.publish(result.pdf, result.pngs, subject, s.note.title) }
-                withContext(Dispatchers.IO) {
+                val noteId = withContext(Dispatchers.IO) {
                     app.db.cleanNotes().insert(
                         CleanNoteEntity(
                             conversationId = conversationId?.takeIf { it != 0L },
@@ -186,6 +186,9 @@ class CleanSession(private val app: NastavnikApp, private val scope: CoroutineSc
                         ),
                     )
                 }
+                // Карточки из конспекта сразу попадают в «Повторение».
+                runCatching { app.study.addCards(noteId, s.note) }
+                app.study.record(app.nastavnik.study.Progress.KIND_CLEAN, NoteStorage.plainTitle(s.note.title))
                 val send = TouchnotesSender.sendPdf(app, result.pdf, NoteStorage.plainTitle(s.note.title), settings.sendTarget)
                 val sendMessage = when (send) {
                     is TouchnotesSender.Outcome.Direct -> "Открываю «${send.label}» — подтверди импорт PDF."
@@ -195,7 +198,7 @@ class CleanSession(private val app: NastavnikApp, private val scope: CoroutineSc
                 val where = published.publicPath?.let { "Сохранено: $it" } ?: (published.error ?: "")
                 _state.value = CleanState.Saved(
                     s.shots, s.note, s.json, result.pdf, result.pngs, published.publicPath,
-                    listOf(where, sendMessage).filter { it.isNotBlank() }.joinToString("\n"),
+                    listOf(where, cardsMessage(s.note.cards.size), sendMessage).filter { it.isNotBlank() }.joinToString("\n"),
                 )
             } catch (e: TimeoutCancellationException) {
                 // Ловим раньше CancellationException: это наш таймаут вёрстки, а не отмена.
@@ -207,6 +210,9 @@ class CleanSession(private val app: NastavnikApp, private val scope: CoroutineSc
             }
         }
     }
+
+    private fun cardsMessage(n: Int): String =
+        if (n == 0) "" else "В «Повторение» добавлено $n ${app.nastavnik.study.ruPlural(n, "карточка", "карточки", "карточек")}."
 
     fun resend() {
         val s = _state.value as? CleanState.Saved ?: return

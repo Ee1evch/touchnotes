@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Карточки повторения: две карточки стопкой -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
+    <path android:strokeColor="#FF000000" android:strokeWidth="2" android:strokeLineJoin="round"
+        android:pathData="M8,7L18,7A2,2 0 0,1 20,9L20,18A2,2 0 0,1 18,20L8,20A2,2 0 0,1 6,18L6,9A2,2 0 0,1 8,7z" />
+    <path android:strokeColor="#FF000000" android:strokeWidth="2" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M3,15L3,6A2,2 0 0,1 5,4L15,4" />
+    <path android:strokeColor="#FF000000" android:strokeWidth="2" android:strokeLineCap="round"
+        android:pathData="M10,12L16,12M10,15.5L14,15.5" />
+</vector>

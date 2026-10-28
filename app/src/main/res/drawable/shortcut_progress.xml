@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Значок ярлыка «progress»: значок ic_chart в фирменном цвете на светлом фоне -->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/surface" />
+    <foreground android:drawable="@drawable/shortcut_progress_fg" />
+</adaptive-icon>

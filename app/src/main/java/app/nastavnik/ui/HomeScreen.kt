@@ -40,6 +40,9 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import app.nastavnik.R
 import app.nastavnik.app
+import app.nastavnik.study.Streaks
+import app.nastavnik.study.ruPlural
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.nastavnik.notes.TouchnotesSender
 import app.nastavnik.overlay.BubbleService
 import kotlinx.coroutines.delay
@@ -111,9 +114,30 @@ fun HomeScreen(resumeTick: Int, go: (String) -> Unit) {
             Attention(notReady, "Без этого наставник не сможет ответить.", "Настроить") { go(MainActivity.SCREEN_SETTINGS) }
         }
 
+        // Учебный день: сколько карточек ждёт и сколько дней подряд занимаешься.
+        val db = context.app.db
+        val now = remember(resumeTick) { System.currentTimeMillis() }
+        val due by remember(now) { db.cards().observeDueCount(now) }.collectAsStateWithLifecycle(initialValue = 0)
+        val events by remember { db.activity().observeAll() }.collectAsStateWithLifecycle(initialValue = emptyList())
+        val streak = remember(events, now) {
+            Streaks.current(events.map { Streaks.day(it.at) }.toSet(), Streaks.day(now))
+        }
+        if (due > 0) {
+            Today(due, streak) { go(MainActivity.SCREEN_REVIEW) }
+        }
+
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            Tile(R.drawable.ic_tune, Brand.Accent, "Настройки", "Нейросеть, ключ, кнопка", Modifier.weight(1f)) { go(MainActivity.SCREEN_SETTINGS) }
-            Tile(R.drawable.ic_history, Brand.Theory, "История", "Задачи и чистовики", Modifier.weight(1f)) { go(MainActivity.SCREEN_HISTORY) }
+            Tile(
+                R.drawable.ic_cards, Brand.Accent, "Повторение",
+                if (due > 0) "${due} ${ruPlural(due, "карточка ждёт", "карточки ждут", "карточек ждут")}" else "Карточки из конспектов",
+                Modifier.weight(1f),
+            ) { go(MainActivity.SCREEN_REVIEW) }
+            Tile(
+                R.drawable.ic_flame, Brand.Theory, "Прогресс",
+                if (streak > 0) "$streak ${ruPlural(streak, "день", "дня", "дней")} подряд" else "Серия и темы с ошибками",
+                Modifier.weight(1f),
+            ) { go(MainActivity.SCREEN_PROGRESS) }
+            Tile(R.drawable.ic_history, Brand.InkSoft, "История", "Задачи и чистовики", Modifier.weight(1f)) { go(MainActivity.SCREEN_HISTORY) }
             Tile(R.drawable.ic_note, Brand.Ok, "Чистовик", "Конспект в PDF", Modifier.weight(1f)) { go(MainActivity.SCREEN_CLEAN) }
         }
 
@@ -125,10 +149,10 @@ fun HomeScreen(resumeTick: Int, go: (String) -> Unit) {
                 .padding(horizontal = 20.dp, vertical = 6.dp),
         ) {
             val steps = listOf(
-                "Пиши как обычно" to "Стилус проходит сквозь кнопку наставника — она не мешает.",
-                "Нажми кнопку пальцем" to "Подсказка, поиск ошибки, теория, свой вопрос или чистовик.",
-                "Смотри прямо на записи" to "Нужная строка подсвечена, рядом — заметка с формулами. Её можно двигать, а глазик прячет подсветку.",
-                "Готово — сделай чистовик" to "Аккуратный PDF уйдёт в Touchnotes и сохранится в «Документы/Конспекты».",
+                "Решай сам" to "Пиши в Touchnotes как обычно. Стилус проходит сквозь кнопку наставника — она не мешает.",
+                "Застрял — нажми кнопку пальцем" to "Подсказка, поиск ошибки, теория или свой вопрос. Ответ появится прямо на нужной строке.",
+                "Решил — закрепи" to "«Похожая задача» даст такую же на другие числа, а «Чистовик» превратит записи в аккуратный PDF.",
+                "Повторяй по паре минут" to "Из каждого чистовика получаются карточки. Они возвращаются завтра, через 3 дня, через неделю — к экзамену всё в голове.",
             )
             steps.forEachIndexed { i, (title, text) ->
                 Step(i + 1, title, text)
@@ -218,6 +242,42 @@ private fun Hero(
     }
 }
 
+/** «Сегодня»: карточки ждут повторения — одна кнопка, чтобы начать. */
+@Composable
+private fun Today(due: Int, streak: Int, onReview: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .softCard(RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.surface)
+            .clickable(onClick = onReview)
+            .padding(18.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        Box(
+            Modifier
+                .size(52.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .background(Brand.gradient),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(due.toString(), color = Color.White, style = MaterialTheme.typography.titleLarge)
+        }
+        Column(Modifier.weight(1f)) {
+            Text(
+                "Сегодня: ${ruPlural(due, "карточка", "карточки", "карточек").let { "$due $it" }} на повторение",
+                style = MaterialTheme.typography.titleMedium,
+            )
+            Text(
+                if (streak > 0) "Пара минут — и серия $streak ${ruPlural(streak, "день", "дня", "дней")} продолжится." else "Пара минут — и материал не забудется к экзамену.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        InkButton("Повторить", icon = R.drawable.ic_cards, onClick = onReview)
+    }
+}
+
 /** Карточка «нужно внимание»: что не так и кнопка, чтобы исправить. */
 @Composable
 private fun Attention(title: String, text: String, action: String, onAction: () -> Unit) {
@@ -256,8 +316,9 @@ private fun Tile(icon: Int, tint: Color, title: String, caption: String, modifie
     ) {
         IconBadge(icon, tint)
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(title, style = MaterialTheme.typography.titleMedium)
-            Text(caption, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 1)
+            // Две строки у всех плиток — ряд ровный, даже если подпись короткая.
+            Text(caption, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, minLines = 2, maxLines = 2)
         }
     }
 }
