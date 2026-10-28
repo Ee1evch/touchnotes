@@ -545,13 +545,15 @@ class AnswerOverlay(baseContext: Context, private val wm: WindowManager, private
             }
             refreshMore()
             setText(if (value) "**$shortText**\n\n${detailText.orEmpty()}" else shortText, false)
+            fitActions()
             relayout()
+            publish()
         }
 
         private fun refreshMore() {
             val has = detailText != null
             more.isVisible = has
-            more.text = if (expanded) "Коротко  ˄" else "Подробнее  ˅"
+            more.text = if (expanded) "Коротко ↑" else "Подробнее ↓"
             updateActionsRow()
         }
 
@@ -559,10 +561,25 @@ class AnswerOverlay(baseContext: Context, private val wm: WindowManager, private
             val visible = showActions || detailText != null
             primary.isVisible = showActions
             secondary.isVisible = showActions && secondary.text.isNotEmpty()
-            if (actions.isVisible != visible) {
+            val widened = fitActions()
+            if (actions.isVisible != visible || widened) {
                 actions.isVisible = visible
                 relayout()
+                publish()
             }
+        }
+
+        /** Заметка не уже, чем нужно кнопкам внизу: «Подробнее», «Похожая задача», «Сделать чистовик» — целиком. */
+        private fun fitActions(): Boolean {
+            val p = params ?: return false
+            fun w(v: TextView, extra: Float) = if (v.isVisible && v.text.isNotEmpty()) v.paint.measureText(v.text.toString()).toInt() + dp(extra) else 0
+            val i = bg.insets()
+            val need = w(more, 14f) + w(secondary, 34f) + w(primary, 28f) + 2 * padH + i[0] + i[2] + dp(8f)
+            val target = maxOf(if (expanded) wideW else compactW, need)
+            if (p.width >= target) return false
+            if (side == Side.LEFT) p.x -= target - p.width
+            p.width = target
+            return true
         }
 
         private fun push(text: String, streaming: Boolean) {

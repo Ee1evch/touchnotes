@@ -212,7 +212,7 @@ class MentorFlowTest {
         SystemClock.sleep(1500)
         screenshot("note_expanded")
         val wide = AnswerOverlay.shownNotes.single()
-        assertTrue("заметка не раскрылась: $narrow -> $wide", wide.width > narrow.width && wide.height > narrow.height)
+        assertTrue("заметка не раскрылась: $narrow -> $wide", wide.width >= narrow.width && wide.height > narrow.height)
         device.findObject(By.textStartsWith("Коротко"))!!.click()
         SystemClock.sleep(800)
 
