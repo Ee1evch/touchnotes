@@ -254,7 +254,10 @@ class SmokeTest {
 
         // 5. Режим «Выделить область» из меню долгого нажатия: обводим прямоугольник — уходит только он.
         device.findObject(By.desc("Наставник").pkg(pkg)).longClick()
-        device.wait(Until.findObject(By.text("Выделять область перед вопросом")), 4000)!!.click()
+        device.wait(Until.findObject(By.text("Выделять область перед вопросом")), 4000)
+        SystemClock.sleep(500)
+        screenshot("menu_long")
+        device.findObject(By.text("Выделять область перед вопросом"))!!.click()
         SystemClock.sleep(600)
         shot.delete()
         tapBubble()
