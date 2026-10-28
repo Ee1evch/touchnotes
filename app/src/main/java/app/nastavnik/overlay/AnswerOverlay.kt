@@ -489,6 +489,7 @@ class AnswerOverlay(baseContext: Context, private val wm: WindowManager, private
             keepOnScreen(p, area)
             updateTail()
             if (root.isAttachedToWindow) runCatching { wm.updateViewLayout(root, p) }
+            publish()
         }
 
         /** Заметка всегда целиком на экране; если из-за этого она отошла от места — хвостик убираем. */
@@ -576,6 +577,8 @@ class AnswerOverlay(baseContext: Context, private val wm: WindowManager, private
             val i = bg.insets()
             val need = w(more, 14f) + w(secondary, 34f) + w(primary, 28f) + 2 * padH + i[0] + i[2] + dp(8f)
             val target = maxOf(if (expanded) wideW else compactW, need)
+            // Раскрытая заметка не бывает уже свёрнутой.
+            if (!expanded) wideW = maxOf(wideW, target)
             if (p.width >= target) return false
             if (side == Side.LEFT) p.x -= target - p.width
             p.width = target
