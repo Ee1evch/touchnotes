@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Вставить из буфера: планшет с зажимом -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
+    <path android:strokeColor="#FF000000" android:strokeWidth="2" android:strokeLineJoin="round"
+        android:pathData="M8,5L6.5,5A1.5,1.5 0 0,0 5,6.5L5,19.5A1.5,1.5 0 0,0 6.5,21L17.5,21A1.5,1.5 0 0,0 19,19.5L19,6.5A1.5,1.5 0 0,0 17.5,5L16,5" />
+    <path android:strokeColor="#FF000000" android:strokeWidth="2" android:strokeLineJoin="round"
+        android:pathData="M9.5,3L14.5,3A1,1 0 0,1 15.5,4L15.5,6A1,1 0 0,1 14.5,7L9.5,7A1,1 0 0,1 8.5,6L8.5,4A1,1 0 0,1 9.5,3z" />
+    <path android:strokeColor="#FF000000" android:strokeWidth="2" android:strokeLineCap="round"
+        android:pathData="M9,12L15,12M9,16L13,16" />
+</vector>

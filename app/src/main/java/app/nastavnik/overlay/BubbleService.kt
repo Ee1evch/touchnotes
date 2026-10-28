@@ -9,7 +9,6 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.content.res.Configuration
-import android.graphics.Color
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -205,7 +204,6 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
         settings?.let { s -> if (bubbleAdded) placeBubble(s.bubbleSide, s.bubbleYFraction) }
         menu.dismiss()
         if (barOwner == BarOwner.ACTIONS) bar.dismiss()
-        // Повернули планшет — записи легли иначе: отметки прячем, заметки остаются (в пределах экрана).
         // Повернули планшет — выделения прячем; как только картинка успокоится, найдём строки заново.
         if (overlay.isShowing) {
             overlay.setSuspended(true)
@@ -520,7 +518,12 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
                 dismissBar(BarOwner.STATUS)
                 if (shownErrorSeq != a.seq) {
                     shownErrorSeq = a.seq
-                    val items = if (a.error?.needsSettings == true) listOf(BarItem("Настройки", primary = true) { bar.dismiss(); openSettings() }) else emptyList()
+                    val items = when {
+                        a.error?.needsSettings == true -> listOf(BarItem("Настройки", primary = true) { bar.dismiss(); openSettings() })
+                        // Сеть моргнула, сервис перегружен — повторить тот же вопрос одним нажатием.
+                        a.kind != AskKind.WATCH -> listOf(BarItem("Повторить", primary = true) { bar.dismiss(); ask(a.question, a.kind) })
+                        else -> emptyList()
+                    }
                     message(BarOwner.ERROR, a.errorText, items)
                 }
             }
@@ -531,7 +534,7 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
         }
         if (s.silentOkAt > lastSilentOk) {
             lastSilentOk = s.silentOkAt
-            bubble.flash(Color.parseColor("#34A853"))
+            bubble.flash(color(R.color.kind_ok))
         }
         val se = s.silentError
         if (se != null && se !== shownSilentError) {
@@ -727,6 +730,8 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
 
     // ---------------- работа в фоне ----------------
 
+    private val power by lazy { getSystemService(PowerManager::class.java) }
+
     /** Все наши окна на экране — при сравнении кадров их не учитываем. */
     private fun ourRects(): List<IRect> =
         overlay.occupiedRects() + listOfNotNull(bubbleRect(), bar.rect(), askBar.rect())
@@ -738,59 +743,70 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
      * — если включена фоновая проверка: студент писал и остановился — тихо проверяет решение.
      */
     private suspend fun watchLoop() {
-        val power = getSystemService(PowerManager::class.java)
         while (lifecycleScope.isActive) {
             delay(TICK_MS)
-            val s = settings ?: continue
-            val tracking = overlay.isShowing && trackRef != null
-            val watching = s.watchPauseSec > 0 && shownSilentError == null
-            if ((!tracking && !watching) || !capturer.isActive || capturing || askBar.isShowing || !power.isInteractive) {
+            // Сбой одного кадра (экран повернули посреди снимка и т. п.) не должен ронять наставника.
+            try {
+                watchStep()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (BuildConfig.DEBUG) Log.w(TAG, "watch", e)
                 prevThumb = null
-                continue
             }
-            val thumb = grabThumb() ?: continue
-            val rects = ourRects()
-            // Строка состояния и панель навигации не двигаются вместе со страницей.
-            val area = OverlayWindows.contentRect(this)
-            val mask = thumb.maskOf(rects)
-            val ref = trackRef
-            if (overlay.isShowing && ref != null) {
-                val motion = withContext(Dispatchers.Default) { ScreenMotion.estimate(ref, thumb, mask, thumb.rowMaskOf(rects), area.top, area.bottom) }
-                if (BuildConfig.DEBUG) Log.i(TAG, "track: $motion")
-                val cells = thumb.cols * thumb.rows
-                when (val m = motion) {
-                    is Motion.Moved -> {
-                        relocateWanted = false
-                        overlay.setSuspended(false)
-                        overlay.setOffset(m.dx, m.dy)
-                    }
-                    // Почти ничего не изменилось (дописали пару слов) — всё на месте.
-                    is Motion.Same -> if (m.changedCells <= cells * RELOCATE_CHANGE) {
-                        relocateWanted = false
-                        overlay.setSuspended(false)
-                        overlay.setOffset(0, 0)
-                    } else {
-                        relocateWanted = true
-                    }
-                    // Не просто прокрутка: увеличили, уменьшили, другая страница. Прячем выделения и ищем строки заново.
-                    Motion.Replaced -> {
-                        overlay.setSuspended(true)
-                        relocateWanted = true
-                    }
-                }
-                // Ищем, когда картинка успокоилась (жест увеличения закончился) и с прошлой попытки что-то поменялось.
-                val prevT = prevTrackThumb
-                val stable = prevT != null && ScreenMotion.changedCells(prevT, thumb, mask) <= 2
-                val last = lastRelocThumb
-                val changedSinceTry = last == null || ScreenMotion.changedCells(last, thumb, mask) > cells / 100
-                if (relocateWanted && stable && changedSinceTry) {
-                    lastRelocThumb = thumb
-                    relocateMarks()
-                }
-                prevTrackThumb = thumb
-            }
-            if (watching) watchTick(thumb, mask, s.watchPauseSec * 1000L)
         }
+    }
+
+    private suspend fun watchStep() {
+        val s = settings ?: return
+        val tracking = overlay.isShowing && trackRef != null
+        val watching = s.watchPauseSec > 0 && shownSilentError == null
+        if ((!tracking && !watching) || !capturer.isActive || capturing || askBar.isShowing || !power.isInteractive) {
+            prevThumb = null
+            return
+        }
+        val thumb = grabThumb() ?: return
+        val rects = ourRects()
+        // Строка состояния и панель навигации не двигаются вместе со страницей.
+        val area = OverlayWindows.contentRect(this)
+        val mask = thumb.maskOf(rects)
+        val ref = trackRef
+        if (overlay.isShowing && ref != null) {
+            val motion = withContext(Dispatchers.Default) { ScreenMotion.estimate(ref, thumb, mask, thumb.rowMaskOf(rects), area.top, area.bottom) }
+            if (BuildConfig.DEBUG) Log.i(TAG, "track: $motion")
+            val cells = thumb.cols * thumb.rows
+            when (val m = motion) {
+                is Motion.Moved -> {
+                    relocateWanted = false
+                    overlay.setSuspended(false)
+                    overlay.setOffset(m.dx, m.dy)
+                }
+                // Почти ничего не изменилось (дописали пару слов) — всё на месте.
+                is Motion.Same -> if (m.changedCells <= cells * RELOCATE_CHANGE) {
+                    relocateWanted = false
+                    overlay.setSuspended(false)
+                    overlay.setOffset(0, 0)
+                } else {
+                    relocateWanted = true
+                }
+                // Не просто прокрутка: увеличили, уменьшили, другая страница. Прячем выделения и ищем строки заново.
+                Motion.Replaced -> {
+                    overlay.setSuspended(true)
+                    relocateWanted = true
+                }
+            }
+            // Ищем, когда картинка успокоилась (жест увеличения закончился) и с прошлой попытки что-то поменялось.
+            val prevT = prevTrackThumb
+            val stable = prevT != null && ScreenMotion.changedCells(prevT, thumb, mask) <= 2
+            val last = lastRelocThumb
+            val changedSinceTry = last == null || ScreenMotion.changedCells(last, thumb, mask) > cells / 100
+            if (relocateWanted && stable && changedSinceTry) {
+                lastRelocThumb = thumb
+                relocateMarks()
+            }
+            prevTrackThumb = thumb
+        }
+        if (watching) watchTick(thumb, mask, s.watchPauseSec * 1000L)
     }
 
     /**

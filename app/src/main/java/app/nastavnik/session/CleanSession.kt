@@ -90,7 +90,14 @@ class CleanSession(private val app: NastavnikApp, private val scope: CoroutineSc
         if (shots.size >= CleanState.MAX_SHOTS) return
         _state.value = CleanState.Collecting(shots, capturing = true)
         job = scope.launch {
-            _state.value = when (val r = capture()) {
+            val r = try {
+                capture()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                ShotResult.Failed("Не удалось сделать снимок экрана. Попробуй ещё раз.")
+            }
+            _state.value = when (r) {
                 is ShotResult.Ok -> CleanState.Collecting(shots + r.jpeg)
                 is ShotResult.Cancelled -> if (shots.isEmpty()) CleanState.Idle else CleanState.Collecting(shots)
                 is ShotResult.Failed -> if (shots.isEmpty()) CleanState.Failed(emptyList(), r.message) else CleanState.Collecting(shots, message = r.message)
@@ -143,6 +150,12 @@ class CleanSession(private val app: NastavnikApp, private val scope: CoroutineSc
                 }
             } catch (e: AiException) {
                 _state.value = CleanState.Failed(shots, e.userMessage, needsSettings = e.needsSettings)
+                return
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Неожиданный сбой не должен ронять приложение: снимки остаются, можно пересобрать.
+                _state.value = CleanState.Failed(shots, "Что-то пошло не так (${e.message ?: e.javaClass.simpleName}). Нажми «Пересобрать».")
                 return
             }
         }

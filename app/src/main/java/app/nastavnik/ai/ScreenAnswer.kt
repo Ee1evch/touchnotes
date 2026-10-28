@@ -52,6 +52,8 @@ data class ScreenAnswer(
     val done: Boolean,
     /** `[[ВЕРНО]]` — тихая проверка не нашла ошибок, показывать нечего. */
     val allGood: Boolean,
+    /** `@@ тема …` — короткое название задачи для истории. */
+    val topic: String? = null,
 )
 
 /**
@@ -74,6 +76,7 @@ object ScreenAnswerParser {
     private val rangeAtStart = Regex("""^[\s:\-]*(\d+)\s*[-–—]\s*(\d+)(?![\d.,])""")
     // Дробная часть — только через точку: запятая в «(10,10,20,20)» разделяет числа.
     private val numberRe = Regex("""-?\d+(?:\.\d+)?""")
+    private val topicRe = Regex("""^\s*@@\s*(?:тема|topic)(?!\p{L})\s*[:\-—]?\s*(.*)$""", RegexOption.IGNORE_CASE)
     private val allGoodRegex = Regex("""\[\[\s*ВЕРНО\s*\]\]""", RegexOption.IGNORE_CASE)
 
     private class Spec(val lines: IntRange?, val after: Int?, val coords: List<Float>?)
@@ -119,6 +122,7 @@ object ScreenAnswerParser {
         var lines: IntRange? = null
         var after: Int? = null
         val body = StringBuilder()
+        var topic: String? = null
         fun flush() {
             val t = body.toString().trim()
             if (kind != null || t.isNotEmpty()) {
@@ -127,6 +131,11 @@ object ScreenAnswerParser {
             body.setLength(0)
         }
         for (line in text.lines()) {
+            val t = topicRe.matchEntire(line)
+            if (t != null) {
+                topic = t.groupValues[1].trim().trim('«', '»', '"', '.').take(80).ifBlank { null }
+                continue
+            }
             val m = header.matchEntire(line)
             val k = m?.let { MarkKind.parse(it.groupValues[1]) }
             val spec = if (k != null) parseSpec(m!!.groupValues[2]) else null
@@ -143,7 +152,7 @@ object ScreenAnswerParser {
         flush()
         // Пустые заметки, кроме последней недописанной, не нужны.
         val cleaned = marks.filterIndexed { i, mk -> mk.text.isNotEmpty() || (streaming && i == marks.lastIndex) }
-        return ScreenAnswer(cleaned, done.done, allGood && cleaned.none { it.kind == MarkKind.ERROR })
+        return ScreenAnswer(cleaned, done.done, allGood && cleaned.none { it.kind == MarkKind.ERROR }, topic)
     }
 
     /** Текст для истории и для следующих запросов: без координат, с подписями. */

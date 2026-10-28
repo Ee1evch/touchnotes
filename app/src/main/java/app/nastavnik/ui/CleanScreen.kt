@@ -3,15 +3,19 @@ package app.nastavnik.ui
 import android.webkit.WebView
 import android.widget.FrameLayout
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.material3.Button
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -19,10 +23,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import app.nastavnik.R
 import app.nastavnik.app
 import app.nastavnik.notes.CleanView
 import app.nastavnik.notes.NoteStorage
@@ -32,8 +38,9 @@ import app.nastavnik.session.CleanState
  * Предпросмотр и сохранение чистовика. Снимки собираются кнопкой поверх Touchnotes,
  * а сюда приложение переходит само, когда нейросеть оформила конспект.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun CleanScreen(onClose: () -> Unit, onSettings: () -> Unit) {
+fun CleanScreen(onClose: () -> Unit, onSettings: () -> Unit, onExample: () -> Unit) {
     val context = LocalContext.current
     val clean = context.app.clean
     val state by clean.state.collectAsStateWithLifecycle()
@@ -52,57 +59,84 @@ fun CleanScreen(onClose: () -> Unit, onSettings: () -> Unit) {
     }
     val title = when (s) {
         is CleanState.Preview -> NoteStorage.plainTitle(s.note.title).ifBlank { "Чистовик" }
-        is CleanState.Saved -> "Готово: " + NoteStorage.plainTitle(s.note.title)
+        is CleanState.Saving -> NoteStorage.plainTitle(s.note.title).ifBlank { "Чистовик" }
+        is CleanState.Saved -> NoteStorage.plainTitle(s.note.title).ifBlank { "Чистовик" }
         is CleanState.Failed -> "Не получилось"
         is CleanState.Generating -> "Собираю чистовик…"
         else -> "Чистовик"
     }
 
-    ScreenScaffold(title = title, onBack = onClose, scrollable = false) {
+    ScreenScaffold(title = title, onBack = onClose, scrollable = json == null) {
+        if (s == CleanState.Idle) {
+            IdleClean(onExample)
+            return@ScreenScaffold
+        }
+        val (icon, tint) = when (s) {
+            is CleanState.Saved -> R.drawable.ic_note to Brand.Ok
+            is CleanState.Failed -> R.drawable.ic_close to Brand.Error
+            else -> R.drawable.ic_sparkle to Brand.Accent
+        }
         val message = when (s) {
-            CleanState.Idle -> "Чистовика сейчас нет. Нажми на кнопку наставника поверх Touchnotes → «Чистовик»."
+            CleanState.Idle -> ""
             is CleanState.Collecting -> "Снимков: ${s.shots.size} из ${CleanState.MAX_SHOTS}. Добавлять экраны можно кнопкой наставника поверх Touchnotes."
             is CleanState.Generating -> "Нейросеть оформляет конспект по снимкам (${s.shots.size}). Обычно это до минуты." +
                 if (s.retry) "\nПервый ответ не разобрался — пробую ещё раз." else ""
-            is CleanState.Preview -> "Проверь предпросмотр. «Сохранить» — PDF и PNG в «Документы/Конспекты» и отправка в Touchnotes."
+            is CleanState.Preview -> "Проверь, всё ли на месте. «Сохранить» сделает PDF и картинки в «Документы/Конспекты» и отправит конспект в Touchnotes."
             is CleanState.Saving -> "Сохраняю PDF и картинки…"
             is CleanState.Saved -> s.sendMessage
             is CleanState.Failed -> s.message
         }
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            if (s is CleanState.Generating || s is CleanState.Saving) CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.5.dp)
-            Text(message, style = MaterialTheme.typography.bodyMedium)
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            when (s) {
-                is CleanState.Collecting -> {
-                    Button(enabled = s.shots.isNotEmpty() && !s.capturing, onClick = { clean.build() }) { Text("Собрать чистовик") }
-                    TextButton(onClick = { clean.cancel(); onClose() }) { Text("Отмена") }
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .softCard(color = MaterialTheme.colorScheme.surface)
+                .padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                if (s is CleanState.Generating || s is CleanState.Saving) {
+                    Box(Modifier.size(42.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(Modifier.size(28.dp), strokeWidth = 3.dp, color = Brand.Accent)
+                    }
+                } else {
+                    IconBadge(icon, tint)
                 }
-                is CleanState.Generating -> TextButton(onClick = { clean.cancel(); onClose() }) { Text("Отмена") }
-                is CleanState.Preview -> {
-                    Button(enabled = host != null, onClick = { host?.let { clean.save(it, conversationId) } }) { Text("Сохранить") }
-                    OutlinedButton(onClick = { clean.build() }) { Text("Пересобрать") }
-                    TextButton(onClick = { clean.cancel(); onClose() }) { Text("Отмена") }
+                Text(message, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+            }
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                when (s) {
+                    is CleanState.Collecting -> {
+                        InkButton("Собрать чистовик", enabled = s.shots.isNotEmpty() && !s.capturing) { clean.build() }
+                        SoftButton("Отмена") { clean.cancel(); onClose() }
+                    }
+                    is CleanState.Generating -> SoftButton("Отмена") { clean.cancel(); onClose() }
+                    is CleanState.Preview -> {
+                        InkButton("Сохранить", enabled = host != null, icon = R.drawable.ic_share) { host?.let { clean.save(it, conversationId) } }
+                        SoftButton("Пересобрать", icon = R.drawable.ic_refresh) { clean.build() }
+                        SoftButton("Отмена") { clean.cancel(); onClose() }
+                    }
+                    is CleanState.Saving -> InkButton("Сохранить", enabled = false) {}
+                    is CleanState.Saved -> {
+                        InkButton("Готово") { clean.cancel(); onClose() }
+                        SoftButton("Отправить ещё раз", icon = R.drawable.ic_share) { clean.resend() }
+                        SoftButton("Картинками", icon = R.drawable.ic_image) { clean.sendPngs() }
+                    }
+                    is CleanState.Failed -> {
+                        if (s.shots.isNotEmpty()) InkButton("Пересобрать", icon = R.drawable.ic_refresh) { clean.build() }
+                        if (s.note != null) SoftButton("К предпросмотру") { clean.backToPreview() }
+                        if (s.needsSettings) SoftButton("Настройки", icon = R.drawable.ic_tune, onClick = onSettings)
+                        SoftButton("Отмена") { clean.cancel(); onClose() }
+                    }
+                    CleanState.Idle -> Unit
                 }
-                is CleanState.Saving -> Button(enabled = false, onClick = {}) { Text("Сохранить") }
-                is CleanState.Saved -> {
-                    Button(onClick = { clean.resend() }) { Text("Отправить ещё раз") }
-                    OutlinedButton(onClick = { clean.sendPngs() }) { Text("Отправить картинками") }
-                    TextButton(onClick = { clean.cancel(); onClose() }) { Text("Закрыть") }
-                }
-                is CleanState.Failed -> {
-                    if (s.shots.isNotEmpty()) Button(onClick = { clean.build() }) { Text("Пересобрать") }
-                    if (s.note != null) OutlinedButton(onClick = { clean.backToPreview() }) { Text("К предпросмотру") }
-                    if (s.needsSettings) OutlinedButton(onClick = onSettings) { Text("Настройки") }
-                    TextButton(onClick = { clean.cancel(); onClose() }) { Text("Отмена") }
-                }
-                CleanState.Idle -> TextButton(onClick = onClose) { Text("Закрыть") }
             }
         }
         if (json != null) {
             AndroidView(
-                modifier = Modifier.fillMaxWidth().weight(1f),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .softCard(RoundedCornerShape(24.dp), 10.dp, Color(0xFFECE9E3)),
                 factory = { ctx ->
                     FrameLayout(ctx).also { frame ->
                         val web = WebView(ctx)
@@ -119,5 +153,39 @@ fun CleanScreen(onClose: () -> Unit, onSettings: () -> Unit) {
                 },
             )
         }
+    }
+}
+
+/** Чистовика сейчас нет: как его сделать и пример без запроса к нейросети. */
+@Composable
+private fun IdleClean(onExample: () -> Unit) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .softCard(color = MaterialTheme.colorScheme.surface)
+            .padding(20.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        IconBadge(R.drawable.ic_note, Brand.Ok, 52)
+        Text("Аккуратный конспект из твоих записей", style = MaterialTheme.typography.headlineSmall)
+        Text(
+            "Нейросеть перепишет рукописные записи начисто: заголовки, определения, формулы, шаги решения и графики. " +
+                "Ничего не добавит от себя без пометки и не исправит ошибки молча.",
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        val steps = listOf(
+            "Открой конспект в Touchnotes и нажми кнопку наставника → «Чистовик».",
+            "Конспект длиннее экрана? Прокрути и нажми «+ Экран» — до ${CleanState.MAX_SHOTS} снимков.",
+            "Нажми «Собрать», проверь предпросмотр и сохрани: PDF уйдёт в Touchnotes.",
+        )
+        steps.forEachIndexed { i, text ->
+            Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                NumberBadge(i + 1)
+                Text(text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+            }
+        }
+        InkButton("Посмотреть пример", icon = R.drawable.ic_open, onClick = onExample)
     }
 }

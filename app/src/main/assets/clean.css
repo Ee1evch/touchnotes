@@ -32,7 +32,7 @@ body {
   -webkit-text-size-adjust: 100%;
   -webkit-font-smoothing: antialiased;
 }
-body.preview { background: #e6e9f0; padding: 12px 0 24px; }
+body.preview { background: #ece9e3; padding: 12px 0 24px; }
 body.export { background: #fff; }
 
 #staging { position: absolute; left: -10000px; top: 0; width: calc(var(--page-w) - 2 * var(--pad-side)); visibility: hidden; }

@@ -77,7 +77,7 @@ class MentorFlowTest {
             spec = "стр ${line.number}"
             Log.i("MentorFlowTest", "target=$t -> line ${line.number} (${line.left},${line.top})-(${line.right},${line.bottom}) of ${lines.size}")
         }
-        return "@@ ok $spec\n" +
+        return "@@ тема Исследование функции\n@@ ok $spec\n" +
             "Верно! Производная \$f'(x) = 3x^2 - 3\$ найдена правильно, и точки \$x = \\pm 1\$ тоже.\n\n" +
             "\$\$f(-1) = 2,\\quad f(1) = -2\$\$\n[[ГОТОВО]]"
     }
@@ -222,6 +222,9 @@ class MentorFlowTest {
         val system = (first["system"] as JsonPrimitive).content
         assertTrue(system.contains("Ты — наставник"))
         assertTrue(system.contains("в пикселях"))
+        // Тема из ответа становится названием задачи в истории.
+        val conv = runBlocking { ctx.app.db.conversations().get(ctx.app.settings.load().activeConversationId) }
+        assertEquals("задача не названа по теме", "Исследование функции", conv?.title)
 
         // Чистовик: снимок → «Собрать» → предпросмотр открывается сам.
         cleanBtn.click()

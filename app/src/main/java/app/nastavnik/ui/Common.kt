@@ -24,8 +24,11 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -38,6 +41,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -132,12 +136,21 @@ fun FieldLabel(text: String, hint: String? = null) {
     }
 }
 
-/** Главная кнопка-пилюля. [light] — белая, для тёмной карточки. */
+/** Главная кнопка-пилюля. [light] — белая, для тёмной карточки; [danger] — красная, для удаления. */
 @Composable
-fun InkButton(text: String, modifier: Modifier = Modifier, enabled: Boolean = true, light: Boolean = false, icon: Int? = null, onClick: () -> Unit) {
+fun InkButton(
+    text: String,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    light: Boolean = false,
+    danger: Boolean = false,
+    icon: Int? = null,
+    onClick: () -> Unit,
+) {
     val bg = when {
-        !enabled -> Color(0xFF9A9AA2)
+        !enabled -> Color(0xFFB9B7BF)
         light -> Color.White
+        danger -> Brand.Error
         else -> Brand.Ink
     }
     val fg = if (light && enabled) Brand.Ink else Color.White
@@ -293,5 +306,108 @@ fun RadioRow(selected: Boolean, label: String, hint: String? = null, onClick: ()
             Text(label, style = MaterialTheme.typography.bodyLarge)
             if (hint != null) Text(hint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
+    }
+}
+
+/** Поле ввода в общем стиле: скруглённое, с фирменной рамкой в фокусе. */
+@Composable
+fun AppTextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String,
+    modifier: Modifier = Modifier,
+    placeholder: String? = null,
+    keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
+    visualTransformation: VisualTransformation = VisualTransformation.None,
+    trailingIcon: (@Composable () -> Unit)? = null,
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        label = { Text(label) },
+        placeholder = placeholder?.let { { Text(it) } },
+        singleLine = true,
+        keyboardOptions = keyboardOptions,
+        visualTransformation = visualTransformation,
+        trailingIcon = trailingIcon,
+        shape = RoundedCornerShape(16.dp),
+        colors = OutlinedTextFieldDefaults.colors(
+            unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            focusedContainerColor = MaterialTheme.colorScheme.surface,
+        ),
+        modifier = modifier.fillMaxWidth(),
+    )
+}
+
+/** Небольшая кнопка-«таблетка»: варианты адреса, второстепенные действия в строке. */
+@Composable
+fun ChipButton(text: String, selected: Boolean = false, enabled: Boolean = true, onClick: () -> Unit) {
+    val bg = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainer
+    val fg = when {
+        !enabled -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+        selected -> MaterialTheme.colorScheme.primary
+        else -> MaterialTheme.colorScheme.onSurface
+    }
+    Box(
+        Modifier
+            .heightIn(min = 40.dp)
+            .clip(CircleShape)
+            .background(bg)
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(text, style = MaterialTheme.typography.labelMedium, color = fg, maxLines = 1)
+    }
+}
+
+/** Текстовая ссылка фирменного цвета. */
+@Composable
+fun LinkText(text: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    Text(
+        text,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = modifier
+            .clip(CircleShape)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 4.dp, vertical = 8.dp),
+    )
+}
+
+/** Короткий итог действия: зелёный — получилось, красный — нет, серый — просто сообщение. */
+enum class Tone { OK, ERROR, INFO }
+
+@Composable
+fun StatusLine(text: String, tone: Tone) {
+    val (bg, fg) = when (tone) {
+        Tone.OK -> Brand.OkSoft to Brand.Ok
+        Tone.ERROR -> Brand.ErrorSoft to Color(0xFFB4232A)
+        Tone.INFO -> MaterialTheme.colorScheme.surfaceContainer to MaterialTheme.colorScheme.onSurface
+    }
+    Text(
+        text,
+        style = MaterialTheme.typography.bodyMedium,
+        color = fg,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(bg)
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+    )
+}
+
+/** Номер шага в скруглённом квадрате фирменного цвета. */
+@Composable
+fun NumberBadge(n: Int) {
+    Box(
+        Modifier
+            .size(30.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(MaterialTheme.colorScheme.primaryContainer),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(n.toString(), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.titleSmall)
     }
 }

@@ -1,11 +1,9 @@
 package app.nastavnik.ui
 
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.Typography
-import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Brush
@@ -76,34 +74,6 @@ private val Light = lightColorScheme(
     onErrorContainer = Color(0xFF8E1F24),
 )
 
-private val Dark = darkColorScheme(
-    primary = Color(0xFF8B7FFF),
-    onPrimary = Color(0xFF160F5C),
-    primaryContainer = Color(0xFF2B2470),
-    onPrimaryContainer = Color(0xFFE3E0FF),
-    secondary = Color(0xFFF4F4F6),
-    onSecondary = Brand.Ink,
-    secondaryContainer = Color(0xFF26262D),
-    onSecondaryContainer = Color(0xFFF4F4F6),
-    tertiary = Color(0xFF5FD49A),
-    background = Color(0xFF0F0F12),
-    onBackground = Color(0xFFF4F4F6),
-    surface = Color(0xFF1A1A1F),
-    onSurface = Color(0xFFF4F4F6),
-    surfaceVariant = Color(0xFF24242B),
-    onSurfaceVariant = Color(0xFFA3A2AB),
-    surfaceContainerLowest = Color(0xFF1A1A1F),
-    surfaceContainerLow = Color(0xFF1C1C21),
-    surfaceContainer = Color(0xFF1F1F25),
-    surfaceContainerHigh = Color(0xFF26262D),
-    surfaceContainerHighest = Color(0xFF2E2E36),
-    outline = Color(0xFF45454E),
-    outlineVariant = Color(0xFF2C2C33),
-    error = Color(0xFFFF6369),
-    errorContainer = Color(0xFF3B1517),
-    onErrorContainer = Color(0xFFFFDAD9),
-)
-
 private fun t(size: Int, line: Int, weight: FontWeight, tracking: Double = 0.0) =
     TextStyle(fontFamily = Onest, fontSize = size.sp, lineHeight = line.sp, fontWeight = weight, letterSpacing = tracking.sp)
 
@@ -123,10 +93,14 @@ private val AppTypography = Typography(
     labelSmall = t(12, 16, FontWeight.SemiBold, 0.4),
 )
 
+/**
+ * Приложение всегда светлое, как бумага: заметки поверх Touchnotes, чистовик и PDF тоже светлые,
+ * и тёмные экраны между ними выглядели бы чужими.
+ */
 @Composable
 fun NastavnikTheme(content: @Composable () -> Unit) {
     MaterialTheme(
-        colorScheme = if (isSystemInDarkTheme()) Dark else Light,
+        colorScheme = Light,
         typography = AppTypography,
         shapes = Shapes(
             extraSmall = RoundedCornerShape(10.dp),

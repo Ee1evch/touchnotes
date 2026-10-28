@@ -89,6 +89,22 @@ class ScreenAnswerParserTest {
     }
 
     @Test
+    fun topicLineNamesTheTaskAndIsNotShown() {
+        val a = ScreenAnswerParser.parse("@@ тема Экстремумы функции\n@@ error стр 2\nПроверь знак.", CoordMode.PIXELS_XY, 1000, 800)
+        assertEquals("Экстремумы функции", a.topic)
+        assertEquals(1, a.marks.size)
+        assertEquals("Проверь знак.", a.marks[0].text)
+        val b = ScreenAnswerParser.parse("@@ topic: «Пределы».\n@@ hint после 3\nЧто будет при x → 0?", CoordMode.PIXELS_XY, 1000, 800)
+        assertEquals("Пределы", b.topic)
+        // Недописанная строка темы не показывается заметкой.
+        val c = ScreenAnswerParser.parse("@@ тема Произв", CoordMode.PIXELS_XY, 1000, 800, streaming = true)
+        assertTrue(c.marks.isEmpty())
+        // Слово, начинающееся с «тема», — не тема.
+        val d = ScreenAnswerParser.parse("@@ note\n@@ тематика без метки", CoordMode.PIXELS_XY, 1000, 800)
+        assertEquals(null, d.topic)
+    }
+
+    @Test
     fun allGoodMarkerForSilentCheck() {
         val a = ScreenAnswerParser.parse("[[ВЕРНО]]", CoordMode.PIXELS_XY, 1000, 800)
         assertTrue(a.allGood)

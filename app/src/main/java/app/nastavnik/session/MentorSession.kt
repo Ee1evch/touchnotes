@@ -153,6 +153,7 @@ class MentorSession(private val app: NastavnikApp, private val scope: CoroutineS
     val state: StateFlow<MentorUi> = _state.asStateFlow()
 
     private var job: Job? = null
+    private var jobKind: AskKind? = null
     private var seq = 0L
 
     /** [resume] — студент сам выбрал задачу в истории: продолжаем её, даже если она давняя. */
@@ -172,6 +173,7 @@ class MentorSession(private val app: NastavnikApp, private val scope: CoroutineS
     fun cancel() {
         job?.cancel()
         job = null
+        jobKind = null
     }
 
     val isBusy: Boolean get() = job?.isActive == true
@@ -186,13 +188,24 @@ class MentorSession(private val app: NastavnikApp, private val scope: CoroutineS
     fun dismissDone() = _state.update { s -> s.copy(answer = s.answer?.copy(done = false)) }
 
     fun ask(question: String, kind: AskKind, shot: suspend () -> ShotResult) {
-        if (isBusy) return
+        if (isBusy) {
+            // Вопрос студента важнее тихой проверки: она уступает ему место.
+            if (kind == AskKind.WATCH || jobKind != AskKind.WATCH) return
+            cancel()
+        }
         val id = ++seq
+        jobKind = kind
         job = scope.launch {
             fun set(a: AnswerUi?) = _state.update { it.copy(answer = a) }
             // Тихая проверка не трогает то, что уже на экране, пока не найдёт ошибку.
             if (kind != AskKind.WATCH) set(AnswerUi(id, kind, question, status = "Смотрю на экран…"))
-            val r = shot()
+            val r = try {
+                shot()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                ShotResult.Failed("Не удалось сделать снимок экрана. Попробуй ещё раз.")
+            }
             val ok = when (r) {
                 is ShotResult.Ok -> r
                 is ShotResult.Cancelled -> {
@@ -235,9 +248,7 @@ class MentorSession(private val app: NastavnikApp, private val scope: CoroutineS
         fun emit(status: String? = null) {
             if (silent) return
             val a = parse(true)
-            _state.update { s ->
-                s.copy(answer = s.answer?.takeIf { it.seq == base.seq }?.copy(marks = a.marks, status = status ?: if (a.marks.isEmpty()) "Думаю…" else null))
-            }
+            updateOwn(base.seq) { it.copy(marks = a.marks, status = status ?: if (a.marks.isEmpty()) "Думаю…" else null) }
         }
         try {
             val request = ChatRequest(
@@ -266,6 +277,8 @@ class MentorSession(private val app: NastavnikApp, private val scope: CoroutineS
             }
             var final = parse(false)
             if (final.marks.isEmpty() && !final.allGood) throw AiErrors.badResponse("пустой ответ")
+            // На вопрос студента модель ответила одним «всё верно» — показываем это заметкой, а не пустотой.
+            if (!silent && final.marks.isEmpty()) final = final.copy(marks = listOf(Mark(MarkKind.OK, null, "Ошибок не вижу — всё сходится.")))
             if (stop == "max_tokens" && final.marks.isNotEmpty()) {
                 val last = final.marks.last()
                 final = final.copy(marks = final.marks.dropLast(1) + last.copy(text = last.text + "\n\n_(ответ обрезан)_"))
@@ -288,6 +301,7 @@ class MentorSession(private val app: NastavnikApp, private val scope: CoroutineS
                     Message(conversationId = convId, role = "assistant", text = ScreenAnswerParser.toPlain(final), createdAt = System.currentTimeMillis()),
                 )
                 db.conversations().touch(convId, System.currentTimeMillis())
+                final.topic?.let { nameConversation(convId, base.question, it) }
             }
             _state.update {
                 it.copy(answer = base.copy(marks = final.marks, streaming = false, status = null, done = final.done, allGood = final.allGood))
@@ -301,7 +315,7 @@ class MentorSession(private val app: NastavnikApp, private val scope: CoroutineS
                     }
                 }
             }
-            _state.update { s -> s.copy(answer = s.answer?.takeIf { it.seq == base.seq }?.copy(streaming = false, status = null)) }
+            updateOwn(base.seq) { it.copy(streaming = false, status = null) }
             throw e
         } catch (e: AiException) {
             if (!silent) _state.update { it.copy(answer = base.copy(streaming = false, status = null, errorText = e.userMessage, error = e)) }
@@ -311,6 +325,18 @@ class MentorSession(private val app: NastavnikApp, private val scope: CoroutineS
             if (!silent) _state.update { it.copy(answer = base.copy(streaming = false, status = null, errorText = err.userMessage, error = err)) }
             else _state.update { it.copy(silentError = err) }
         }
+    }
+
+    /** Меняет ответ на экране, только если это всё ещё ответ [seq]: остановленный запрос не трогает новый. */
+    private fun updateOwn(seq: Long, change: (AnswerUi) -> AnswerUi) = _state.update { s ->
+        val a = s.answer
+        if (a != null && a.seq == seq) s.copy(answer = change(a)) else s
+    }
+
+    /** Задача названа по первому вопросу или дате — даём ей имя по теме, которую узнала модель. */
+    private suspend fun nameConversation(id: Long, question: String, topic: String) {
+        val conv = db.conversations().get(id) ?: return
+        if (conv.title.startsWith(GENERIC_TITLE) || conv.title == question.take(60)) db.conversations().rename(id, topic)
     }
 
     private suspend fun currentConversation(now: Long): Long {
@@ -323,7 +349,7 @@ class MentorSession(private val app: NastavnikApp, private val scope: CoroutineS
         // Долго не спрашивали — скорее всего, это уже другая задача.
         currentConversation(now).let { if (it != 0L) return it }
         val stamp = SimpleDateFormat("d MMMM, HH:mm", Locale("ru")).format(Date(now))
-        val title = if (Prompts.isQuickPrompt(firstQuestion)) "Задача · $stamp" else firstQuestion.take(60)
+        val title = if (Prompts.isQuickPrompt(firstQuestion)) "$GENERIC_TITLE$stamp" else firstQuestion.take(60)
         val id = db.conversations().insert(Conversation(title = title, subject = "", createdAt = now, updatedAt = now))
         app.settings.setActiveConversation(id)
         _state.update { it.copy(conversationId = id) }
@@ -335,5 +361,6 @@ class MentorSession(private val app: NastavnikApp, private val scope: CoroutineS
         const val MAX_TOKENS = 16000
         private const val MAX_HISTORY = 12
         private const val NEW_TASK_AFTER_MS = 40 * 60 * 1000L
+        private const val GENERIC_TITLE = "Задача · "
     }
 }

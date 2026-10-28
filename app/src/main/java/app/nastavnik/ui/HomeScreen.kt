@@ -114,7 +114,7 @@ fun HomeScreen(resumeTick: Int, go: (String) -> Unit) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             Tile(R.drawable.ic_tune, Brand.Accent, "Настройки", "Нейросеть, ключ, кнопка", Modifier.weight(1f)) { go(MainActivity.SCREEN_SETTINGS) }
             Tile(R.drawable.ic_history, Brand.Theory, "История", "Задачи и чистовики", Modifier.weight(1f)) { go(MainActivity.SCREEN_HISTORY) }
-            Tile(R.drawable.ic_note, Brand.Ok, "Чистовик", "Проверить PDF", Modifier.weight(1f)) { go(MainActivity.SCREEN_CLEAN_TEST) }
+            Tile(R.drawable.ic_note, Brand.Ok, "Чистовик", "Конспект в PDF", Modifier.weight(1f)) { go(MainActivity.SCREEN_CLEAN) }
         }
 
         SectionLabel("Как это работает")
@@ -265,16 +265,7 @@ private fun Tile(icon: Int, tint: Color, title: String, caption: String, modifie
 @Composable
 private fun Step(n: Int, title: String, text: String) {
     Row(Modifier.padding(vertical = 14.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-        Box(
-            Modifier
-                .size(30.dp)
-                .clip(RoundedCornerShape(10.dp))
-                .background(MaterialTheme.colorScheme.primaryContainer),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(n.toString(), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.titleSmall)
-        }
-        Spacer(Modifier.width(0.dp))
+        NumberBadge(n)
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(title, style = MaterialTheme.typography.titleMedium)
             Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)

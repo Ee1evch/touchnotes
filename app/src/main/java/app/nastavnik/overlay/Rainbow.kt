@@ -4,17 +4,8 @@ import android.animation.ValueAnimator
 import android.graphics.Color
 import android.view.animation.LinearInterpolator
 
-/** Радуга Google: синий → красный → жёлтый → зелёный → снова синий (замкнутый круг для SweepGradient). */
+/** Фирменные градиенты оверлея и вращение для индикатора «думаю». */
 object Rainbow {
-    val COLORS = intArrayOf(
-        Color.parseColor("#4285F4"),
-        Color.parseColor("#9B72CB"),
-        Color.parseColor("#EA4335"),
-        Color.parseColor("#FBBC04"),
-        Color.parseColor("#34A853"),
-        Color.parseColor("#4285F4"),
-    )
-
     /** Фирменное кольцо кнопки: фиолетово-синий → сиреневый → розовый и обратно. */
     val BRAND = intArrayOf(
         Color.parseColor("#5B4CF0"),

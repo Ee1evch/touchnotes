@@ -117,7 +117,7 @@ class SmokeTest {
     fun screensForReview() {
         shell("settings put global hide_error_dialogs 1")
         ctx.app.settings.setOnboardingDone(true)
-        for (screen in listOf(MainActivity.SCREEN_HOME, MainActivity.SCREEN_SETTINGS, MainActivity.SCREEN_HISTORY, MainActivity.SCREEN_ONBOARDING)) {
+        for (screen in listOf(MainActivity.SCREEN_HOME, MainActivity.SCREEN_SETTINGS, MainActivity.SCREEN_HISTORY, MainActivity.SCREEN_ONBOARDING, MainActivity.SCREEN_CLEAN)) {
             val scenario = ActivityScenario.launch<MainActivity>(Intent(ctx, MainActivity::class.java).putExtra(MainActivity.EXTRA_SCREEN, screen))
             SystemClock.sleep(2500)
             dismissSystemAnr()

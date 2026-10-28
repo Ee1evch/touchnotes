@@ -93,9 +93,24 @@ class NoteStorage(private val context: Context) {
         private val MATH_CHARS = Regex("""[\$\{\}]""")
         private val SPACES = Regex("""\s+""")
 
+        private val SUP = Regex("""\^(?:\{([0-9n+\-]{1,3})\}|([0-9]{1,2}|n))""")
+        private val SUB = Regex("""_(?:\{([0-9nik]{1,2})\}|([0-9]{1,2}|[nik]))""")
+        private val SUP_CHARS = mapOf('0' to '⁰', '1' to '¹', '2' to '²', '3' to '³', '4' to '⁴', '5' to '⁵', '6' to '⁶', '7' to '⁷', '8' to '⁸', '9' to '⁹', 'n' to 'ⁿ', '+' to '⁺', '-' to '⁻')
+        private val SUB_CHARS = mapOf('0' to '₀', '1' to '₁', '2' to '₂', '3' to '₃', '4' to '₄', '5' to '₅', '6' to '₆', '7' to '₇', '8' to '₈', '9' to '₉', 'n' to 'ₙ', 'i' to 'ᵢ', 'k' to 'ₖ')
+
+        /** Частые команды LaTeX, у которых есть понятный символ. */
+        private val SYMBOLS = mapOf(
+            "to" to "→", "infty" to "∞", "cdot" to "·", "times" to "×", "le" to "≤", "leq" to "≤", "ge" to "≥", "geq" to "≥",
+            "ne" to "≠", "neq" to "≠", "pm" to "±", "pi" to "π", "alpha" to "α", "beta" to "β", "gamma" to "γ", "delta" to "δ",
+            "Delta" to "Δ", "varepsilon" to "ε", "epsilon" to "ε", "lambda" to "λ", "sum" to "∑", "int" to "∫", "sqrt" to "√",
+            "in" to "∈", "forall" to "∀", "exists" to "∃", "Rightarrow" to "⇒", "Leftrightarrow" to "⇔", "approx" to "≈",
+        )
+
         fun plainTitle(title: String): String = title
             .replace(FRAC, "$1/$2")
-            .replace(COMMAND, "")
+            .replace(SUP) { m -> (m.groupValues[1] + m.groupValues[2]).map { SUP_CHARS[it] ?: it }.joinToString("") }
+            .replace(SUB) { m -> (m.groupValues[1] + m.groupValues[2]).map { SUB_CHARS[it] ?: it }.joinToString("") }
+            .replace(COMMAND) { m -> SYMBOLS[m.value.drop(1)]?.let { " $it " } ?: "" }
             .replace(MATH_CHARS, "")
             .replace(SPACES, " ")
             .trim()
