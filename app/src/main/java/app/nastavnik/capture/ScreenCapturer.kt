@@ -15,19 +15,21 @@ import android.os.HandlerThread
 import android.os.Looper
 import android.util.DisplayMetrics
 import android.view.Display
-import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.withTimeoutOrNull
-import java.util.concurrent.atomic.AtomicBoolean
-import kotlin.coroutines.resume
 
 class CaptureException(message: String) : Exception(message)
 
 /**
  * Снимки экрана через MediaProjection. Виртуальный дисплей создаётся один раз на сессию
- * (Android 14+ не позволяет создавать его повторно), а поверхность ImageReader подключается
- * только на время снимка — так экран не копируется постоянно и не тратит батарею.
+ * (Android 14+ не позволяет создавать его повторно), и экран идёт в него всё время, пока наставник включён:
+ * последний кадр всегда под рукой.
+ *
+ * Раньше поверхность подключалась только на время снимка, чтобы не тратить батарею. Но на части планшетов
+ * система на неподвижном экране после подключения кадр не присылает вовсе — и снимок не получался никогда
+ * («экран не прислал кадр»). Теперь кадры приходят сами при каждом изменении экрана (на неподвижном — ни
+ * одного, батарея не тратится), а снимок берёт свежий кадр после того, как спрятались наши окна.
  */
 class ScreenCapturer(private val context: Context) {
     private val mpm = context.getSystemService(MediaProjectionManager::class.java)
@@ -43,8 +45,19 @@ class ScreenCapturer(private val context: Context) {
     private var height = 0
     private var dpi = 0
 
+    /** Последний кадр экрана (держим открытым, пока не придёт следующий) и когда он пришёл. Под [frameLock]. */
+    private val frameLock = Any()
+    private var latest: Image? = null
+    private var latestAt = 0L
+
     /** Вызывается в главном потоке, если система или пользователь остановили запись экрана. */
     var onStopped: (() -> Unit)? = null
+
+    /**
+     * Нужен свежий кадр, а экран неподвижен — этот вызов чуть меняет невидимую точку в углу экрана,
+     * и система рисует новый кадр. Вызывается в главном потоке.
+     */
+    var nudge: (() -> Unit)? = null
 
     val isActive: Boolean get() = projection != null
 
@@ -74,7 +87,8 @@ class ScreenCapturer(private val context: Context) {
         width = m.widthPixels
         height = m.heightPixels
         dpi = m.densityDpi
-        reader = newReader(width, height)
+        val r = newReader(width, height)
+        reader = r
         return try {
             virtualDisplay = p.createVirtualDisplay(
                 "nastavnik-capture",
@@ -82,7 +96,7 @@ class ScreenCapturer(private val context: Context) {
                 height,
                 dpi,
                 DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
-                null,
+                r.surface,
                 null,
                 handler,
             )
@@ -95,64 +109,78 @@ class ScreenCapturer(private val context: Context) {
 
     private val lock = Mutex()
 
-    /** Полный снимок экрана в реальном разрешении (вместе со строкой состояния). */
-    suspend fun capture(): Bitmap = lock.withLock { captureLocked() }
+    /**
+     * Снимок экрана в реальном разрешении (вместе со строкой состояния) — кадр, пришедший не раньше [sinceNanos]
+     * (по [System.nanoTime]). Так в снимок не попадают наши окна, которые только что спрятали. Экран неподвижен
+     * и свежего кадра нет даже после «будилки» — берём последний: он и есть то, что сейчас на экране.
+     */
+    suspend fun capture(sinceNanos: Long = System.nanoTime()): Bitmap = lock.withLock {
+        ensureSize()
+        val start = System.nanoTime()
+        var nudges = 0
+        while (true) {
+            val fresh = frameAfter(sinceNanos)
+            if (fresh != null) return@withLock fresh
+            val waited = (System.nanoTime() - start) / 1_000_000
+            if (waited >= WAIT_MS) break
+            if (nudges < WAKE_AT_MS.size && waited >= WAKE_AT_MS[nudges]) {
+                nudges++
+                nudge?.invoke()
+            }
+            delay(POLL_MS)
+        }
+        frameAfter(0L) ?: throw CaptureException(NO_FRAME)
+    }
 
-    private suspend fun captureLocked(): Bitmap {
+    /** Последний кадр без ожидания — для слежения между вопросами. null — кадров ещё не было. */
+    suspend fun captureLatest(): Bitmap? = lock.withLock {
+        ensureSize()
+        frameAfter(0L)
+    }
+
+    /** Копия последнего кадра, если он пришёл не раньше [sinceNanos]. */
+    private fun frameAfter(sinceNanos: Long): Bitmap? = synchronized(frameLock) {
+        val img = latest
+        if (img == null || latestAt < sinceNanos) null else runCatching { ImageUtils.imageToBitmap(img) }.getOrNull()
+    }
+
+    /** Повернули планшет — подстраиваем размер виртуального дисплея и приёмника кадров. */
+    private fun ensureSize() {
         val vd = virtualDisplay ?: throw CaptureException("Нет разрешения на снимок экрана")
         val m = realMetrics()
-        if (m.widthPixels != width || m.heightPixels != height || m.densityDpi != dpi) {
-            // Повернули планшет — подстраиваем размер виртуального дисплея.
-            width = m.widthPixels
-            height = m.heightPixels
-            dpi = m.densityDpi
-            vd.surface = null
-            reader?.close()
-            reader = newReader(width, height)
-            vd.resize(width, height, dpi)
-        }
-        val r = reader ?: throw CaptureException("Захват экрана не готов")
-        drain(r)
-        try {
-            val image = withTimeoutOrNull(FRAME_TIMEOUT_MS) { awaitFrame(r, vd) }
-                ?: run {
-                    // Иногда первый кадр не приходит, пока экран статичен: переподключаем поверхность.
-                    vd.surface = null
-                    withTimeoutOrNull(FRAME_TIMEOUT_MS) { awaitFrame(r, vd) }
-                }
-                ?: throw CaptureException("Экран не прислал кадр. Попробуй ещё раз.")
-            return image.use { ImageUtils.imageToBitmap(it) }
-        } finally {
-            vd.surface = null
-            r.setOnImageAvailableListener(null, null)
-        }
+        if (m.widthPixels == width && m.heightPixels == height && m.densityDpi == dpi) return
+        width = m.widthPixels
+        height = m.heightPixels
+        dpi = m.densityDpi
+        vd.surface = null
+        dropLatest()
+        runCatching { reader?.close() }
+        val r = newReader(width, height)
+        reader = r
+        vd.resize(width, height, dpi)
+        vd.surface = r.surface
     }
 
-    private suspend fun awaitFrame(r: ImageReader, vd: VirtualDisplay): Image =
-        suspendCancellableCoroutine { cont ->
-            val done = AtomicBoolean(false)
-            r.setOnImageAvailableListener({ rr ->
+    /** Приёмник кадров: держит последний кадр открытым, прошлый сразу отпускает. */
+    private fun newReader(w: Int, h: Int): ImageReader =
+        ImageReader.newInstance(w, h, PixelFormat.RGBA_8888, 3).apply {
+            setOnImageAvailableListener({ rr ->
                 val img = runCatching { rr.acquireLatestImage() }.getOrNull() ?: return@setOnImageAvailableListener
-                if (done.compareAndSet(false, true) && cont.isActive) {
-                    rr.setOnImageAvailableListener(null, null)
-                    cont.resume(img)
-                } else {
-                    img.close()
+                synchronized(frameLock) {
+                    latest?.close()
+                    latest = img
+                    latestAt = System.nanoTime()
                 }
             }, handler)
-            cont.invokeOnCancellation { r.setOnImageAvailableListener(null, null) }
-            mainHandler.post { if (!done.get()) vd.surface = r.surface }
         }
 
-    private fun drain(r: ImageReader) {
-        while (true) {
-            val img = runCatching { r.acquireLatestImage() }.getOrNull() ?: break
-            img.close()
+    private fun dropLatest() {
+        synchronized(frameLock) {
+            latest?.close()
+            latest = null
+            latestAt = 0L
         }
     }
-
-    private fun newReader(w: Int, h: Int): ImageReader =
-        ImageReader.newInstance(w, h, PixelFormat.RGBA_8888, 2)
 
     @Suppress("DEPRECATION")
     private fun realMetrics(): DisplayMetrics {
@@ -172,6 +200,7 @@ class ScreenCapturer(private val context: Context) {
         projection = null
         runCatching { virtualDisplay?.release() }
         virtualDisplay = null
+        dropLatest()
         runCatching { reader?.close() }
         reader = null
     }
@@ -182,6 +211,12 @@ class ScreenCapturer(private val context: Context) {
     }
 
     companion object {
-        private const val FRAME_TIMEOUT_MS = 1200L
+        /** Сколько ждать свежего кадра для снимка. */
+        private const val WAIT_MS = 1500L
+        private const val POLL_MS = 25L
+
+        /** Когда «будить» неподвижный экран, если свежий кадр не пришёл. */
+        private val WAKE_AT_MS = longArrayOf(120L, 400L, 900L)
+        const val NO_FRAME = "Не получилось снять экран. Нажми ещё раз."
     }
 }

@@ -149,6 +149,16 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
     }
     private val restoreTouch = Runnable { setBubbleTouchable(true) }
 
+    /**
+     * Невидимая точка 1×1 в углу экрана (под строкой состояния, в снимок не попадает). Когда снимку нужен свежий
+     * кадр, а экран неподвижен, она чуть меняет цвет — и система рисует новый кадр.
+     */
+    private var nudgeView: android.view.View? = null
+    private var nudgeOn = false
+
+    /** Сколько полных снимков подряд не удалось: после двух — разрешение на снимок экрана запрашиваем заново. */
+    private var captureFailures = 0
+
     override fun onCreate() {
         super.onCreate()
         running = true
@@ -177,6 +187,7 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
         }
         settings = napp.settings.load()
         addBubble()
+        addNudge()
         notebook = NotebookPages(File(filesDir, "notebook"))
         lifecycleScope.launch {
             withContext(nb) { notebook.load(System.currentTimeMillis()) }
@@ -256,6 +267,8 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
             askBar.dismiss()
             overlay.clear()
             removeBubble()
+            nudgeView?.let { runCatching { wm.removeView(it) } }
+            nudgeView = null
             mentor.cancel()
         }
         capturer.shutdown()
@@ -346,6 +359,19 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
             wm.addView(bubble, bubbleParams)
             bubbleAdded = true
         } catch (_: Exception) {
+        }
+    }
+
+    private fun addNudge() {
+        val v = android.view.View(this).apply { setBackgroundColor(NUDGE_A) }
+        val p = OverlayWindows.absParams(
+            0, 0, 1, 1,
+            WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+        )
+        if (runCatching { wm.addView(v, p) }.isSuccess) nudgeView = v
+        capturer.nudge = {
+            nudgeOn = !nudgeOn
+            nudgeView?.setBackgroundColor(if (nudgeOn) NUDGE_B else NUDGE_A)
         }
     }
 
@@ -747,12 +773,24 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
         }
         if (barOwner == BarOwner.ACTIONS || barOwner == BarOwner.NOTICE) bar.dismiss()
         capturing = true
+        val hiddenAt = System.nanoTime()
         setOverlaysHidden(true)
         try {
             delay(HIDE_DELAY_MS)
             val full = try {
-                capturer.capture()
+                // Кадр не раньше, чем окна точно спрятались.
+                capturer.capture(hiddenAt + HIDDEN_AFTER_NS).also { captureFailures = 0 }
             } catch (e: CaptureException) {
+                captureFailures++
+                if (captureFailures >= 2 && capturer.isActive) {
+                    // Доступ к экрану есть, а кадров нет — сбрасываем его: при следующем нажатии Android спросит заново.
+                    captureFailures = 0
+                    capturer.stop()
+                    startForegroundCompat()
+                    return ShotResult.Failed(
+                        "Снимок экрана не получается. Нажми кнопку ещё раз — Android заново спросит разрешение, выбери «Весь экран».",
+                    )
+                }
                 return ShotResult.Failed(e.message ?: "Не удалось сделать снимок")
             }
             try {
@@ -965,10 +1003,10 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
         if (!added) return
         // Новая страница: свежий кадр в полном размере, наши окна закрашиваем цветом листа.
         val full = try {
-            capturer.capture()
+            capturer.captureLatest()
         } catch (_: CaptureException) {
-            return
-        }
+            null
+        } ?: return
         try {
             val cover = rects.map { android.graphics.Rect(it.left, it.top, it.right, it.bottom) }
             withContext(nb) {
@@ -1047,10 +1085,11 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
         val ref = g.page() ?: return
         if (!capturer.isActive || capturing) return
         capturing = true
+        val hiddenAt = System.nanoTime()
         setOverlaysHidden(true)
         val full: android.graphics.Bitmap? = try {
             delay(HIDE_DELAY_MS)
-            capturer.capture()
+            capturer.capture(hiddenAt + HIDDEN_AFTER_NS)
         } catch (_: CaptureException) {
             null
         } finally {
@@ -1111,12 +1150,13 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
         }
     }
 
+    /** Последний кадр экрана для слежения (наши окна на нём есть — их место при сравнении не учитывается). */
     private suspend fun grabThumb(): Thumb? {
         val full = try {
-            capturer.capture()
+            capturer.captureLatest()
         } catch (_: Exception) {
-            return null
-        }
+            null
+        } ?: return null
         return try {
             withContext(Dispatchers.Default) { ImageUtils.thumb(full) }
         } finally {
@@ -1169,9 +1209,16 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
         private const val NOTIFICATION_ID = 42
         private const val STYLUS_PASS_MS = 1500L
         private const val HIDE_DELAY_MS = 180L
+
+        /** Кадр, пришедший позже этого после того, как спрятали окна, их уже не содержит. */
+        private const val HIDDEN_AFTER_NS = 50_000_000L
         private const val AFTER_PERMISSION_DELAY_MS = 600L
         private const val PERMISSION_TIMEOUT_MS = 120_000L
         private const val TICK_MS = 2000L
+
+        /** Два почти прозрачных цвета точки-«будилки»: глазом не отличить, а кадр новый. */
+        private const val NUDGE_A = 0x01FFFFFF
+        private const val NUDGE_B = 0x02FFFFFF
         private const val READING_TICK_MS = 900L
 
         /** Сколько других страниц конспекта прикладывать к вопросу и к тихой проверке. */
