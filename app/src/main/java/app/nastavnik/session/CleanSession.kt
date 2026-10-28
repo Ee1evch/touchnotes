@@ -15,6 +15,8 @@ import app.nastavnik.notes.CleanNoteParser
 import app.nastavnik.notes.NoteStorage
 import app.nastavnik.notes.PdfExporter
 import app.nastavnik.notes.TouchnotesSender
+import app.nastavnik.study.Progress
+import app.nastavnik.study.ruPlural
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -188,7 +190,7 @@ class CleanSession(private val app: NastavnikApp, private val scope: CoroutineSc
                 }
                 // Карточки из конспекта сразу попадают в «Повторение».
                 runCatching { app.study.addCards(noteId, s.note) }
-                app.study.record(app.nastavnik.study.Progress.KIND_CLEAN, NoteStorage.plainTitle(s.note.title))
+                app.study.record(Progress.KIND_CLEAN, NoteStorage.plainTitle(s.note.title))
                 val send = TouchnotesSender.sendPdf(app, result.pdf, NoteStorage.plainTitle(s.note.title), settings.sendTarget)
                 val sendMessage = when (send) {
                     is TouchnotesSender.Outcome.Direct -> "Открываю «${send.label}» — подтверди импорт PDF."
@@ -212,7 +214,7 @@ class CleanSession(private val app: NastavnikApp, private val scope: CoroutineSc
     }
 
     private fun cardsMessage(n: Int): String =
-        if (n == 0) "" else "В «Повторение» добавлено $n ${app.nastavnik.study.ruPlural(n, "карточка", "карточки", "карточек")}."
+        if (n == 0) "" else "В «Повторение» добавлено $n ${ruPlural(n, "карточка", "карточки", "карточек")}."
 
     fun resend() {
         val s = _state.value as? CleanState.Saved ?: return
