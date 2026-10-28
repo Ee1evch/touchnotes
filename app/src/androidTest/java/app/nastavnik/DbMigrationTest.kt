@@ -19,7 +19,7 @@ class DbMigrationTest {
     private val ctx = InstrumentationRegistry.getInstrumentation().targetContext
 
     @Test
-    fun migratesFromVersion1KeepingHistory() = runBlocking {
+    fun migratesFromVersion1KeepingHistory() = runBlocking<Unit> {
         val name = "migration-test.db"
         ctx.deleteDatabase(name)
         fun open() = Room.databaseBuilder(ctx, AppDatabase::class.java, name).addMigrations(AppDatabase.MIGRATION_1_2).build()
