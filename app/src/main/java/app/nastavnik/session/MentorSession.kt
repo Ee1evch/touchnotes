@@ -170,6 +170,9 @@ class MentorSession(
     private val _state = MutableStateFlow(MentorUi())
     val state: StateFlow<MentorUi> = _state.asStateFlow()
 
+    /** Дополнение к системному промту: например, задачи тренировочного варианта с ответами. */
+    var extraSystem: String? = null
+
     private var job: Job? = null
     private var jobKind: AskKind? = null
     private var seq = 0L
@@ -275,7 +278,8 @@ class MentorSession(
         try {
             val request = ChatRequest(
                 modelId = settings.model,
-                system = Prompts.mentorSystem(settings.strictness, mode, MistakeMemory.forPrompt(MistakeMemory.decode(app.settings.mistakesJson()))),
+                system = Prompts.mentorSystem(settings.strictness, mode, MistakeMemory.forPrompt(MistakeMemory.decode(app.settings.mistakesJson())))
+                    .let { base -> extraSystem?.takeIf { it.isNotBlank() }?.let { "$base\n\n$it" } ?: base },
                 turns = turns,
                 // Сначала страницы всего конспекта, последним — текущий экран с номерами строк.
                 images = shot.context.map { ImagePart(it) } + ImagePart(shot.jpeg),

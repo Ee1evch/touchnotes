@@ -91,3 +91,63 @@ object ExamPlan {
     private fun same(a: String, b: String) = a.trim().equals(b.trim(), ignoreCase = true) ||
         (a.length > 3 && b.length > 3 && (a.contains(b, true) || b.contains(a, true)))
 }
+
+/** Текст для нейросети: из чего составлять вариант, тест или карточку. */
+object PracticePrompts {
+    /** Сколько символов материала отправляем — чтобы запрос оставался дешёвым. */
+    const val MATERIAL_LIMIT = 9000
+
+    private const val MATH = "Формулы пиши в LaTeX внутри \$…\$ (KaTeX), без markdown-заголовков."
+
+    fun variantSystem(count: Int): String = """Ты — преподаватель, который готовит студента 1 курса ИТ-специальности к контрольной.
+Составь тренировочный вариант из $count задач по присланной теме или материалу: как на настоящей контрольной, от простой к сложной (level 1 — разминка, 2 — типовая, 3 — с подвохом). Задачи должны решаться от руки за 5–15 минут, с однозначным проверяемым ответом. Не повторяй задачи из материала дословно — меняй числа и формулировки.
+$MATH
+Ответ — только JSON-массив без пояснений: [{"task": "условие", "answer": "краткий верный ответ", "level": 1}]"""
+
+    fun quizSystem(count: Int): String = """Ты — преподаватель. Составь мини-тест из $count вопросов по присланному материалу для студента 1 курса ИТ-специальности: проверяй понимание, а не память на мелочи. У каждого вопроса 4 варианта ответа, ровно один верный; неверные варианты — типичные ошибки студентов. В поле why — одно-два предложения, почему верный ответ верный.
+$MATH
+Ответ — только JSON-массив без пояснений: [{"q": "вопрос", "options": ["…", "…", "…", "…"], "correct": 0, "why": "…"}] (correct — номер верного варианта, с нуля)."""
+
+    val CARD_SYSTEM = """Ты помогаешь студенту повторять материал по карточкам. Из присланной подсказки наставника сделай одну карточку: на лицевой стороне — вопрос, который заставляет вспомнить главное (правило, формулу, типичную ошибку), на обороте — короткий точный ответ (до 2 предложений или одна формула).
+$MATH
+Ответ — только JSON без пояснений: {"q": "вопрос", "a": "ответ"}"""
+
+    /** Сообщение студента: тема и, если есть, материал (конспект). */
+    fun material(topic: String, text: String?): String = buildString {
+        if (topic.isNotBlank()) append("Тема: ").append(topic.trim()).append('\n')
+        val body = text?.trim().orEmpty()
+        if (body.isNotEmpty()) {
+            append("Материал:\n")
+            append(if (body.length > MATERIAL_LIMIT) body.take(MATERIAL_LIMIT) + "…" else body)
+        }
+    }.trim()
+
+    /**
+     * Дополнение к промту наставника в тетради с вариантом: он знает условия и верные ответы,
+     * но не выдаёт ответ, пока студент не решит сам или не попросит.
+     */
+    fun variantForMentor(tasks: List<PracticeTask>): String? {
+        if (tasks.isEmpty()) return null
+        return buildString {
+            append("Студент решает в этой тетради тренировочный вариант. Условия и верные ответы (ответ не называй, пока студент сам не решит или прямо не попросит; при проверке сверяй с ним):\n")
+            tasks.forEachIndexed { i, t -> append("${i + 1}. ${t.task}\n   Ответ: ${t.answer}\n") }
+        }.trimEnd()
+    }
+}
+
+/** Конспект как обычный текст — материал для варианта и теста. */
+object NoteText {
+    fun plain(note: app.nastavnik.notes.CleanNote): String = buildString {
+        if (note.title.isNotBlank()) append(note.title.trim()).append("\n\n")
+        for (b in note.blocks) {
+            b.title?.takeIf { it.isNotBlank() }?.let { append(it.trim()).append(": ") }
+            b.text?.takeIf { it.isNotBlank() }?.let { append(it.trim()).append(' ') }
+            b.tex?.takeIf { it.isNotBlank() }?.let { append("$").append(it.trim()).append("$ ") }
+            b.items?.forEach { append("\n- ").append(it.trim()) }
+            b.head?.let { append("\n").append(it.joinToString(" | ")) }
+            b.rows?.forEach { append("\n").append(it.joinToString(" | ")) }
+            append('\n')
+        }
+        if (note.summary.isNotEmpty()) append("\nГлавное:\n").append(note.summary.joinToString("\n") { "- $it" })
+    }.replace(Regex("\n{3,}"), "\n\n").trim()
+}

@@ -23,6 +23,7 @@ import app.nastavnik.ink.UndoStack
 import app.nastavnik.session.AnswerUi
 import app.nastavnik.session.AskKind
 import app.nastavnik.session.MentorSession
+import app.nastavnik.study.PracticePrompts
 import app.nastavnik.session.ShotGeometry
 import app.nastavnik.session.ShotResult
 import kotlinx.coroutines.CoroutineScope
@@ -101,6 +102,7 @@ class NotebookController(val app: NastavnikApp, val notebookId: Long, private va
         meta = m
         pages = ps
         mentor.useConversation(m.conversationId)
+        mentor.extraSystem = PracticePrompts.variantForMentor(m.tasks)
         applyTool()
         showPage(0)
         loaded = true

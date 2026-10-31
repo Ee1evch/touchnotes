@@ -46,4 +46,15 @@ class NotebookStoreTest {
         val ids = (1..100).map { store.newId(42) }
         assertEquals(100, ids.toSet().size)
     }
+
+    @Test
+    fun variantTasksSurviveReload() {
+        val store = NotebookStore(Files.createTempDirectory("nbv").toFile())
+        val (m, _) = store.create("Вариант: пределы", Paper.GRID, now = 1_000)
+        val tasks = listOf(app.nastavnik.study.PracticeTask("Найти предел", "1", 2))
+        store.saveMeta(m.copy(tasks = tasks))
+        assertEquals(tasks, store.meta(m.id)!!.tasks)
+        // Старые тетради без поля tasks читаются как без варианта.
+        assertTrue(store.meta(store.create("Обычная", Paper.LINED, now = 2_000).first.id)!!.tasks.isEmpty())
+    }
 }

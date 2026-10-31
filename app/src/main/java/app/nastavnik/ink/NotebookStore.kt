@@ -15,6 +15,8 @@ data class NotebookMeta(
     val paper: String = Paper.GRID.name,
     /** Разговор с наставником по этой тетради (0 — ещё не спрашивали). */
     val conversationId: Long = 0,
+    /** Тренировочный вариант, который решают в этой тетради (условия видны в панели, ответы знает только наставник). */
+    val tasks: List<app.nastavnik.study.PracticeTask> = emptyList(),
 )
 
 /**

@@ -54,6 +54,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import app.nastavnik.study.TrainResult
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -648,6 +649,18 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
     override fun onSimilar() = quick(QuickAction.SIMILAR)
 
     override fun onSpeak(text: String) = napp.speaker.speak(text)
+
+    override fun onCard(text: String) {
+        notice("Делаю карточку…")
+        lifecycleScope.launch {
+            val topic = mentor.state.value.conversationId.takeIf { it != 0L }
+                ?.let { napp.db.conversations().get(it)?.title }.orEmpty()
+            when (val r = napp.trainer.cardFromHint(text, topic)) {
+                is TrainResult.Ok -> notice("Карточка в «Повторении»: вернётся завтра")
+                is TrainResult.Failed -> notice("Карточка не получилась: ${r.message}")
+            }
+        }
+    }
 
     private fun toggleRegion() {
         regionMode = !regionMode

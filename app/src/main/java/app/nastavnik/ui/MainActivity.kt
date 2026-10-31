@@ -88,6 +88,13 @@ class MainActivity : ComponentActivity() {
                     } else {
                         NotebooksScreen(resumeTick, onBack = home, onOpen = openNotebook)
                     }
+                    SCREEN_TRAINING, SCREEN_EXAMS -> TrainingScreen(
+                        initialTab = if (screen == SCREEN_EXAMS) TrainTab.EXAMS else TrainTab.VARIANT,
+                        onBack = home,
+                        onOpenNotebook = openNotebook,
+                        onReview = { go(SCREEN_REVIEW) },
+                        onSettings = { go(SCREEN_SETTINGS) },
+                    )
                     SCREEN_ONBOARDING -> OnboardingScreen(resumeTick, onDone = { screen = SCREEN_HOME; moveTaskToBack(true) }, onSkip = { screen = SCREEN_HOME })
                     SCREEN_SETTINGS -> SettingsScreen(onBack = home)
                     SCREEN_HISTORY -> HistoryScreen(onBack = home)
@@ -180,6 +187,8 @@ class MainActivity : ComponentActivity() {
         const val SCREEN_REVIEW = "review"
         const val SCREEN_PROGRESS = "progress"
         const val SCREEN_NOTEBOOKS = "notebooks"
+        const val SCREEN_TRAINING = "training"
+        const val SCREEN_EXAMS = "exams"
         const val SCREEN_NOTEBOOK = "notebook"
         const val EXTRA_NOTEBOOK = "notebook_id"
         const val EXTRA_FROM_OVERLAY = "from_overlay"

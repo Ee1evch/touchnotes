@@ -2,6 +2,8 @@ package app.nastavnik.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -44,6 +46,8 @@ import kotlinx.coroutines.withContext
 import app.nastavnik.app
 import app.nastavnik.study.Streaks
 import app.nastavnik.study.ruPlural
+import app.nastavnik.study.Exam
+import app.nastavnik.study.ExamPlan
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.nastavnik.notes.NoteApps
 import app.nastavnik.overlay.BubbleService
@@ -139,19 +143,30 @@ fun HomeScreen(resumeTick: Int, go: (String) -> Unit, openNotebook: (Long) -> Un
             Today(due, streak) { go(MainActivity.SCREEN_REVIEW) }
         }
 
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            Tile(
+        // Ближайший экзамен: обратный отсчёт и сразу к подготовке.
+        val exam = remember(resumeTick) { context.app.study.nextExam() }
+        if (exam != null) ExamCountdown(exam) { go(MainActivity.SCREEN_EXAMS) }
+
+        // Плитки: на планшете в один ряд, на телефоне — по три.
+        val tiles: List<TileSpec> = listOf(
+            TileSpec(
                 R.drawable.ic_cards, "Повторение",
                 if (due > 0) "${due} ${ruPlural(due, "карточка ждёт", "карточки ждут", "карточек ждут")}" else "Карточки из конспектов",
-                Modifier.weight(1f),
-            ) { go(MainActivity.SCREEN_REVIEW) }
-            Tile(
+            ) { go(MainActivity.SCREEN_REVIEW) },
+            TileSpec(R.drawable.ic_target, "Тренировка", "Вариант, мини-тест, экзамены") { go(MainActivity.SCREEN_TRAINING) },
+            TileSpec(
                 R.drawable.ic_flame, "Прогресс",
                 if (streak > 0) "$streak ${ruPlural(streak, "день", "дня", "дней")} подряд" else "Серия и темы с ошибками",
-                Modifier.weight(1f),
-            ) { go(MainActivity.SCREEN_PROGRESS) }
-            Tile(R.drawable.ic_history, "История", "Задачи и чистовики", Modifier.weight(1f)) { go(MainActivity.SCREEN_HISTORY) }
-            Tile(R.drawable.ic_note, "Чистовик", "Конспект в PDF", Modifier.weight(1f)) { go(MainActivity.SCREEN_CLEAN) }
+            ) { go(MainActivity.SCREEN_PROGRESS) },
+            TileSpec(R.drawable.ic_history, "История", "Задачи и чистовики") { go(MainActivity.SCREEN_HISTORY) },
+            TileSpec(R.drawable.ic_note, "Чистовик", "Конспект в PDF") { go(MainActivity.SCREEN_CLEAN) },
+        )
+        val perRow = if (LocalConfiguration.current.screenWidthDp >= 840) tiles.size else 3
+        tiles.chunked(perRow).forEach { row ->
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                row.forEach { t -> Tile(t.icon, t.title, t.caption, Modifier.weight(1f), t.onClick) }
+                repeat(perRow - row.size) { Spacer(Modifier.weight(1f)) }
+            }
         }
 
         SectionLabel("Как это работает")
@@ -353,6 +368,35 @@ private fun Attention(title: String, text: String, action: String, onAction: () 
             Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.8f))
         }
         InkButton(action, onClick = onAction)
+    }
+}
+
+@Composable
+private class TileSpec(val icon: Int, val title: String, val caption: String, val onClick: () -> Unit)
+
+/** Экзамен скоро: сколько дней осталось. */
+@Composable
+private fun ExamCountdown(e: Exam, onClick: () -> Unit) {
+    val days = ExamPlan.daysLeft(e.at, System.currentTimeMillis())
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .glass()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 18.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        IconBadge(R.drawable.ic_calendar)
+        Column(Modifier.weight(1f)) {
+            Text(
+                if (days == 0) "Сегодня экзамен: ${e.subject}" else "${e.subject}: экзамен через $days ${ruPlural(days, "день", "дня", "дней")}",
+                style = MaterialTheme.typography.titleMedium,
+                maxLines = 2,
+            )
+            Text("Карточки предмета успеют повториться. Реши вариант — проверь себя.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Icon(painterResource(R.drawable.ic_chevron), contentDescription = null, tint = Brand.InkSoft, modifier = Modifier.size(20.dp))
     }
 }
 

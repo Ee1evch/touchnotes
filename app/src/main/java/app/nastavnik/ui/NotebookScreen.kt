@@ -69,6 +69,8 @@ import app.nastavnik.overlay.SpeechInput
 import app.nastavnik.session.AnswerUi
 import app.nastavnik.session.AskKind
 import app.nastavnik.study.ruPlural
+import app.nastavnik.study.TrainResult
+import app.nastavnik.study.PracticeTask
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -458,6 +460,7 @@ private fun MentorPanel(ctl: NotebookController, answer: AnswerUi?, onCleanReady
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
+            ctl.meta?.tasks?.takeIf { it.isNotEmpty() }?.let { VariantCard(it) }
             problem?.let { p ->
                 StatusLine(p, Tone.ERROR)
                 if (p.contains("настройки")) LinkText("Открыть настройки", onClick = onSettings)
@@ -477,7 +480,7 @@ private fun MentorPanel(ctl: NotebookController, answer: AnswerUi?, onCleanReady
                         }
                     }
                     answer.marks.forEachIndexed { i, m ->
-                        NoteCard(i + 1, m, onLocate = { ctl.focusMark(i + 1) })
+                        NoteCard(i + 1, m, topic = ctl.meta?.title.orEmpty(), onLocate = { ctl.focusMark(i + 1) })
                     }
                     if (!answer.streaming && answer.marks.isNotEmpty()) {
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -519,9 +522,14 @@ private fun EmptyMentor() {
 
 /** Заметка наставника в панели: номер как на листе, вид, короткая подсказка и «Подробнее». */
 @Composable
-private fun NoteCard(number: Int, m: Mark, onLocate: () -> Unit) {
-    val speak: (String) -> Unit = LocalContext.current.app.speaker::speak
+private fun NoteCard(number: Int, m: Mark, topic: String, onLocate: () -> Unit) {
+    val context = LocalContext.current
+    val speak: (String) -> Unit = context.app.speaker::speak
+    val scope = rememberCoroutineScope()
     var expanded by rememberSaveable(number, m.text) { mutableStateOf(false) }
+    // «В карточки»: null — не нажимали, иначе итог (добавлено или почему нет).
+    var carded by remember(m.text) { mutableStateOf<String?>(null) }
+    var carding by remember(m.text) { mutableStateOf(false) }
     val kindColor = Color(PageDrawer.kindColor(m.kind))
     Column(
         Modifier
@@ -550,9 +558,59 @@ private fun NoteCard(number: Int, m: Mark, onLocate: () -> Unit) {
             }
         }
         RichText(m.text, sizePx = 16)
-        if (m.detail != null) {
-            if (expanded) RichText(m.detail, sizePx = 15)
-            LinkText(if (expanded) "Коротко ↑" else "Подробнее ↓") { expanded = !expanded }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (m.detail != null) LinkText(if (expanded) "Коротко ↑" else "Подробнее ↓") { expanded = !expanded }
+            Spacer(Modifier.weight(1f))
+            when {
+                carding -> Text("Делаю карточку…", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                carded != null -> Text(carded!!, style = MaterialTheme.typography.labelMedium, color = if (carded!!.startsWith("✓")) Brand.Ok else Brand.Error)
+                else -> LinkText("В карточки +") {
+                    carding = true
+                    scope.launch {
+                        val hint = if (m.detail != null) "${m.text}\n\n${m.detail}" else m.text
+                        carded = when (val r = context.app.trainer.cardFromHint(hint, topic)) {
+                            is TrainResult.Ok -> "✓ В повторении"
+                            is TrainResult.Failed -> r.message
+                        }
+                        carding = false
+                    }
+                }
+            }
+        }
+        if (m.detail != null && expanded) RichText(m.detail, sizePx = 15)
+    }
+}
+
+/** Задачи тренировочного варианта: условия всегда под рукой, ответы знает только наставник. */
+@Composable
+private fun VariantCard(tasks: List<PracticeTask>) {
+    var open by rememberSaveable { mutableStateOf(true) }
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .glass(RoundedCornerShape(20.dp), 4.dp, strong = true)
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Row(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable { open = !open },
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("Вариант · ${tasks.size} ${ruPlural(tasks.size, "задача", "задачи", "задач")}", style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
+            Text(if (open) "свернуть" else "показать", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        if (open) {
+            tasks.forEachIndexed { i, t ->
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("${i + 1}.", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 2.dp))
+                    RichText(t.task, sizePx = 15)
+                }
+            }
+            Text(
+                "Решай по порядку на листе. «Проверь ответ» сверит с верным ответом, а «Подсказка» не выдаст его раньше времени.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

@@ -18,6 +18,7 @@ import app.nastavnik.session.CleanSession
 import app.nastavnik.study.Reminders
 import app.nastavnik.study.Speaker
 import app.nastavnik.study.StudyRepo
+import app.nastavnik.study.Trainer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.MainScope
 
@@ -44,6 +45,9 @@ class NastavnikApp : Application() {
 
     /** Карточки повторения и учебные события для «Прогресса». */
     val study: StudyRepo by lazy { StudyRepo(this) }
+
+    /** Тренировочные варианты, мини-тесты и карточки из подсказок. */
+    val trainer: Trainer by lazy { Trainer(this) }
 
     /** Чистовик общий для кнопки, тетрадей и экрана предпросмотра. */
     val clean: CleanSession by lazy { CleanSession(this, appScope) }

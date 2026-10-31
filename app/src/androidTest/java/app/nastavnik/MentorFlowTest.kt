@@ -110,7 +110,12 @@ class MentorFlowTest {
                     MockResponse().setHeader("content-type", "text/event-stream").setBody(sse(answer()))
                 } else {
                     // Модель «обернула» JSON в ```json — парсер должен справиться.
-                    val text = "Вот чистовик:\n```json\n$note\n```"
+                    val text = when {
+                        body.contains("тренировочный вариант из") -> VARIANT_JSON
+                        body.contains("Составь мини-тест") -> QUIZ_JSON
+                        body.contains("повторять материал по карточкам") -> "{\"q\":\"Чему равна производная \$x^3\$?\",\"a\":\"\$3x^2\$\"}"
+                        else -> "Вот чистовик:\n```json\n$note\n```"
+                    }
                     val resp = buildJsonObject {
                         put("content", buildJsonArray { add(buildJsonObject { put("type", "text"); put("text", text) }) })
                         put("stop_reason", "end_turn")
@@ -329,6 +334,12 @@ class MentorFlowTest {
         assertEquals("нет отметки на листе", 1, app.nastavnik.ink.InkView.shownMarks.size)
         val req = bodies.last { it.contains("\"stream\":true") }
         assertTrue("вопрос ушёл без снимка страницы", req.contains("\"type\":\"image\""))
+
+        // «В карточки +» под заметкой — карточка сразу в повторении.
+        val cardsBefore = runBlocking { ctx.app.db.cards().observeCount().first() }
+        device.wait(Until.findObject(By.text("В карточки +")), 5000)!!.click()
+        assertNotNull("карточка не добавилась", device.wait(Until.findObject(By.text("✓ В повторении")), 15000))
+        assertEquals(cardsBefore + 1, runBlocking { ctx.app.db.cards().observeCount().first() })
         scenario.close()
 
         // Фото тетради с бумаги → новая тетрадь.
@@ -375,6 +386,66 @@ class MentorFlowTest {
         SystemClock.sleep(2500)
         screenshot("screen_notebooks")
         list.close()
+    }
+
+    /** Тренировка: вариант → решать в тетради (наставник знает ответы), мини-тест с разбором, экзамены. */
+    @Test
+    fun trainingVariantQuizAndExams() {
+        val study = ctx.app.study
+        study.saveExams(emptyList())
+        val launch = { screen: String ->
+            ActivityScenario.launch<MainActivity>(Intent(ctx, MainActivity::class.java).putExtra(MainActivity.EXTRA_SCREEN, screen))
+        }
+        // Вариант.
+        var sc = launch(MainActivity.SCREEN_TRAINING)
+        device.wait(Until.findObject(By.clazz("android.widget.EditText")), 8000)!!.text = "Пределы"
+        device.findObject(By.text("Составить вариант"))!!.click()
+        assertNotNull("вариант не составился", device.wait(Until.findObject(By.text("Решать в тетради")), 20000))
+        SystemClock.sleep(2500)
+        screenshot("training_variant")
+        assertTrue(bodies.last().contains("Тема: Пределы"))
+        device.findObject(By.text("Показать ответы"))!!.click()
+        assertNotNull(device.wait(Until.findObject(By.textContains("Ответ: 1")), 5000))
+        device.findObject(By.text("Решать в тетради"))!!.click()
+        assertNotNull("тетрадь варианта не открылась", device.wait(Until.findObject(By.desc("Лист тетради")), 10000))
+        assertNotNull("нет условий варианта в панели", device.wait(Until.findObject(By.textStartsWith("Вариант · 3")), 5000))
+        val nb = ctx.app.notebooks.store.list().first()
+        assertEquals(3, nb.tasks.size)
+        SystemClock.sleep(2000)
+        screenshot("notebook_variant")
+        sc.close()
+
+        // Мини-тест: первый ответ неверный, второй верный → 1 из 2, ошибка уходит в карточки.
+        sc = launch(MainActivity.SCREEN_TRAINING)
+        device.wait(Until.findObject(By.text("Мини-тест")), 8000)!!.click()
+        device.wait(Until.findObject(By.text("Начать тест")), 5000)!!.click()
+        device.wait(Until.findObject(By.text("Ничего")), 20000)!!.click()
+        SystemClock.sleep(800)
+        screenshot("quiz_answer")
+        device.findObject(By.text("Дальше"))!!.click()
+        device.wait(Until.findObject(By.text("Матрица")), 5000)!!.click()
+        device.wait(Until.findObject(By.text("Итог")), 5000)!!.click()
+        assertNotNull("нет итога теста", device.wait(Until.findObject(By.text("1 из 2")), 5000))
+        val before = runBlocking { ctx.app.db.cards().observeCount().first() }
+        device.findObject(By.text("Ошибки в карточки (1)"))!!.click()
+        assertNotNull(device.wait(Until.findObject(By.text("Повторить карточки")), 5000))
+        assertEquals(before + 1, runBlocking { ctx.app.db.cards().observeCount().first() })
+        screenshot("quiz_result")
+        sc.close()
+
+        // Экзамены: список с обратным отсчётом и плашка на главном.
+        val day = 24 * 3600 * 1000L
+        study.saveExams(listOf(app.nastavnik.study.Exam("Математический анализ", System.currentTimeMillis() + 12 * day)))
+        sc = launch(MainActivity.SCREEN_EXAMS)
+        assertNotNull(device.wait(Until.findObject(By.text("Готовиться")), 8000))
+        SystemClock.sleep(1000)
+        screenshot("training_exams")
+        sc.close()
+        sc = launch(MainActivity.SCREEN_HOME)
+        assertNotNull("нет обратного отсчёта на главном", device.wait(Until.findObject(By.textStartsWith("Математический анализ: экзамен через")), 8000))
+        screenshot("home_exam")
+        sc.close()
+        study.saveExams(emptyList())
     }
 
     /** Наставник видит весь конспект: пролистанные страницы уходят вместе со следующим вопросом. */
@@ -458,5 +529,13 @@ class MentorFlowTest {
                 kotlin.math.abs(markDy - pageDy) <= device.displayHeight / 25)
         }
         scenario.close()
+    }
+
+    private companion object {
+        const val VARIANT_JSON = "[{\"task\":\"Найдите \$\\\\lim_{x\\\\to 0} \\\\frac{\\\\sin 3x}{x}\$\",\"answer\":\"3\",\"level\":1}," +
+            "{\"task\":\"Найдите предел последовательности (n+1)/n\",\"answer\":\"1\",\"level\":2}," +
+            "{\"task\":\"Существует ли предел sin(1/x) при x→0? Обоснуйте.\",\"answer\":\"нет\",\"level\":3}]"
+        const val QUIZ_JSON = "[{\"q\":\"Что такое предел функции?\",\"options\":[\"Ничего\",\"Число, к которому стремятся значения\",\"Максимум\",\"Производная\"],\"correct\":1,\"why\":\"По определению Коши.\"}," +
+            "{\"q\":\"Что можно умножать на вектор слева?\",\"options\":[\"Матрица\",\"Ничто\",\"Только число\",\"Только вектор\"],\"correct\":0,\"why\":\"Матрица подходящего размера.\"}]"
     }
 }

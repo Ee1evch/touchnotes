@@ -35,9 +35,11 @@ class StudyRepo(private val app: NastavnikApp) {
     /** Карточка после ответа: новая коробка и срок. Считается сразу, без базы — экран не ждёт. */
     fun answered(card: CardEntity, remembered: Boolean, now: Long = System.currentTimeMillis()): CardEntity {
         val next = Leitner.review(card.box, remembered, now)
+        // Перед экзаменом карточка предмета не уйдёт дальше утра накануне.
+        val exam = ExamPlan.examFor(exams(), card.subject.ifBlank { card.topic }, now)
         return card.copy(
             box = next.box,
-            dueAt = next.dueAt,
+            dueAt = ExamPlan.capDue(next.dueAt, now, exam?.at),
             reviews = card.reviews + 1,
             lapses = card.lapses + if (remembered) 0 else 1,
         )
@@ -52,6 +54,13 @@ class StudyRepo(private val app: NastavnikApp) {
     suspend fun record(kind: String, topic: String, errors: Int = 0) {
         runCatching { app.db.activity().insert(ActivityEntity(kind = kind, topic = topic, errors = errors, at = System.currentTimeMillis())) }
     }
+
+    fun exams(): List<Exam> = ExamPlan.decode(app.settings.examsJson()).sortedBy { it.at }
+
+    fun saveExams(list: List<Exam>) = app.settings.setExamsJson(ExamPlan.encode(list.sortedBy { it.at }))
+
+    /** Ближайший экзамен, который ещё не прошёл (в течение дня экзамена — тоже он). */
+    fun nextExam(now: Long = System.currentTimeMillis()): Exam? = exams().firstOrNull { it.at + Streaks.DAY_MS > now }
 
     companion object {
         const val SAMPLE_PREFIX = "Пример: "

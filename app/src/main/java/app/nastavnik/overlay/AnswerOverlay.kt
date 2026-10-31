@@ -52,6 +52,9 @@ class AnswerOverlay(baseContext: Context, private val wm: WindowManager, private
 
         /** Прочитать заметку вслух. */
         fun onSpeak(text: String)
+
+        /** Сделать из заметки карточку для повторения. */
+        fun onCard(text: String)
     }
 
     private val ctx = ContextThemeWrapper(baseContext, R.style.Theme_Nastavnik_Overlay)
@@ -384,6 +387,19 @@ class AnswerOverlay(baseContext: Context, private val wm: WindowManager, private
                     listener.onSpeak(if (expanded && detailText != null) "$shortText. ${detailText.orEmpty()}" else shortText)
                 }
             }
+            val card = ImageView(ctx).apply {
+                setImageResource(R.drawable.ic_cards)
+                setColorFilter(0xFF6B6A73.toInt())
+                setPadding(dp(7f), dp(7f), dp(7f), dp(7f))
+                contentDescription = "В карточки"
+                setOnClickListener {
+                    listener.onCard(if (detailText != null) "$shortText\n\n${detailText.orEmpty()}" else shortText)
+                    // Одна заметка — одна карточка: повторное нажатие ничего не добавит.
+                    isEnabled = false
+                    alpha = 0.35f
+                }
+            }
+            header.addView(card, LinearLayout.LayoutParams(dp(32f), dp(32f)))
             header.addView(speak, LinearLayout.LayoutParams(dp(32f), dp(32f)))
             header.addView(eye, LinearLayout.LayoutParams(dp(32f), dp(32f)))
             header.addView(GripView(ctx), LinearLayout.LayoutParams(dp(20f), dp(32f)))

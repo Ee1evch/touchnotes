@@ -44,4 +44,36 @@ class PracticeTest {
         assertEquals(exam, ExamPlan.examFor(exams, "математический анализ", now)?.at)
         assertEquals(exams, ExamPlan.decode(ExamPlan.encode(exams)))
     }
+
+    @Test
+    fun promptsCarryMaterialAndHideAnswersFromStudent() {
+        assertTrue(PracticePrompts.variantSystem(5).contains("из 5 задач"))
+        assertTrue(PracticePrompts.quizSystem(8).contains("из 8 вопросов"))
+        assertTrue(PracticePrompts.CARD_SYSTEM.contains("\$…\$"))
+        val long = "а".repeat(PracticePrompts.MATERIAL_LIMIT + 50)
+        val m = PracticePrompts.material("Пределы", long)
+        assertTrue(m.startsWith("Тема: Пределы\nМатериал:\n"))
+        assertTrue(m.endsWith("…"))
+        assertEquals("Тема: Ряды", PracticePrompts.material("  Ряды ", "  "))
+        assertNull(PracticePrompts.variantForMentor(emptyList()))
+        val v = PracticePrompts.variantForMentor(listOf(PracticeTask("Найти \$x\$", "2"), PracticeTask("Вторая", "5")))!!
+        assertTrue(v.contains("1. Найти \$x\$\n   Ответ: 2"))
+        assertTrue(v.contains("2. Вторая"))
+    }
+
+    @Test
+    fun noteBecomesPlainText() {
+        val note = app.nastavnik.notes.CleanNote(
+            title = "Производная",
+            blocks = listOf(
+                app.nastavnik.notes.NoteBlock(type = "def", title = "Определение", text = "Предел отношения", tex = "f'(x)"),
+                app.nastavnik.notes.NoteBlock(type = "list", items = listOf("линейность", "произведение")),
+            ),
+            summary = listOf("Главное правило"),
+        )
+        val t = NoteText.plain(note)
+        assertTrue(t.startsWith("Производная\n\nОпределение: Предел отношения \$f'(x)\$"))
+        assertTrue(t.contains("- линейность"))
+        assertTrue(t.endsWith("Главное:\n- Главное правило"))
+    }
 }

@@ -96,6 +96,8 @@ object Progress {
     const val KIND_WATCH = "watch"
     const val KIND_CLEAN = "clean"
     const val KIND_CARD = "card"
+    const val KIND_QUIZ = "quiz"
+    const val KIND_VARIANT = "variant"
 
     fun summarize(events: List<Event>, now: Long, zone: TimeZone = TimeZone.getDefault()): ProgressSummary {
         val today = Streaks.day(now, zone)
