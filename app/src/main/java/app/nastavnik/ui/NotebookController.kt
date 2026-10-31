@@ -292,16 +292,6 @@ class NotebookController(val app: NastavnikApp, val notebookId: Long, private va
         if (editTool == t) return
         editTool = t
         applyTool()
-        showHint(
-            when (t) {
-                EditTool.PEN -> "Ручка"
-                EditTool.HIGHLIGHTER -> "Маркер — ложится под текст"
-                EditTool.ERASER -> if (partialEraser) "Ластик стирает часть линии" else "Ластик стирает линию целиком"
-                EditTool.LASSO -> "Обведи записи — их можно двигать, копировать, перекрашивать"
-                EditTool.SHAPE -> "Тяни пером — ${shapeKind.label.lowercase()}"
-                EditTool.TEXT -> "Коснись листа, чтобы напечатать текст"
-            },
-        )
     }
 
     fun pickPen(color: Int) {

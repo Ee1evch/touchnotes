@@ -487,7 +487,7 @@ fun PagesOverview(ctl: NotebookController, onAdd: () -> Unit, onDismiss: () -> U
                 .padding(24.dp)
                 .widthIn(max = 980.dp)
                 .fillMaxWidth()
-                .glass(RoundedCornerShape(32.dp), 24.dp, strong = true)
+                .softCard(RoundedCornerShape(32.dp), 24.dp, MaterialTheme.colorScheme.surface)
                 .padding(22.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
@@ -556,7 +556,7 @@ fun EditorTips(onDone: () -> Unit) {
         Column(
             Modifier
                 .widthIn(max = 460.dp)
-                .glass(RoundedCornerShape(32.dp), 24.dp, strong = true)
+                .softCard(RoundedCornerShape(32.dp), 24.dp, MaterialTheme.colorScheme.surface)
                 .padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {

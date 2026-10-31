@@ -436,12 +436,12 @@ private fun Divider() {
 private class Ask(val action: QuickAction, val icon: Int, val title: String, val hint: String)
 
 private val ASKS = listOf(
-    Ask(QuickAction.NEXT_STEP, R.drawable.ic_bulb, "Подсказка", "следующий шаг"),
-    Ask(QuickAction.FIND_ERROR, R.drawable.ic_search, "Где ошибка?", "найдёт и отметит"),
-    Ask(QuickAction.CHECK_ANSWER, R.drawable.ic_check, "Проверь ответ", "сверит решение"),
-    Ask(QuickAction.THEORY, R.drawable.ic_book, "Теория", "правило с примером"),
-    Ask(QuickAction.SHOW_STEP, R.drawable.ic_chevron, "Покажи шаг", "если совсем застрял"),
-    Ask(QuickAction.SIMILAR, R.drawable.ic_refresh, "Похожая", "задача на тренировку"),
+    Ask(QuickAction.NEXT_STEP, R.drawable.ic_bulb, "Подсказка", "что дальше"),
+    Ask(QuickAction.FIND_ERROR, R.drawable.ic_search, "Где ошибка?", "отметит её"),
+    Ask(QuickAction.CHECK_ANSWER, R.drawable.ic_check, "Проверить", "мой ответ"),
+    Ask(QuickAction.THEORY, R.drawable.ic_book, "Теория", "с примером"),
+    Ask(QuickAction.SHOW_STEP, R.drawable.ic_chevron, "Покажи шаг", "один шаг"),
+    Ask(QuickAction.SIMILAR, R.drawable.ic_refresh, "Похожая", "для тренировки"),
 )
 
 /**
@@ -633,7 +633,7 @@ private fun AskView(
                 row.forEach { a -> AskTile(a, enabled = !busy, modifier = Modifier.weight(1f)) { ask(a.action.prompt, AskKind.QUICK) } }
             }
         }
-        AskTile(Ask(QuickAction.NEXT_STEP, R.drawable.ic_timer, "Контрольная", "таймер, подсказок нет"), enabled = !busy, modifier = Modifier.fillMaxWidth()) { examDialog = true }
+        AskTile(Ask(QuickAction.NEXT_STEP, R.drawable.ic_timer, "Контрольная", "по таймеру, без подсказок"), enabled = !busy, modifier = Modifier.fillMaxWidth()) { examDialog = true }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Box(Modifier.weight(1f)) {
                 AppTextField(
