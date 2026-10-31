@@ -51,7 +51,7 @@ fun ThemeSection() {
     val repo = context.app.settings
     var mode by remember { mutableStateOf(runCatching { ThemeMode.valueOf(repo.themeMode()) }.getOrDefault(ThemeMode.LIGHT)) }
     SectionCard("Оформление") {
-        FieldLabel("Тема", "Тёмная — графитовое стекло. Лист тетради и чистовик остаются светлыми, как бумага.")
+        FieldLabel("Тема", "Тёмная — графитовое стекло, и лист тетради тоже тёмный (чернила светлеют). Чистовик и PDF остаются светлыми.")
         Segmented(ThemeMode.entries.map { it to it.label }, mode) {
             mode = it
             repo.setThemeMode(it.name)

@@ -281,6 +281,16 @@ class MentorFlowTest {
         scenario.close()
     }
 
+    /** Прокрутить к тексту средствами UiScrollable (надёжно на длинных экранах) и проверить, что он есть. */
+    private fun scrollToText(text: String): Boolean {
+        runCatching {
+            androidx.test.uiautomator.UiScrollable(androidx.test.uiautomator.UiSelector().scrollable(true)).apply { maxSearchSwipes = 40 }
+                .scrollTextIntoView(text)
+        }
+        if (device.findObject(androidx.test.uiautomator.UiSelector().textContains(text)).exists()) return true
+        return findScrolling(By.textContains(text), 8000) != null
+    }
+
     /** Найти элемент, прокручивая экран вниз: длинные экраны не помещаются целиком. */
     private fun findScrolling(selector: androidx.test.uiautomator.BySelector, timeoutMs: Long = 20000): androidx.test.uiautomator.UiObject2? {
         val until = SystemClock.uptimeMillis() + timeoutMs
@@ -549,12 +559,12 @@ class MentorFlowTest {
             screenshot("home_dark")
             sc.close()
             sc = ActivityScenario.launch<MainActivity>(Intent(ctx, MainActivity::class.java).putExtra(MainActivity.EXTRA_SCREEN, MainActivity.SCREEN_SETTINGS))
-            assertNotNull("нет раздела расходов", findScrolling(By.text("Без лимита"), 40000))
+            assertTrue("нет раздела расходов", scrollToText("Дневной лимит"))
             SystemClock.sleep(800)
             screenshot("settings_usage_dark")
             // Подписи разделов — обычный текст: их UiAutomator находит надёжнее, чем кнопки со значком.
-            assertNotNull("нет резервной копии", findScrolling(By.text("Все записи в одном файле"), 60000))
-            assertNotNull("нет обновлений", findScrolling(By.textStartsWith("Новые сборки выходят на GitHub"), 20000))
+            assertTrue("нет резервной копии", scrollToText("Все записи в одном файле"))
+            assertTrue("нет обновлений", scrollToText("Новые сборки выходят на GitHub"))
             SystemClock.sleep(800)
             screenshot("settings_backup_dark")
             sc.close()
