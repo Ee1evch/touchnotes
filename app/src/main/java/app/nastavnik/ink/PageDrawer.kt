@@ -134,6 +134,51 @@ class PageDrawer {
         return Color.argb(Color.alpha(c), mix(r), mix(g), mix(b))
     }
 
+    private fun drawPaper(c: Canvas, paper: Paper, h: Float, visible: RectF?) {
+        val top = (visible?.top ?: 0f).coerceAtLeast(0f)
+        val bottom = (visible?.bottom ?: h).coerceAtMost(h)
+        val left = (visible?.left ?: 0f).coerceAtLeast(0f)
+        val right = (visible?.right ?: PAGE_W).coerceAtMost(PAGE_W)
+        when (paper) {
+            Paper.GRID -> {
+                var y = CELL
+                while (y < h) {
+                    if (y in top..bottom) c.drawLine(left, y, right, y, linePaint)
+                    y += CELL
+                }
+                var x = CELL
+                while (x < PAGE_W) {
+                    if (x in left..right) c.drawLine(x, top, x, bottom, linePaint)
+                    x += CELL
+                }
+                // Поля справа, как в школьной тетради.
+                c.drawLine(PAGE_W - CELL * 2, top, PAGE_W - CELL * 2, bottom, marginPaint)
+            }
+            Paper.LINED -> {
+                var y = LINE_TOP
+                while (y < h - CELL) {
+                    if (y in top..bottom) c.drawLine(left, y, right, y, linePaint)
+                    y += LINE_STEP
+                }
+                c.drawLine(LINE_MARGIN, top, LINE_MARGIN, bottom, marginPaint)
+            }
+            Paper.DOTS -> {
+                var y = CELL
+                while (y < h) {
+                    if (y in top..bottom) {
+                        var x = CELL
+                        while (x < PAGE_W) {
+                            if (x in left..right) c.drawCircle(x, y, 1.6f, dotPaint)
+                            x += CELL
+                        }
+                    }
+                    y += CELL
+                }
+            }
+            Paper.BLANK -> Unit
+        }
+    }
+
     // ---------------- отметки наставника ----------------
 
     private val markFill = Paint(Paint.ANTI_ALIAS_FLAG)
