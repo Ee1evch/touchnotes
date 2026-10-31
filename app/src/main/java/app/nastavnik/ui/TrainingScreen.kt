@@ -398,14 +398,14 @@ private fun QuizOption(text: String, i: Int, picked: Int?, correct: Int, onClick
         when (state) {
             1 -> Brand.Ok
             2 -> Brand.Error
-            else -> Color(0x1A16161A)
+            else -> Brand.Line
         },
         label = "opt",
     )
     val bg = when (state) {
         1 -> Brand.OkSoft
         2 -> Brand.ErrorSoft
-        else -> Color.White.copy(alpha = if (state == 3) 0.35f else 0.62f)
+        else -> Brand.Glass.copy(alpha = if (state == 3) 0.35f else 0.62f)
     }
     Row(
         Modifier

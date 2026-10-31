@@ -12,6 +12,8 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
@@ -52,6 +54,23 @@ jobs:
           name: nastavnik-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+
+      # Каждая сборка из push — релиз build-<номер> с APK: по нему приложение находит обновление
+      # («Настройки → Обновления») и ставит поверх, а по ссылке releases/latest всегда свежий APK.
+      - name: Релиз для обновления из приложения
+        if: github.event_name == 'push'
+        # Нет прав на релизы (форк, ограничения организации) — сборка всё равно зелёная.
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp app/build/outputs/apk/debug/app-debug.apk nastavnik.apk
+          gh release create "build-${{ github.run_number }}" nastavnik.apk \
+            --repo "${{ github.repository }}" \
+            --target "${{ github.sha }}" \
+            --title "Наставник, сборка ${{ github.run_number }}" \
+            --notes "Ветка ${{ github.ref_name }}, коммит ${{ github.sha }}" \
+            --latest
 
   # Проверки на эмуляторе планшета: экспорт PDF, плавающая кнопка, стилус, панель, снимок экрана.
   smoke:

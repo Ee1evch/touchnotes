@@ -127,6 +127,9 @@ interface ConversationDao {
             "FROM conversations c ORDER BY c.updated_at DESC",
     )
     fun observeSummaries(): Flow<List<ConversationSummary>>
+
+    @Query("SELECT * FROM conversations ORDER BY updated_at DESC")
+    suspend fun all(): List<Conversation>
 }
 
 @Dao
@@ -142,6 +145,10 @@ interface MessageDao {
 
     @Query("SELECT * FROM messages WHERE conversation_id = :conversationId ORDER BY id")
     suspend fun forConversation(conversationId: Long): List<Message>
+
+    /** Для поиска: все ответы и вопросы без ошибок, свежие первыми. */
+    @Query("SELECT * FROM messages WHERE is_error = 0 ORDER BY id DESC LIMIT :limit")
+    suspend fun recent(limit: Int): List<Message>
 }
 
 @Dao
@@ -187,6 +194,9 @@ interface CardDao {
 
     @Query("DELETE FROM cards WHERE note_id = :noteId")
     suspend fun deleteForNote(noteId: Long)
+
+    @Query("SELECT * FROM cards ORDER BY created_at DESC")
+    suspend fun all(): List<CardEntity>
 
     @Query("DELETE FROM cards WHERE note_id IS NULL AND topic = :topic")
     suspend fun deleteLoose(topic: String)

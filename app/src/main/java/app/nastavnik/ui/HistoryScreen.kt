@@ -89,7 +89,7 @@ internal fun plural(n: Int, one: String, few: String, many: String): String {
 }
 
 @Composable
-fun HistoryScreen(onBack: () -> Unit) {
+fun HistoryScreen(onBack: () -> Unit, onCleanReady: () -> Unit = {}) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var openConversation by rememberSaveable { mutableStateOf<Long?>(null) }
     val conv = openConversation
@@ -100,7 +100,7 @@ fun HistoryScreen(onBack: () -> Unit) {
     }
     ScreenScaffold(title = "История", onBack = onBack) {
         Segmented(listOf(0 to "Задачи", 1 to "Чистовики"), tab) { tab = it }
-        if (tab == 0) ConversationList(onOpen = { openConversation = it }) else CleanNoteList()
+        if (tab == 0) ConversationList(onOpen = { openConversation = it }) else CleanNoteList(onCleanReady)
     }
 }
 
@@ -266,13 +266,15 @@ private fun ConversationDetail(id: Long, onBack: () -> Unit) {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun CleanNoteList() {
+private fun CleanNoteList(onCleanReady: () -> Unit) {
     val context = LocalContext.current
     val db = context.app.db
     val scope = rememberCoroutineScope()
     val items by remember { db.cleanNotes().observeAll() }.collectAsStateWithLifecycle(initialValue = null)
     var message by remember { mutableStateOf<String?>(null) }
     var toDelete by remember { mutableStateOf<CleanNoteEntity?>(null) }
+    var toExport by remember { mutableStateOf<CleanNoteEntity?>(null) }
+    toExport?.let { n -> ExportDialog(n, onDismiss = { toExport = null }, onError = { message = it }) }
     toDelete?.let { n ->
         ConfirmDelete(
             "Удалить чистовик?",
@@ -294,6 +296,7 @@ private fun CleanNoteList() {
         Empty(R.drawable.ic_note, "Чистовиков пока нет", "Кнопка наставника → «Чистовик» или «Сделать чистовик» в тетради: записи превратятся в аккуратный PDF-конспект.")
         return
     }
+    CheatSheetCard(list, onReady = onCleanReady)
     list.forEach { n: CleanNoteEntity ->
         val pdf = n.pdfPath?.let(::File)?.takeIf { it.exists() }
         val pngs = n.pngPaths.orEmpty().split("\n").filter { it.isNotBlank() }.map(::File).filter { it.exists() }
@@ -328,6 +331,7 @@ private fun CleanNoteList() {
                 if (pngs.isNotEmpty()) {
                     ChipButton("Картинками") { report(NoteApps.sendImages(context, pngs, n.title)) { message = it } }
                 }
+                ChipButton("Экспорт") { toExport = n }
                 ChipButton("Удалить") { toDelete = n }
             }
             if (pdf == null) {

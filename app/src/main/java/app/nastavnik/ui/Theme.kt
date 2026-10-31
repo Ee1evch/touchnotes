@@ -5,6 +5,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.Typography
 import androidx.compose.material3.lightColorScheme
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
@@ -20,24 +25,39 @@ import app.nastavnik.R
  * и полупрозрачные стеклянные пластины вместо яркого акцента; у видов заметок — свои спокойные цвета.
  */
 object Brand {
-    val Ink = Color(0xFF16161A)
-    val InkSoft = Color(0xFF5E5D66)
-    val Paper = Color(0xFFF4F2EE)
+    /** Тёмная тема включена: цвета ниже читаются в композиции, поэтому экраны перерисуются сами. */
+    var dark by mutableStateOf(false)
+
+    private fun pick(light: Long, dark: Long) = Color(if (this.dark) dark else light)
+
+    /** Чернила: основной текст и графитовые кнопки (в тёмной теме — светлые). */
+    val Ink get() = pick(0xFF16161A, 0xFFEDECF1)
+    val InkSoft get() = pick(0xFF5E5D66, 0xFFA3A2AD)
+
+    /** Текст и значки на графитовой кнопке. */
+    val OnInk get() = pick(0xFFFFFFFF, 0xFF16161A)
+    val Paper get() = pick(0xFFF4F2EE, 0xFF121215)
+
+    /** Цвет стекла и поверхностей. */
+    val Glass get() = pick(0xFFFFFFFF, 0xFF2A2A31)
+
+    /** Тонкие линии и подложки «на просвет». */
+    val Line get() = pick(0x1A16161A, 0x24FFFFFF)
 
     /** «Акцент» — графит: выделение делают стекло и контраст, а не цвет. */
-    val Accent = Color(0xFF2C2C33)
-    val AccentSoft = Color(0xFFE9E9EE)
+    val Accent get() = pick(0xFF2C2C33, 0xFFE4E3EA)
+    val AccentSoft get() = pick(0xFFE9E9EE, 0xFF2E2E36)
     val Error = Color(0xFFE5484D)
-    val ErrorSoft = Color(0xFFFDECEC)
+    val ErrorSoft get() = pick(0xFFFDECEC, 0xFF3A1F22)
     val Ok = Color(0xFF1F9D60)
-    val OkSoft = Color(0xFFE5F6ED)
+    val OkSoft get() = pick(0xFFE5F6ED, 0xFF16301F)
     val Theory = Color(0xFFD9822B)
-    val TheorySoft = Color(0xFFFCF0E3)
+    val TheorySoft get() = pick(0xFFFCF0E3, 0xFF3A2A18)
 
     /** Мягкие пятна фона под стеклом: без них прозрачная пластина на ровной бумаге не читается как стекло. */
-    val BlobCool = Color(0xFFD5E2F3)
-    val BlobWarm = Color(0xFFF5DECD)
-    val BlobMint = Color(0xFFD5ECE1)
+    val BlobCool get() = pick(0xFFD5E2F3, 0xFF1C2A3D)
+    val BlobWarm get() = pick(0xFFF5DECD, 0xFF3A2A20)
+    val BlobMint get() = pick(0xFFD5ECE1, 0xFF183028)
 }
 
 val Onest = FontFamily(
@@ -47,22 +67,53 @@ val Onest = FontFamily(
     Font(R.font.onest_bold, FontWeight.Bold),
 )
 
+private fun scheme(dark: Boolean) = if (dark) Dark else Light
+
+private val Dark = darkColorScheme(
+    primary = Color(0xFFE4E3EA),
+    onPrimary = Color(0xFF16161A),
+    primaryContainer = Color(0xFF2E2E36),
+    onPrimaryContainer = Color(0xFFEDECF1),
+    secondary = Color(0xFFEDECF1),
+    onSecondary = Color(0xFF16161A),
+    secondaryContainer = Color(0xFF2A2A31),
+    onSecondaryContainer = Color(0xFFEDECF1),
+    tertiary = Brand.Ok,
+    background = Color(0xFF121215),
+    onBackground = Color(0xFFEDECF1),
+    surface = Color(0xFF1E1E23),
+    onSurface = Color(0xFFEDECF1),
+    surfaceVariant = Color(0xFF2A2A31),
+    onSurfaceVariant = Color(0xFFA3A2AD),
+    surfaceContainerLowest = Color(0xFF16161A),
+    surfaceContainerLow = Color(0xFF1C1C21),
+    surfaceContainer = Color(0xFF222228),
+    surfaceContainerHigh = Color(0xFF2A2A31),
+    surfaceContainerHighest = Color(0xFF33333B),
+    outline = Color(0xFF4A4A53),
+    outlineVariant = Color(0xFF34343C),
+    error = Brand.Error,
+    onError = Color.White,
+    errorContainer = Color(0xFF3A1F22),
+    onErrorContainer = Color(0xFFFFB4B6),
+)
+
 private val Light = lightColorScheme(
-    primary = Brand.Accent,
+    primary = Color(0xFF2C2C33),
     onPrimary = Color.White,
-    primaryContainer = Brand.AccentSoft,
-    onPrimaryContainer = Brand.Ink,
-    secondary = Brand.Ink,
+    primaryContainer = Color(0xFFE9E9EE),
+    onPrimaryContainer = Color(0xFF16161A),
+    secondary = Color(0xFF16161A),
     onSecondary = Color.White,
     secondaryContainer = Color(0xFFECE9E3),
-    onSecondaryContainer = Brand.Ink,
+    onSecondaryContainer = Color(0xFF16161A),
     tertiary = Brand.Ok,
-    background = Brand.Paper,
-    onBackground = Brand.Ink,
+    background = Color(0xFFF4F2EE),
+    onBackground = Color(0xFF16161A),
     surface = Color.White,
-    onSurface = Brand.Ink,
+    onSurface = Color(0xFF16161A),
     surfaceVariant = Color(0xFFECE9E3),
-    onSurfaceVariant = Brand.InkSoft,
+    onSurfaceVariant = Color(0xFF5E5D66),
     surfaceContainerLowest = Color.White,
     surfaceContainerLow = Color(0xFFFAF9F6),
     surfaceContainer = Color(0xFFF1EFEA),
@@ -72,7 +123,7 @@ private val Light = lightColorScheme(
     outlineVariant = Color(0xFFE6E2DB),
     error = Brand.Error,
     onError = Color.White,
-    errorContainer = Brand.ErrorSoft,
+    errorContainer = Color(0xFFFDECEC),
     onErrorContainer = Color(0xFF8E1F24),
 )
 
@@ -95,14 +146,23 @@ private val AppTypography = Typography(
     labelSmall = t(12, 16, FontWeight.SemiBold, 0.4),
 )
 
+/** Как выбрана тема в настройках. */
+enum class ThemeMode(val label: String) { SYSTEM("Как в системе"), LIGHT("Светлая"), DARK("Тёмная") }
+
 /**
- * Приложение всегда светлое, как бумага: заметки поверх записей, тетради, чистовик и PDF тоже светлые,
- * и тёмные экраны между ними выглядели бы чужими.
+ * Тема приложения. Тёмная — «графитовое стекло»; лист тетради, чистовик и заметки поверх записей
+ * остаются светлыми, как бумага.
  */
 @Composable
-fun NastavnikTheme(content: @Composable () -> Unit) {
+fun NastavnikTheme(mode: ThemeMode = ThemeMode.LIGHT, content: @Composable () -> Unit) {
+    val dark = when (mode) {
+        ThemeMode.SYSTEM -> isSystemInDarkTheme()
+        ThemeMode.LIGHT -> false
+        ThemeMode.DARK -> true
+    }
+    Brand.dark = dark
     MaterialTheme(
-        colorScheme = Light,
+        colorScheme = scheme(dark),
         typography = AppTypography,
         shapes = Shapes(
             extraSmall = RoundedCornerShape(10.dp),

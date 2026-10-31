@@ -68,11 +68,11 @@ fun Modifier.glass(shape: Shape = RoundedCornerShape(24.dp), elevation: Dp = 10.
         .clip(shape)
         .background(
             Brush.verticalGradient(
-                listOf(Color.White.copy(alpha = if (strong) 0.92f else 0.76f), Color.White.copy(alpha = if (strong) 0.8f else 0.56f)),
+                listOf(Brand.Glass.copy(alpha = if (strong) 0.92f else 0.76f), Brand.Glass.copy(alpha = if (strong) 0.8f else 0.56f)),
             ),
         )
-        .border(0.6.dp, Color(0x1A16161A), shape)
-        .border(1.2.dp, Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.95f), Color.White.copy(alpha = 0.25f))), shape)
+        .border(0.6.dp, Brand.Line, shape)
+        .border(1.2.dp, Brush.verticalGradient(listOf(Color.White.copy(alpha = if (Brand.dark) 0.16f else 0.95f), Color.White.copy(alpha = if (Brand.dark) 0.03f else 0.25f))), shape)
 
 /** Бумага с мягкими цветными пятнами — фон всех экранов, под стеклом. */
 fun Modifier.paperBackdrop(): Modifier = drawBehind {
@@ -183,7 +183,7 @@ fun InkButton(
         danger -> Brand.Error
         else -> Brand.Ink
     }
-    val fg = Color.White
+    val fg = Brand.OnInk
     Row(
         modifier
             .heightIn(min = 50.dp)
@@ -223,8 +223,8 @@ fun StatusPill(text: String, ok: Boolean) {
     Row(
         modifier = Modifier
             .clip(CircleShape)
-            .background(Color.White.copy(alpha = 0.6f))
-            .border(0.6.dp, Color(0x1416161A), CircleShape)
+            .background(Brand.Glass.copy(alpha = 0.6f))
+            .border(0.6.dp, Brand.Line, CircleShape)
             .padding(horizontal = 12.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(7.dp),
@@ -248,7 +248,7 @@ fun IconBadge(icon: Int, size: Int = 42) {
             .size(size.dp)
             .clip(shape)
             .background(Brand.Ink.copy(alpha = 0.06f))
-            .border(0.8.dp, Color.White.copy(alpha = 0.9f), shape),
+            .border(0.8.dp, Brand.Glass.copy(alpha = 0.9f), shape),
         contentAlignment = Alignment.Center,
     ) {
         Icon(painterResource(icon), contentDescription = null, tint = Brand.Ink, modifier = Modifier.size((size * 0.48f).dp))
@@ -262,7 +262,7 @@ fun <T> Segmented(options: List<Pair<T, String>>, selected: T, onSelect: (T) -> 
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
-            .background(Color(0x1416161A))
+            .background(Brand.Line)
             .padding(4.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
@@ -348,10 +348,10 @@ fun AppTextField(
 /** Небольшая кнопка-«таблетка»: варианты адреса, второстепенные действия в строке. */
 @Composable
 fun ChipButton(text: String, selected: Boolean = false, enabled: Boolean = true, onClick: () -> Unit) {
-    val bg = if (selected) Brand.Ink else Color.White.copy(alpha = 0.62f)
+    val bg = if (selected) Brand.Ink else Brand.Glass.copy(alpha = 0.62f)
     val fg = when {
         !enabled -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-        selected -> Color.White
+        selected -> Brand.OnInk
         else -> MaterialTheme.colorScheme.onSurface
     }
     Box(
@@ -359,7 +359,7 @@ fun ChipButton(text: String, selected: Boolean = false, enabled: Boolean = true,
             .heightIn(min = 40.dp)
             .clip(CircleShape)
             .background(bg)
-            .border(0.6.dp, Color(0x1A16161A), CircleShape)
+            .border(0.6.dp, Brand.Line, CircleShape)
             .clickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 10.dp),
         contentAlignment = Alignment.Center,

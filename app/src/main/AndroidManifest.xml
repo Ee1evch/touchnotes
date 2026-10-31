@@ -11,6 +11,8 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Обновление из приложения: скачанный с GitHub APK ставится через системный установщик. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <queries>
         <!-- Поиск приложений для записей и других, принимающих PDF и картинки -->
@@ -123,6 +125,19 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Плавающая кнопка-помощник поверх приложения для заметок; показывается по запросу пользователя" />
         </service>
+
+        <!-- Виджет на главном экране: карточки на сегодня, серия, экзамен, быстрые действия. -->
+        <receiver
+            android:name=".study.StudyWidget"
+            android:exported="true"
+            android:label="@string/app_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_study" />
+        </receiver>
 
         <receiver
             android:name=".study.ReminderReceiver"

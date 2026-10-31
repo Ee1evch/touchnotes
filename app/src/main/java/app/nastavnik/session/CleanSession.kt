@@ -107,6 +107,12 @@ class CleanSession(private val app: NastavnikApp, private val scope: CoroutineSc
         }
     }
 
+    /** Готовый чистовик без нейросети (например, шпаргалка из уже сохранённых конспектов) — сразу в предпросмотр. */
+    fun preview(note: CleanNote) {
+        cancel()
+        _state.value = CleanState.Preview(emptyList(), note, CleanNoteParser.toJson(note))
+    }
+
     /** Добавить готовые снимки — например, все запомненные страницы конспекта. */
     fun addImages(images: List<ByteArray>) {
         val shots = _state.value.shots

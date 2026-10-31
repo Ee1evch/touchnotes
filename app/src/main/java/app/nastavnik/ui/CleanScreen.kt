@@ -111,7 +111,8 @@ fun CleanScreen(onClose: () -> Unit, onSettings: () -> Unit, onExample: () -> Un
                     is CleanState.Generating -> SoftButton("Отмена") { clean.cancel(); onClose() }
                     is CleanState.Preview -> {
                         InkButton("Сохранить", enabled = host != null, icon = R.drawable.ic_share) { host?.let { clean.save(it, conversationId) } }
-                        SoftButton("Пересобрать", icon = R.drawable.ic_refresh) { clean.build() }
+                        // Шпаргалка собрана без снимков — пересобирать её нечем.
+                        if (s.shots.isNotEmpty()) SoftButton("Пересобрать", icon = R.drawable.ic_refresh) { clean.build() }
                         SoftButton("Отмена") { clean.cancel(); onClose() }
                     }
                     is CleanState.Saving -> InkButton("Сохранить", enabled = false) {}

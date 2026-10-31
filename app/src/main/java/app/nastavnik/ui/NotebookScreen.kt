@@ -179,7 +179,7 @@ private fun NotebookTopBar(ctl: NotebookController, panel: Boolean, onBack: () -
         }
         Box {
             BarButton(R.drawable.ic_plus, "Добавить страницу") { addMenu = true }
-            DropdownMenu(expanded = addMenu, onDismissRequest = { addMenu = false }, containerColor = Color.White, shape = RoundedCornerShape(18.dp)) {
+            DropdownMenu(expanded = addMenu, onDismissRequest = { addMenu = false }, containerColor = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(18.dp)) {
                 Paper.entries.forEach { p ->
                     MenuItem("Лист: ${p.label.lowercase()}", R.drawable.ic_notebook) { addMenu = false; ctl.addPage(p) }
                 }
@@ -193,7 +193,7 @@ private fun NotebookTopBar(ctl: NotebookController, panel: Boolean, onBack: () -
         BarButton(R.drawable.ic_redo, "Вернуть", enabled = ctl.canRedo) { ctl.redo() }
         Box {
             BarButton(R.drawable.ic_more, "Ещё") { moreMenu = true }
-            DropdownMenu(expanded = moreMenu, onDismissRequest = { moreMenu = false }, containerColor = Color.White, shape = RoundedCornerShape(18.dp)) {
+            DropdownMenu(expanded = moreMenu, onDismissRequest = { moreMenu = false }, containerColor = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(18.dp)) {
                 Paper.entries.forEach { p ->
                     MenuItem(
                         (if (ctl.page?.paper == p) "✓ " else "") + "Бумага: ${p.label.lowercase()}",
@@ -216,7 +216,7 @@ private fun NotebookTopBar(ctl: NotebookController, panel: Boolean, onBack: () -
             text = { AppTextField(text, { text = it }, "Например: Матанализ, пределы") },
             confirmButton = { InkButton("Сохранить") { ctl.rename(text); renaming = false } },
             dismissButton = { SoftButton("Отмена") { renaming = false } },
-            containerColor = Color.White,
+            containerColor = MaterialTheme.colorScheme.surface,
             shape = RoundedCornerShape(28.dp),
         )
     }
@@ -227,7 +227,7 @@ private fun NotebookTopBar(ctl: NotebookController, panel: Boolean, onBack: () -
             text = { Text("Всё, что на ней написано, пропадёт.", color = MaterialTheme.colorScheme.onSurfaceVariant) },
             confirmButton = { InkButton("Удалить", danger = true) { ctl.deletePage(); confirmDelete = false } },
             dismissButton = { SoftButton("Отмена") { confirmDelete = false } },
-            containerColor = Color.White,
+            containerColor = MaterialTheme.colorScheme.surface,
             shape = RoundedCornerShape(28.dp),
         )
     }
@@ -246,7 +246,7 @@ private fun MenuItem(text: String, icon: Int, onClick: () -> Unit) {
 @Composable
 private fun BarButton(icon: Int, description: String, enabled: Boolean = true, active: Boolean = false, onClick: () -> Unit) {
     val tint = when {
-        active -> Color.White
+        active -> Brand.OnInk
         enabled -> Brand.Ink
         else -> Brand.Ink.copy(alpha = 0.3f)
     }
@@ -350,7 +350,7 @@ private fun ToolIcon(icon: Int, description: String, active: Boolean, onClick: (
             .semantics { contentDescription = description },
         contentAlignment = Alignment.Center,
     ) {
-        Icon(painterResource(icon), contentDescription = null, tint = if (active) Color.White else Brand.Ink, modifier = Modifier.size(20.dp))
+        Icon(painterResource(icon), contentDescription = null, tint = if (active) Brand.OnInk else Brand.Ink, modifier = Modifier.size(20.dp))
     }
 }
 
@@ -635,29 +635,29 @@ private fun ExamCard(ctl: NotebookController) {
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Icon(painterResource(R.drawable.ic_timer), contentDescription = null, tint = Color.White, modifier = Modifier.size(22.dp))
-            Text("Контрольная · осталось %d:%02d".format(min, sec), style = MaterialTheme.typography.titleMedium, color = Color.White)
+            Icon(painterResource(R.drawable.ic_timer), contentDescription = null, tint = Brand.OnInk, modifier = Modifier.size(22.dp))
+            Text("Контрольная · осталось %d:%02d".format(min, sec), style = MaterialTheme.typography.titleMedium, color = Brand.OnInk)
         }
         Text(
             "Наставник молчит, пока не сдашь работу. Потом он проверит всё целиком и поставит оценку.",
             style = MaterialTheme.typography.bodySmall,
-            color = Color.White.copy(alpha = 0.75f),
+            color = Brand.OnInk.copy(alpha = 0.75f),
         )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Box(
                 Modifier
                     .clip(CircleShape)
-                    .background(Color.White)
+                    .background(Brand.OnInk)
                     .clickable { ctl.submitExam() }
                     .padding(horizontal = 18.dp, vertical = 11.dp),
             ) { Text("Сдать работу", style = MaterialTheme.typography.labelLarge, color = Brand.Ink) }
             Box(
                 Modifier
                     .clip(CircleShape)
-                    .background(Color.White.copy(alpha = 0.14f))
+                    .background(Brand.OnInk.copy(alpha = 0.14f))
                     .clickable { ctl.cancelExam() }
                     .padding(horizontal = 18.dp, vertical = 11.dp),
-            ) { Text("Прервать", style = MaterialTheme.typography.labelLarge, color = Color.White) }
+            ) { Text("Прервать", style = MaterialTheme.typography.labelLarge, color = Brand.OnInk) }
         }
     }
 }
@@ -680,7 +680,7 @@ private fun ExamDialog(onStart: (Int) -> Unit, onDismiss: () -> Unit) {
         },
         confirmButton = { InkButton("Начать", icon = R.drawable.ic_timer) { onStart(minutes) } },
         dismissButton = { SoftButton("Отмена", onClick = onDismiss) },
-        containerColor = Color.White,
+        containerColor = MaterialTheme.colorScheme.surface,
         shape = RoundedCornerShape(28.dp),
     )
 }
@@ -693,7 +693,7 @@ fun AppSwitch(checked: Boolean, onChange: (Boolean) -> Unit) {
         onCheckedChange = onChange,
         colors = androidx.compose.material3.SwitchDefaults.colors(
             checkedTrackColor = Brand.Ink,
-            checkedThumbColor = Color.White,
+            checkedThumbColor = Brand.OnInk,
             uncheckedTrackColor = Brand.Ink.copy(alpha = 0.12f),
             uncheckedThumbColor = Color.White,
             uncheckedBorderColor = Brand.Ink.copy(alpha = 0.2f),

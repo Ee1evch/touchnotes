@@ -55,6 +55,8 @@ fun SettingsScreen(onBack: () -> Unit) {
             ModelPicker(s.provider, ModelPresets.mentor(s.provider), s.cleanModel) { repo.setCleanModel(it, s.provider) }
         }
 
+        UsageSection(s.model)
+
         SectionCard("Весь конспект") {
             FieldLabel(
                 "Что видит наставник",
@@ -196,6 +198,10 @@ fun SettingsScreen(onBack: () -> Unit) {
                 }
             }
         }
+
+        ThemeSection()
+        BackupSection()
+        UpdateSection()
     }
 }
 
@@ -226,7 +232,7 @@ private fun AppPickerDialog(apps: List<NoteApps.App>, onDismiss: () -> Unit, onP
                 }
             }
         },
-        containerColor = Color.White,
+        containerColor = MaterialTheme.colorScheme.surface,
         shape = RoundedCornerShape(28.dp),
     )
 }

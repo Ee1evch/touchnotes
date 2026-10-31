@@ -72,7 +72,10 @@ sealed interface StreamUpdate {
     /** Сервер переключился на запасную модель: уже показанный текст нужно сбросить. */
     data object Restart : StreamUpdate
 
-    data class Stop(val stopReason: String?) : StreamUpdate
+    data class Stop(val stopReason: String?, val outputTokens: Int? = null) : StreamUpdate
+
+    /** Сколько токенов насчитал сервер (начало ответа — вход, конец — выход). */
+    data class Tokens(val input: Int?, val output: Int?) : StreamUpdate
 
     data class Error(val type: String?, val message: String?) : StreamUpdate
 }
@@ -102,10 +105,20 @@ object StreamDecoder {
                     else -> null
                 }
             }
+            "message_start" -> {
+                val usage = (obj["message"] as? JsonObject)?.get("usage") as? JsonObject
+                val input = listOf("input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens").sumOf { usage?.int(it) ?: 0 }
+                if (usage != null) StreamUpdate.Tokens(input, usage.int("output_tokens")) else null
+            }
             "message_delta" -> {
                 val delta = obj["delta"] as? JsonObject
                 val reason = delta?.str("stop_reason")
-                if (reason != null) StreamUpdate.Stop(reason) else null
+                val output = (obj["usage"] as? JsonObject)?.int("output_tokens")
+                when {
+                    reason != null -> StreamUpdate.Stop(reason, output)
+                    output != null -> StreamUpdate.Tokens(null, output)
+                    else -> null
+                }
             }
             "message_stop" -> StreamUpdate.Stop(null)
             "error" -> {
@@ -117,4 +130,5 @@ object StreamDecoder {
     }
 
     private fun JsonObject.str(key: String): String? = (this[key] as? JsonPrimitive)?.contentOrNull
+    private fun JsonObject.int(key: String): Int? = (this[key] as? JsonPrimitive)?.contentOrNull?.toIntOrNull()
 }

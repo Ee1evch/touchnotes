@@ -3,4 +3,6 @@
     <files-path name="notes" path="notes/" />
     <!-- Снимок камеры для тетради: камера пишет сюда, потом фото становится страницей. -->
     <cache-path name="camera" path="camera/" />
+    <!-- Экспорт конспекта в Markdown, LaTeX, Word и резервная копия. -->
+    <cache-path name="export" path="export/" />
 </paths>

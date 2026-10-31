@@ -14,7 +14,7 @@ class AiException(
     val httpCode: Int? = null,
     cause: Throwable? = null,
 ) : Exception(userMessage, cause) {
-    enum class Kind { NO_KEY, AUTH, FORBIDDEN, NOT_FOUND, BAD_REQUEST, RATE_LIMIT, OVERLOADED, SERVER, NETWORK, REFUSAL, BAD_RESPONSE }
+    enum class Kind { NO_KEY, AUTH, FORBIDDEN, NOT_FOUND, BAD_REQUEST, RATE_LIMIT, OVERLOADED, SERVER, NETWORK, REFUSAL, BAD_RESPONSE, BUDGET }
 
     /** Есть смысл молча повторить запрос ещё раз. */
     val retryable: Boolean get() = kind == Kind.OVERLOADED || kind == Kind.SERVER
@@ -37,6 +37,11 @@ object AiErrors {
     fun badBaseUrl(url: String) = AiException(
         AiException.Kind.NOT_FOUND,
         "Неверный адрес сервера: «$url». Он должен начинаться с http:// или https://.",
+    )
+
+    fun budget(limit: String) = AiException(
+        AiException.Kind.BUDGET,
+        "Дневной лимит расходов ($limit) исчерпан. Завтра он обнулится, а поднять или снять его можно в настройках → «Расходы».",
     )
 
     fun refusal() = AiException(

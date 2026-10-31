@@ -19,6 +19,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -27,6 +31,7 @@ import android.net.Uri
 import androidx.core.content.IntentCompat
 import androidx.lifecycle.lifecycleScope
 import app.nastavnik.app
+import app.nastavnik.study.StudyWidget
 import kotlinx.coroutines.launch
 import app.nastavnik.overlay.BubbleService
 
@@ -57,7 +62,19 @@ class MainActivity : ComponentActivity() {
         if (savedInstanceState == null) receiveShared(intent)
 
         setContent {
-            NastavnikTheme {
+            val prefs by remember { app.settings.flow() }.collectAsStateWithLifecycle(initialValue = null)
+            val mode = remember(prefs) { runCatching { ThemeMode.valueOf(app.settings.themeMode()) }.getOrDefault(ThemeMode.LIGHT) }
+            val dark = when (mode) {
+                ThemeMode.SYSTEM -> isSystemInDarkTheme()
+                ThemeMode.LIGHT -> false
+                ThemeMode.DARK -> true
+            }
+            LaunchedEffect(dark) {
+                val t = android.graphics.Color.TRANSPARENT
+                val style = if (dark) SystemBarStyle.dark(t) else SystemBarStyle.light(t, t)
+                enableEdgeToEdge(statusBarStyle = style, navigationBarStyle = style)
+            }
+            NastavnikTheme(mode) {
                 val go: (String) -> Unit = {
                     fromOverlay = false
                     screen = it
@@ -97,7 +114,12 @@ class MainActivity : ComponentActivity() {
                     )
                     SCREEN_ONBOARDING -> OnboardingScreen(resumeTick, onDone = { screen = SCREEN_HOME; moveTaskToBack(true) }, onSkip = { screen = SCREEN_HOME })
                     SCREEN_SETTINGS -> SettingsScreen(onBack = home)
-                    SCREEN_HISTORY -> HistoryScreen(onBack = home)
+                    SCREEN_HISTORY -> HistoryScreen(onBack = home, onCleanReady = { go(SCREEN_CLEAN) })
+                    SCREEN_SEARCH -> SearchScreen(
+                        onBack = home,
+                        onOpenNotebook = openNotebook,
+                        onHistory = { go(SCREEN_HISTORY) },
+                    )
                     SCREEN_CLEAN_TEST -> CleanTestScreen(onBack = { go(SCREEN_CLEAN) })
                     SCREEN_REVIEW -> ReviewScreen(onBack = home, onExample = { go(SCREEN_CLEAN_TEST) })
                     SCREEN_PROGRESS -> ProgressScreen(onBack = home, onReview = { go(SCREEN_REVIEW) })
@@ -168,6 +190,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         resumeTick++
+        StudyWidget.refresh(this)
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -188,6 +211,7 @@ class MainActivity : ComponentActivity() {
         const val SCREEN_PROGRESS = "progress"
         const val SCREEN_NOTEBOOKS = "notebooks"
         const val SCREEN_TRAINING = "training"
+        const val SCREEN_SEARCH = "search"
         const val SCREEN_EXAMS = "exams"
         const val SCREEN_NOTEBOOK = "notebook"
         const val EXTRA_NOTEBOOK = "notebook_id"

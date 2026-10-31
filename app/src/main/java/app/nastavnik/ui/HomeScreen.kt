@@ -3,6 +3,7 @@ package app.nastavnik.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -78,6 +79,8 @@ fun HomeScreen(resumeTick: Int, go: (String) -> Unit, openNotebook: (Long) -> Un
                 Icon(painterResource(R.drawable.ic_sparkle), contentDescription = null, tint = Brand.Ink, modifier = Modifier.size(20.dp))
             }
             Text("Наставник", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(start = 12.dp).weight(1f))
+            RoundIconButton(R.drawable.ic_search, "Поиск") { go(MainActivity.SCREEN_SEARCH) }
+            Spacer(Modifier.width(10.dp))
             RoundIconButton(R.drawable.ic_tune, "Настройки") { go(MainActivity.SCREEN_SETTINGS) }
         }
 
@@ -327,7 +330,7 @@ private fun Today(due: Int, streak: Int, onReview: () -> Unit) {
                 .background(Brand.Ink),
             contentAlignment = Alignment.Center,
         ) {
-            Text(due.toString(), color = Color.White, style = MaterialTheme.typography.titleLarge)
+            Text(due.toString(), color = Brand.OnInk, style = MaterialTheme.typography.titleLarge)
         }
         Column(Modifier.weight(1f)) {
             Text(

@@ -193,11 +193,14 @@ class MentorFlowTest {
 
     @Test
     fun answerIsDrawnOnTheScreenThenCleanCopyIsSaved() {
-        val scenario = ActivityScenario.launch(MainActivity::class.java)
+        // Экран в одну колонку: строка с заголовком не сливается с соседней колонкой.
+        val scenario = ActivityScenario.launch<MainActivity>(
+            Intent(ctx, MainActivity::class.java).putExtra(MainActivity.EXTRA_SCREEN, MainActivity.SCREEN_HISTORY),
+        )
         SystemClock.sleep(800)
         scenario.onActivity { BubbleService.start(it) }
-        target = device.wait(Until.findObject(By.text("Пиши прямо здесь")), 5000)?.visibleBounds
-        assertNotNull("на главном экране нет заголовка «Пиши прямо здесь»", target)
+        target = device.wait(Until.findObject(By.text("История")), 5000)?.visibleBounds
+        assertNotNull("нет заголовка «История»", target)
         askHint()
 
         // Ответ пришёл → строка подсвечена, рядом заметка с кнопкой «Сделать чистовик».
@@ -276,6 +279,18 @@ class MentorFlowTest {
         assertEquals("карточки не добавились", 5, cardCount)
         device.pressBack()
         scenario.close()
+    }
+
+    /** Найти элемент, прокручивая экран вниз: длинные экраны не помещаются целиком. */
+    private fun findScrolling(selector: androidx.test.uiautomator.BySelector, timeoutMs: Long = 20000): androidx.test.uiautomator.UiObject2? {
+        val until = SystemClock.uptimeMillis() + timeoutMs
+        while (SystemClock.uptimeMillis() < until) {
+            device.wait(Until.findObject(selector), 1500)?.let { return it }
+            val w = device.displayWidth
+            val h = device.displayHeight
+            device.swipe(w / 2, (h * 0.75).toInt(), w / 2, (h * 0.35).toInt(), 25)
+        }
+        return null
     }
 
     /** Штрих пером: вниз, несколько точек, вверх — как настоящий стилус. */
@@ -400,13 +415,13 @@ class MentorFlowTest {
         var sc = launch(MainActivity.SCREEN_TRAINING)
         device.wait(Until.findObject(By.clazz("android.widget.EditText")), 8000)!!.text = "Пределы"
         device.findObject(By.text("Составить вариант"))!!.click()
-        assertNotNull("вариант не составился", device.wait(Until.findObject(By.text("Решать в тетради")), 20000))
+        assertNotNull("вариант не составился", findScrolling(By.text("Показать ответы")))
         SystemClock.sleep(2500)
         screenshot("training_variant")
         assertTrue(bodies.last().contains("Тема: Пределы"))
         device.findObject(By.text("Показать ответы"))!!.click()
-        assertNotNull(device.wait(Until.findObject(By.textContains("Ответ: 1")), 5000))
-        device.findObject(By.text("Решать в тетради"))!!.click()
+        assertNotNull(findScrolling(By.textContains("Ответ: 1"), 6000))
+        findScrolling(By.text("Решать в тетради"), 6000)!!.click()
         assertNotNull("тетрадь варианта не открылась", device.wait(Until.findObject(By.desc("Лист тетради")), 10000))
         assertNotNull("нет условий варианта в панели", device.wait(Until.findObject(By.textStartsWith("Вариант · 3")), 5000))
         val nb = ctx.app.notebooks.store.list().first()
@@ -419,16 +434,16 @@ class MentorFlowTest {
         sc = launch(MainActivity.SCREEN_TRAINING)
         device.wait(Until.findObject(By.text("Мини-тест")), 8000)!!.click()
         device.wait(Until.findObject(By.text("Начать тест")), 5000)!!.click()
-        device.wait(Until.findObject(By.text("Ничего")), 20000)!!.click()
+        findScrolling(By.text("Ничего"))!!.click()
         SystemClock.sleep(800)
         screenshot("quiz_answer")
-        device.findObject(By.text("Дальше"))!!.click()
-        device.wait(Until.findObject(By.text("Матрица")), 5000)!!.click()
-        device.wait(Until.findObject(By.text("Итог")), 5000)!!.click()
-        assertNotNull("нет итога теста", device.wait(Until.findObject(By.text("1 из 2")), 5000))
+        findScrolling(By.text("Дальше"), 6000)!!.click()
+        findScrolling(By.text("Матрица"), 6000)!!.click()
+        findScrolling(By.text("Итог"), 6000)!!.click()
+        assertNotNull("нет итога теста", findScrolling(By.text("1 из 2"), 6000))
         val before = runBlocking { ctx.app.db.cards().observeCount().first() }
-        device.findObject(By.text("Ошибки в карточки (1)"))!!.click()
-        assertNotNull(device.wait(Until.findObject(By.text("Повторить карточки")), 5000))
+        findScrolling(By.text("Ошибки в карточки (1)"), 6000)!!.click()
+        assertNotNull(findScrolling(By.text("Повторить карточки"), 6000))
         assertEquals(before + 1, runBlocking { ctx.app.db.cards().observeCount().first() })
         screenshot("quiz_result")
         sc.close()
@@ -437,7 +452,7 @@ class MentorFlowTest {
         val day = 24 * 3600 * 1000L
         study.saveExams(listOf(app.nastavnik.study.Exam("Математический анализ", System.currentTimeMillis() + 12 * day)))
         sc = launch(MainActivity.SCREEN_EXAMS)
-        assertNotNull(device.wait(Until.findObject(By.text("Готовиться")), 8000))
+        assertNotNull(findScrolling(By.text("Готовиться"), 10000))
         SystemClock.sleep(1000)
         screenshot("training_exams")
         sc.close()
@@ -446,6 +461,108 @@ class MentorFlowTest {
         screenshot("home_exam")
         sc.close()
         study.saveExams(emptyList())
+    }
+
+    /** Конспекты: поиск находит чистовик, экспорт в три формата, шпаргалка открывается в предпросмотре. */
+    @Test
+    fun searchExportAndCheatSheet() {
+        val raw = ctx.assets.open("sample_note.json").bufferedReader().use { it.readText() }
+        val note = app.nastavnik.notes.CleanNoteParser.parse(raw)
+        val json = app.nastavnik.notes.CleanNoteParser.toJson(note)
+        val id = runBlocking {
+            ctx.app.db.cleanNotes().insert(
+                app.nastavnik.data.CleanNoteEntity(
+                    conversationId = null, subject = note.subject, title = "Исследование функции", json = json,
+                    pdfPath = null, pngPaths = null, publicPath = null, createdAt = System.currentTimeMillis(),
+                ),
+            )
+        }
+        try {
+            // Экспорт: Markdown с формулами, LaTeX с окружениями, Word — zip.
+            val entity = runBlocking { ctx.app.db.cleanNotes().get(id)!! }
+            val md = runBlocking { app.nastavnik.ui.exportNote(ctx, entity, app.nastavnik.ui.ExportFormat.MARKDOWN) }
+            assertTrue(md.readText().contains("# Исследование функции"))
+            val tex = runBlocking { app.nastavnik.ui.exportNote(ctx, entity, app.nastavnik.ui.ExportFormat.LATEX) }
+            assertTrue(tex.readText().contains("\\begin{document}"))
+            val docx = runBlocking { app.nastavnik.ui.exportNote(ctx, entity, app.nastavnik.ui.ExportFormat.WORD) }
+            assertEquals('P'.code.toByte(), docx.readBytes()[0])
+
+            // Поиск по слову из конспекта.
+            var sc = ActivityScenario.launch<MainActivity>(
+                Intent(ctx, MainActivity::class.java).putExtra(MainActivity.EXTRA_SCREEN, MainActivity.SCREEN_SEARCH),
+            )
+            device.wait(Until.findObject(By.clazz("android.widget.EditText")), 8000)!!.text = "экстремум"
+            assertNotNull("поиск не нашёл чистовик", device.wait(Until.findObject(By.textStartsWith("ЧИСТОВИКИ")), 8000))
+            SystemClock.sleep(800)
+            screenshot("search_results")
+            sc.close()
+
+            // Шпаргалка из чистовиков → предпросмотр.
+            sc = ActivityScenario.launch<MainActivity>(
+                Intent(ctx, MainActivity::class.java).putExtra(MainActivity.EXTRA_SCREEN, MainActivity.SCREEN_HISTORY),
+            )
+            device.wait(Until.findObject(By.text("Чистовики")), 8000)!!.click()
+            findScrolling(By.text("Собрать шпаргалку"), 8000)!!.click()
+            assertNotNull("шпаргалка не открылась", findScrolling(By.text("Сохранить"), 10000))
+            SystemClock.sleep(3000)
+            screenshot("cheat_sheet")
+            val state = ctx.app.clean.state.value as app.nastavnik.session.CleanState.Preview
+            assertTrue(state.note.title.startsWith("Шпаргалка"))
+            ctx.app.clean.cancel()
+            sc.close()
+        } finally {
+            runBlocking { ctx.app.db.cleanNotes().delete(id) }
+        }
+    }
+
+    /** Удобство: расходы считаются, лимит останавливает запросы, копия сохраняется, тёмная тема, виджет. */
+    @Test
+    fun usageBackupDarkThemeAndWidget() {
+        val na = ctx.app
+        // Расходы: каждый запрос к нейросети попадает в журнал; дневной лимит останавливает следующие.
+        na.settings.setUsageJson("[]")
+        val req = app.nastavnik.ai.ChatRequest("claude-sonnet-5-5", "s", listOf(app.nastavnik.ai.ChatTurn(app.nastavnik.ai.Role.USER, "Составь мини-тест")), maxTokens = 100)
+        runBlocking { na.ai().complete("sk-ant-test", req) }
+        assertEquals(1, na.usage.today().requests)
+        na.settings.setDailyLimitUsd(0.000001f)
+        val blocked = runCatching { runBlocking { na.ai().complete("sk-ant-test", req) } }.exceptionOrNull()
+        assertEquals(app.nastavnik.ai.AiException.Kind.BUDGET, (blocked as? app.nastavnik.ai.AiException)?.kind)
+        na.settings.setDailyLimitUsd(0f)
+
+        // Резервная копия: архив с базой и тетрадями, без ключей.
+        val zip = File(ctx.cacheDir, "backup.zip")
+        val count = runBlocking { zip.outputStream().use { app.nastavnik.data.Backup.write(na, it) } }
+        assertTrue("в копии мало файлов: $count", count >= 1)
+        assertTrue(zip.inputStream().use { app.nastavnik.data.Backup.looksValid(it) })
+        val names = java.util.zip.ZipFile(zip).use { z -> z.entries().toList().map { it.name } }
+        assertTrue(names.any { it.startsWith("db/") })
+        assertTrue(names.none { it.contains("secure") })
+
+        // Тёмная тема: главный экран и настройки.
+        na.settings.setThemeMode("DARK")
+        try {
+            var sc = ActivityScenario.launch<MainActivity>(Intent(ctx, MainActivity::class.java).putExtra(MainActivity.EXTRA_SCREEN, MainActivity.SCREEN_HOME))
+            SystemClock.sleep(2000)
+            screenshot("home_dark")
+            sc.close()
+            sc = ActivityScenario.launch<MainActivity>(Intent(ctx, MainActivity::class.java).putExtra(MainActivity.EXTRA_SCREEN, MainActivity.SCREEN_SETTINGS))
+            assertNotNull("нет раздела расходов", findScrolling(By.text("Без лимита"), 10000))
+            SystemClock.sleep(800)
+            screenshot("settings_usage_dark")
+            assertNotNull("нет резервной копии", findScrolling(By.text("Сохранить копию"), 10000))
+            assertNotNull("нет обновлений", findScrolling(By.text("Проверить обновления"), 10000))
+            SystemClock.sleep(800)
+            screenshot("settings_backup_dark")
+            sc.close()
+        } finally {
+            na.settings.setThemeMode("LIGHT")
+        }
+
+        // Виджет: разметка собирается и заполняется без ошибок.
+        val views = android.widget.RemoteViews(ctx.packageName, R.layout.widget_study)
+        val host = android.widget.FrameLayout(ctx)
+        val v = views.apply(ctx, host)
+        assertNotNull(v.findViewById<android.widget.TextView>(R.id.widget_due))
     }
 
     /** Наставник видит весь конспект: пролистанные страницы уходят вместе со следующим вопросом. */

@@ -49,6 +49,7 @@ class StudyRepo(private val app: NastavnikApp) {
     suspend fun save(updated: CardEntity, remembered: Boolean) {
         cards.update(updated)
         record(Progress.KIND_CARD, updated.topic, if (remembered) 0 else 1)
+        StudyWidget.refresh(app)
     }
 
     suspend fun record(kind: String, topic: String, errors: Int = 0) {
@@ -57,7 +58,10 @@ class StudyRepo(private val app: NastavnikApp) {
 
     fun exams(): List<Exam> = ExamPlan.decode(app.settings.examsJson()).sortedBy { it.at }
 
-    fun saveExams(list: List<Exam>) = app.settings.setExamsJson(ExamPlan.encode(list.sortedBy { it.at }))
+    fun saveExams(list: List<Exam>) {
+        app.settings.setExamsJson(ExamPlan.encode(list.sortedBy { it.at }))
+        StudyWidget.refresh(app)
+    }
 
     /** Ближайший экзамен, который ещё не прошёл (в течение дня экзамена — тоже он). */
     fun nextExam(now: Long = System.currentTimeMillis()): Exam? = exams().firstOrNull { it.at + Streaks.DAY_MS > now }

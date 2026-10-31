@@ -179,7 +179,11 @@ class ClaudeClient(
                 "text" -> sb.append(HttpCalls.str(block, "text").orEmpty())
             }
         }
-        return Completion(sb.toString(), HttpCalls.str(obj, "stop_reason"))
+        val usage = (obj["usage"] as? JsonObject)?.let { u ->
+            val input = listOf("input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens").sumOf { HttpCalls.str(u, it)?.toIntOrNull() ?: 0 }
+            Usage(input, HttpCalls.str(u, "output_tokens")?.toIntOrNull() ?: 0)
+        }
+        return Completion(sb.toString(), HttpCalls.str(obj, "stop_reason"), usage)
     }
 
     companion object {

@@ -133,6 +133,14 @@ object NoteApps {
         }
     }
 
+    /** Поделиться любым файлом из кэша экспорта (Markdown, LaTeX, Word, резервная копия) через системный выбор. */
+    fun shareFile(context: Context, file: File, mime: String, title: String): Outcome = try {
+        openChooser(context, buildIntent(Intent.ACTION_SEND, uriFor(context, file), mime, title))
+        Outcome.Chooser
+    } catch (e: Exception) {
+        Outcome.Failed("Не удалось отправить файл: ${e.message}")
+    }
+
     /** Отправить PNG-страницы (их удобно вставлять картинками в заметку). */
     fun sendImages(context: Context, pngs: List<File>, title: String): Outcome {
         if (pngs.isEmpty()) return Outcome.Failed("Нет картинок")

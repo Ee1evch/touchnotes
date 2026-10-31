@@ -244,7 +244,7 @@ private fun NotebookCard(m: NotebookMeta, onOpen: () -> Unit, onChanged: () -> U
                 Box(Modifier.size(36.dp).clip(CircleShape).clickable { menu = true }, contentAlignment = Alignment.Center) {
                     Icon(painterResource(R.drawable.ic_more), contentDescription = "Действия с тетрадью", tint = Brand.Ink, modifier = Modifier.size(20.dp))
                 }
-                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, containerColor = Color.White, shape = RoundedCornerShape(18.dp)) {
+                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, containerColor = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(18.dp)) {
                     DropdownMenuItem(text = { Text("Переименовать") }, onClick = { menu = false; renaming = true })
                     DropdownMenuItem(text = { Text("Удалить") }, onClick = { menu = false; confirm = true })
                 }
@@ -264,7 +264,7 @@ private fun NotebookCard(m: NotebookMeta, onOpen: () -> Unit, onChanged: () -> U
                 }
             },
             dismissButton = { SoftButton("Отмена") { renaming = false } },
-            containerColor = Color.White,
+            containerColor = MaterialTheme.colorScheme.surface,
             shape = RoundedCornerShape(28.dp),
         )
     }
@@ -280,7 +280,7 @@ private fun NotebookCard(m: NotebookMeta, onOpen: () -> Unit, onChanged: () -> U
                 }
             },
             dismissButton = { SoftButton("Отмена") { confirm = false } },
-            containerColor = Color.White,
+            containerColor = MaterialTheme.colorScheme.surface,
             shape = RoundedCornerShape(28.dp),
         )
     }

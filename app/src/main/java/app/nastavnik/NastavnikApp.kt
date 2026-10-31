@@ -9,9 +9,11 @@ import app.nastavnik.ai.AiBackend
 import app.nastavnik.ai.AiProvider
 import app.nastavnik.ai.ClaudeClient
 import app.nastavnik.ai.GeminiClient
+import app.nastavnik.ai.MeteredBackend
 import app.nastavnik.ai.OpenAiClient
 import app.nastavnik.data.AppDatabase
 import app.nastavnik.data.AppSettings
+import app.nastavnik.data.AppUsage
 import app.nastavnik.data.SettingsRepo
 import app.nastavnik.ink.Notebooks
 import app.nastavnik.session.CleanSession
@@ -53,12 +55,18 @@ class NastavnikApp : Application() {
     val clean: CleanSession by lazy { CleanSession(this, appScope) }
 
     /** Клиент выбранного в настройках провайдера. */
-    fun ai(s: AppSettings = settings.load()): AiBackend = when (s.provider) {
-        AiProvider.ANTHROPIC -> claude
-        AiProvider.GEMINI -> gemini
-        AiProvider.OPENAI_COMPAT -> OpenAiClient(http, s.openAiBaseUrl)
-        AiProvider.ANTHROPIC_COMPAT -> ClaudeClient(http, s.anthropicCompatBaseUrl, AiProvider.ANTHROPIC_COMPAT, s.authMode)
-    }
+    fun ai(s: AppSettings = settings.load()): AiBackend = MeteredBackend(
+        when (s.provider) {
+            AiProvider.ANTHROPIC -> claude
+            AiProvider.GEMINI -> gemini
+            AiProvider.OPENAI_COMPAT -> OpenAiClient(http, s.openAiBaseUrl)
+            AiProvider.ANTHROPIC_COMPAT -> ClaudeClient(http, s.anthropicCompatBaseUrl, AiProvider.ANTHROPIC_COMPAT, s.authMode)
+        },
+        usage,
+    )
+
+    /** Расходы на нейросеть и дневной лимит. */
+    val usage: AppUsage by lazy { AppUsage(settings) }
 
     override fun onCreate() {
         super.onCreate()

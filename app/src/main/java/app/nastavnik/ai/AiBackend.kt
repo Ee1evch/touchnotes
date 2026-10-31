@@ -140,7 +140,7 @@ interface AiBackend {
 }
 
 /** Итог обычного (не потокового) запроса. */
-data class Completion(val text: String, val stopReason: String?)
+data class Completion(val text: String, val stopReason: String?, val usage: Usage? = null)
 
 /** Результат проверки ключа в настройках. */
 sealed interface KeyCheck {

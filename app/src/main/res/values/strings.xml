@@ -4,4 +4,5 @@
     <string name="shortcut_start">Запустить</string>
     <string name="shortcut_review">Повторение</string>
     <string name="shortcut_progress">Прогресс</string>
+    <string name="widget_description">Карточки на сегодня, серия и экзамен</string>
 </resources>

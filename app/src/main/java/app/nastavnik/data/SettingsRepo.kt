@@ -131,6 +131,16 @@ class SettingsRepo(private val context: Context) {
     fun setPenColor(c: Int) = prefs.edit { putInt(K_PEN_COLOR, c) }
     fun fingerDraws(): Boolean = prefs.getBoolean(K_FINGER, false)
     fun setFingerDraws(on: Boolean) = prefs.edit { putBoolean(K_FINGER, on) }
+    /** Тема: SYSTEM / LIGHT / DARK. */
+    fun themeMode(): String = prefs.getString(K_THEME, "LIGHT").orEmpty()
+    fun setThemeMode(v: String) = prefs.edit { putString(K_THEME, v) }
+
+    /** Журнал расходов по дням (JSON) и дневной лимит в долларах (0 — без лимита). */
+    fun usageJson(): String? = prefs.getString(K_USAGE, null)
+    fun setUsageJson(json: String) = prefs.edit { putString(K_USAGE, json) }
+    fun dailyLimitUsd(): Float = prefs.getFloat(K_LIMIT, 0f)
+    fun setDailyLimitUsd(v: Float) = prefs.edit { putFloat(K_LIMIT, v.coerceAtLeast(0f)) }
+
     /** Экзамены (JSON списка [app.nastavnik.study.Exam]). */
     fun examsJson(): String? = prefs.getString(K_EXAMS, null)
     fun setExamsJson(json: String) = prefs.edit { putString(K_EXAMS, json) }
@@ -252,6 +262,9 @@ class SettingsRepo(private val context: Context) {
         private const val PREFS = "settings"
         private const val SECURE_PREFS = "secure_settings"
         private const val K_EXAMS = "exams"
+        private const val K_USAGE = "usage_log"
+        private const val K_THEME = "theme_mode"
+        private const val K_LIMIT = "daily_limit_usd"
         private const val K_PROVIDER = "provider"
         private const val K_OPENAI_BASE = "openai_base_url"
         private const val K_ANTHROPIC_COMPAT_BASE = "anthropic_compat_base_url"
