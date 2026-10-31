@@ -9,6 +9,8 @@ import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.RectF
 import android.graphics.Typeface
+import android.text.StaticLayout
+import android.text.TextPaint
 import app.nastavnik.ai.MarkKind
 import java.util.WeakHashMap
 
@@ -84,15 +86,61 @@ class PageDrawer {
      * Вся страница: лист, подложка, разлиновка, сначала маркер, потом ручка.
      * [visible] — видимая часть страницы в её единицах: разлиновку рисуем только там.
      */
-    fun drawPage(c: Canvas, page: InkPage, background: Bitmap?, visible: RectF? = null) {
+    fun drawPage(c: Canvas, page: InkPage, background: Bitmap?, visible: RectF? = null, exclude: Set<Any> = emptySet()) {
         val h = page.height
         c.drawRect(0f, 0f, PAGE_W, h, paperPaint)
         if (background != null && !background.isRecycled) {
             c.drawBitmap(background, null, RectF(0f, 0f, PAGE_W, h), bitmapPaint)
         }
         drawPaper(c, page.paper, h, visible)
-        for (s in page.strokes) if (s.tool == Tool.HIGHLIGHTER && visibleStroke(s, visible)) drawStroke(c, s)
-        for (s in page.strokes) if (s.tool == Tool.PEN && visibleStroke(s, visible)) drawStroke(c, s)
+        for (s in page.strokes) if (s.tool == Tool.HIGHLIGHTER && s !in exclude && visibleStroke(s, visible)) drawStroke(c, s)
+        for (t in page.texts) if (t !in exclude) drawText(c, t)
+        for (s in page.strokes) if (s.tool != Tool.HIGHLIGHTER && s !in exclude && visibleStroke(s, visible)) drawStroke(c, s)
+    }
+
+    // ---------------- текст ----------------
+
+    private val layouts = WeakHashMap<TextBox, StaticLayout>()
+    private val textPaint = TextPaint(Paint.ANTI_ALIAS_FLAG)
+
+    private fun layoutOf(t: TextBox): StaticLayout = layouts.getOrPut(t) {
+        val p = TextPaint(textPaint).apply { textSize = t.size; color = t.color }
+        StaticLayout.Builder.obtain(t.text, 0, t.text.length, p, t.width.toInt().coerceAtLeast(20))
+            .setLineSpacing(0f, 1.15f)
+            .build()
+    }
+
+    /** Высота текста после вёрстки — для попадания пальцем и рамки выделения. */
+    fun textHeight(t: TextBox): Float = layoutOf(t).height.toFloat()
+
+    fun drawText(c: Canvas, t: TextBox) {
+        val l = layoutOf(t)
+        l.paint.color = displayColor(t.color)
+        c.save()
+        c.translate(t.x, t.y)
+        l.draw(c)
+        c.restore()
+    }
+
+    /** Подсветка выделенного: мягкий ореол под штрихом. */
+    private val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeCap = Paint.Cap.ROUND
+        strokeJoin = Paint.Join.ROUND
+    }
+
+    fun drawGlow(c: Canvas, s: Stroke, color: Int, extra: Float) {
+        val g = linesOf(s)
+        glowPaint.color = color
+        if (g.dot.isNotEmpty()) {
+            glowPaint.strokeWidth = g.dot[2] * 2 + extra
+            c.drawPoint(g.dot[0], g.dot[1], glowPaint)
+            return
+        }
+        for (k in g.widths.indices) {
+            glowPaint.strokeWidth = g.widths[k] + extra
+            c.drawLines(g.lines[k], glowPaint)
+        }
     }
 
     private fun visibleStroke(s: Stroke, v: RectF?): Boolean {

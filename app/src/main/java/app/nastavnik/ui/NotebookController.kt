@@ -15,10 +15,17 @@ import app.nastavnik.geom.IRect
 import app.nastavnik.ink.InkPage
 import app.nastavnik.ink.InkView
 import app.nastavnik.ink.NotebookMeta
+import app.nastavnik.ink.NotebookStore
+import app.nastavnik.ink.PageRenderer
+import android.graphics.Bitmap
 import app.nastavnik.ink.PAGE_W
 import app.nastavnik.ink.PageMark
 import app.nastavnik.ink.Paper
 import app.nastavnik.ink.Tool
+import app.nastavnik.ink.EditTool
+import app.nastavnik.ink.ShapeKind
+import app.nastavnik.ink.Stroke
+import app.nastavnik.ink.TextBox
 import app.nastavnik.ink.UndoStack
 import app.nastavnik.session.AnswerUi
 import app.nastavnik.session.AskKind
@@ -59,18 +66,49 @@ class NotebookController(val app: NastavnikApp, val notebookId: Long, private va
     var loaded by mutableStateOf(false)
         private set
 
-    // Инструменты (запоминаются между тетрадями).
-    var tool by mutableStateOf(Tool.PEN)
+    // Инструменты (цвет ручки и «писать пальцем» запоминаются между тетрадями).
+    var editTool by mutableStateOf(EditTool.PEN)
         private set
     var penColor by mutableIntStateOf(app.settings.penColor())
         private set
     var markerColor by mutableIntStateOf(MARKERS.first())
         private set
-    var widthIndex by mutableIntStateOf(1)
+    var penWidth by mutableStateOf(3.2f)
         private set
-    var eraser by mutableStateOf(false)
+    var markerWidth by mutableStateOf(InkView.HIGHLIGHTER_W)
+        private set
+    var partialEraser by mutableStateOf(false)
+        private set
+    var shapeKind by mutableStateOf(ShapeKind.LINE)
+        private set
+    var textSize by mutableStateOf(TEXT_SIZES[1])
         private set
     var fingerDraws by mutableStateOf(app.settings.fingerDraws())
+        private set
+
+    /** Перо задержали — сейчас работает временный ластик (подсвечиваем его в палитре). */
+    var tempEraser by mutableStateOf(false)
+        private set
+
+    /** Выделение лассо: рамка на экране и сколько выделено. */
+    var selection by mutableStateOf<RectF?>(null)
+        private set
+    var selectionCount by mutableIntStateOf(0)
+        private set
+
+    /** Скопированное лассо (можно вставить на другую страницу). */
+    private var clipboard: Pair<List<Stroke>, List<TextBox>>? = null
+    var canPaste by mutableStateOf(false)
+        private set
+
+    /** Короткая подсказка поверх листа: что произошло или как пользоваться инструментом. */
+    var hint by mutableStateOf<String?>(null)
+        private set
+    var hintSeq by mutableIntStateOf(0)
+        private set
+
+    /** Просят напечатать текст: место на странице и текст, который правят (или null — новый). */
+    var textRequest by mutableStateOf<Triple<Float, Float, TextBox?>?>(null)
         private set
 
     /** Сам проверять страницу, когда студент перестал писать. */
@@ -154,6 +192,48 @@ class NotebookController(val app: NastavnikApp, val notebookId: Long, private va
         }
     }
 
+    /** Копия текущей страницы сразу после неё (вместе с подложкой). */
+    fun duplicatePage() {
+        val m = meta ?: return
+        val p = page ?: return
+        scope.launch {
+            flushSaveNow()
+            val copy = withContext(Dispatchers.IO) {
+                val id = nbs.store.newId()
+                val bg = p.background?.let { name ->
+                    val newName = NotebookStore.backgroundName(id)
+                    runCatching { nbs.store.background(m.id, name).copyTo(nbs.store.background(m.id, newName), overwrite = true) }
+                        .map { newName }.getOrNull()
+                }
+                InkPage(id, p.paper, bg, p.height, p.strokes.toMutableList(), p.texts.toMutableList())
+            }
+            val nm = withContext(Dispatchers.IO) { nbs.store.addPage(m, copy, index) }
+            meta = nm
+            pages = pages.toMutableList().apply { add(index + 1, copy) }
+            showPage(index + 1)
+            showHint("Страница скопирована")
+        }
+    }
+
+    /** Переставить страницу [from] на место [to]. */
+    fun movePage(from: Int, to: Int) {
+        val m = meta ?: return
+        if (from !in pages.indices || to !in pages.indices || from == to) return
+        val current = page?.id
+        val list = pages.toMutableList().apply { add(to, removeAt(from)) }
+        pages = list
+        index = list.indexOfFirst { it.id == current }.coerceAtLeast(0)
+        val nm = m.copy(pages = list.map { it.id }, updatedAt = System.currentTimeMillis())
+        meta = nm
+        scope.launch(Dispatchers.IO) { nbs.store.saveMeta(nm) }
+    }
+
+    /** Миниатюра страницы для обзора тетради. */
+    suspend fun thumbnail(p: InkPage, widthPx: Int): Bitmap = withContext(Dispatchers.Default) {
+        val bg = nbs.background(notebookId, p)
+        PageRenderer.render(p, bg, widthPx)
+    }
+
     fun deletePage() {
         val m = meta ?: return
         val p = page ?: return
@@ -208,31 +288,101 @@ class NotebookController(val app: NastavnikApp, val notebookId: Long, private va
 
     // ---------------- инструменты ----------------
 
+    fun pickTool(t: EditTool) {
+        if (editTool == t) return
+        editTool = t
+        applyTool()
+        showHint(
+            when (t) {
+                EditTool.PEN -> "Ручка"
+                EditTool.HIGHLIGHTER -> "Маркер — ложится под текст"
+                EditTool.ERASER -> if (partialEraser) "Ластик стирает часть линии" else "Ластик стирает линию целиком"
+                EditTool.LASSO -> "Обведи записи — их можно двигать, копировать, перекрашивать"
+                EditTool.SHAPE -> "Тяни пером — ${shapeKind.label.lowercase()}"
+                EditTool.TEXT -> "Коснись листа, чтобы напечатать текст"
+            },
+        )
+    }
+
     fun pickPen(color: Int) {
-        tool = Tool.PEN; eraser = false; penColor = color
+        penColor = color
         app.settings.setPenColor(color)
+        if (editTool != EditTool.SHAPE && editTool != EditTool.TEXT) editTool = EditTool.PEN
         applyTool()
     }
 
     fun pickMarker(color: Int) {
-        tool = Tool.HIGHLIGHTER; eraser = false; markerColor = color
+        markerColor = color
+        editTool = EditTool.HIGHLIGHTER
         applyTool()
     }
 
-    fun pickEraser() {
-        eraser = !eraser
+    fun changePenWidth(w: Float) {
+        penWidth = w
         applyTool()
     }
 
-    fun cycleWidth() {
-        widthIndex = (widthIndex + 1) % WIDTHS.size
+    fun changeMarkerWidth(w: Float) {
+        markerWidth = w
         applyTool()
+    }
+
+    fun choosePartialEraser(on: Boolean) {
+        partialEraser = on
+        applyTool()
+    }
+
+    fun pickShape(k: ShapeKind) {
+        shapeKind = k
+        editTool = EditTool.SHAPE
+        applyTool()
+    }
+
+    fun pickTextSize(size: Float) {
+        textSize = size
     }
 
     fun toggleFinger() {
         fingerDraws = !fingerDraws
         app.settings.setFingerDraws(fingerDraws)
         applyTool()
+        showHint(if (fingerDraws) "Пальцем пишешь, двумя — двигаешь лист" else "Пальцем двигаешь лист, пишешь пером")
+    }
+
+    fun showHint(text: String) {
+        hint = text
+        hintSeq++
+    }
+
+    // Выделение.
+    fun deleteSelection() = ink.deleteSelection()
+    fun duplicateSelection() = ink.duplicateSelection()
+    fun recolorSelection(c: Int) = ink.recolorSelection(c)
+    fun clearSelection() = ink.clearSelection()
+
+    fun copySelection() {
+        val (s, t) = ink.selectionCopy()
+        if (s.isEmpty() && t.isEmpty()) return
+        clipboard = s to t
+        canPaste = true
+        showHint("Скопировано — можно вставить на любую страницу")
+    }
+
+    fun paste() {
+        val c = clipboard ?: return
+        ink.paste(c.first, c.second)
+        editTool = EditTool.LASSO
+    }
+
+    // Текст.
+    fun submitText(text: String) {
+        val r = textRequest ?: return
+        textRequest = null
+        ink.putText(r.first, r.second, text, r.third?.size ?: textSize, r.third?.color ?: penColor, r.third)
+    }
+
+    fun cancelText() {
+        textRequest = null
     }
 
     fun toggleAutoCheck() {
@@ -242,11 +392,28 @@ class NotebookController(val app: NastavnikApp, val notebookId: Long, private va
     }
 
     private fun applyTool() {
-        ink.tool = tool
-        ink.color = if (tool == Tool.HIGHLIGHTER) markerColor else penColor
-        ink.penWidth = WIDTHS[widthIndex]
-        ink.eraser = eraser
+        ink.editTool = editTool
+        ink.color = if (editTool == EditTool.HIGHLIGHTER) markerColor else penColor
+        ink.penWidth = penWidth
+        ink.markerWidth = markerWidth
+        ink.partialEraser = partialEraser
+        ink.shapeKind = shapeKind
         ink.fingerDraws = fingerDraws
+    }
+
+    override fun onSelectionChanged(screen: RectF?, count: Int) {
+        selection = screen
+        selectionCount = count
+    }
+
+    override fun onTextRequest(x: Float, y: Float, existing: TextBox?) {
+        textRequest = Triple(x, y, existing)
+    }
+
+    override fun onHint(text: String) = showHint(text)
+
+    override fun onTemporaryEraser(active: Boolean) {
+        tempEraser = active
     }
 
     // ---------------- сохранение ----------------
@@ -424,9 +591,15 @@ class NotebookController(val app: NastavnikApp, val notebookId: Long, private va
 
     companion object {
         /** Синяя ручка — как у большинства студентов, чёрная, красная для пометок, зелёная. */
-        val PENS = listOf(0xFF1F4FD1.toInt(), 0xFF16161A.toInt(), 0xFFD93A3A.toInt(), 0xFF1F9D60.toInt())
-        val MARKERS = listOf(0xFFFFE15A.toInt(), 0xFFFF9BCB.toInt(), 0xFF9CD8FF.toInt())
+        val PENS = listOf(
+            0xFF1F4FD1.toInt(), 0xFF16161A.toInt(), 0xFFD93A3A.toInt(), 0xFF1F9D60.toInt(),
+            0xFFE07B1F.toInt(), 0xFF7A4BD1.toInt(),
+        )
+        val MARKERS = listOf(0xFFFFE15A.toInt(), 0xFFFF9BCB.toInt(), 0xFF9CD8FF.toInt(), 0xFFA6F0A0.toInt())
         val WIDTHS = floatArrayOf(2.2f, 3.2f, 5f)
+
+        /** Размер печатного текста: мелкий, обычный, заголовок (в единицах страницы). */
+        val TEXT_SIZES = floatArrayOf(16f, 22f, 32f)
         private const val SAVE_DELAY_MS = 800L
         private const val AUTO_PAUSE_MS = 7_000L
         private const val AUTO_GAP_MS = 40_000L

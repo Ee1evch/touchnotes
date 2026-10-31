@@ -101,6 +101,10 @@ class SettingsRepo(private val context: Context) {
         fastAnswers = prefs.getBoolean(K_FAST, true),
     )
 
+    /** Подсказки по жестам листа показаны (один раз). */
+    fun editorTipsShown(): Boolean = prefs.getBoolean(K_TIPS, false)
+    fun setEditorTipsShown() = prefs.edit { putBoolean(K_TIPS, true) }
+
     fun setFastAnswers(on: Boolean) = prefs.edit { putBoolean(K_FAST, on) }
 
     /** Поток настроек: выдаёт текущее значение и каждое изменение. */
@@ -273,6 +277,7 @@ class SettingsRepo(private val context: Context) {
         private const val K_USAGE = "usage_log"
         private const val K_THEME = "theme_mode"
         private const val K_FAST = "fast_answers"
+        private const val K_TIPS = "editor_tips_shown"
         private const val K_LIMIT = "daily_limit_usd"
         private const val K_PROVIDER = "provider"
         private const val K_OPENAI_BASE = "openai_base_url"

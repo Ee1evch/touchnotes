@@ -10,8 +10,25 @@ import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.sin
 
-/** Чем пишем: ручка или полупрозрачный маркер. */
-enum class Tool { PEN, HIGHLIGHTER }
+/** Чем написан штрих: ручка, полупрозрачный маркер или ровная фигура (без сглаживания и нажима). */
+enum class Tool { PEN, HIGHLIGHTER, SHAPE }
+
+/** Напечатанный текст на странице: левый верхний угол, ширина строки, размер шрифта — в единицах страницы. */
+class TextBox(val x: Float, val y: Float, val width: Float, val text: String, val size: Float, val color: Int) {
+    fun moved(dx: Float, dy: Float) = TextBox(x + dx, y + dy, width, text, size, color)
+
+    /** Примерная рамка (точная высота известна только после вёрстки на экране). */
+    fun bounds(lines: Int = estimateLines()): FloatArray = floatArrayOf(x, y, x + width, y + lines * size * LINE_K)
+
+    fun estimateLines(): Int {
+        val perLine = (width / (size * 0.52f)).toInt().coerceAtLeast(1)
+        return text.split('\n').sumOf { ((it.length + perLine - 1) / perLine).coerceAtLeast(1) }
+    }
+
+    companion object {
+        const val LINE_K = 1.3f
+    }
+}
 
 /** Бумага страницы. Клетка — как в обычной студенческой тетради. */
 enum class Paper(val label: String) { GRID("Клетка"), LINED("Линейка"), DOTS("Точки"), BLANK("Чистый") }
@@ -21,6 +38,13 @@ enum class Paper(val label: String) { GRID("Клетка"), LINED("Линейк�
  */
 class Stroke(val tool: Tool, val color: Int, val width: Float, val points: FloatArray) {
     val size: Int get() = points.size / 3
+
+    /** Тот же штрих, сдвинутый на (dx, dy). */
+    fun moved(dx: Float, dy: Float) = Stroke(tool, color, width, FloatArray(points.size) { i ->
+        when (i % 3) { 0 -> points[i] + dx; 1 -> points[i] + dy; else -> points[i] }
+    })
+
+    fun recolored(c: Int) = Stroke(tool, c, width, points)
     fun x(i: Int) = points[i * 3]
     fun y(i: Int) = points[i * 3 + 1]
     fun p(i: Int) = points[i * 3 + 2]
@@ -47,6 +71,7 @@ class InkPage(
     val background: String? = null,
     val height: Float = A4_H,
     val strokes: MutableList<Stroke> = mutableListOf(),
+    val texts: MutableList<TextBox> = mutableListOf(),
 ) {
     /** Растёт при каждом изменении — по нему перерисовываются превью и снимки для наставника. */
     var version: Long = 0
@@ -54,6 +79,11 @@ class InkPage(
 
     fun touch() {
         version++
+    }
+
+    fun set(newStrokes: List<Stroke>, newTexts: List<TextBox>) {
+        strokes.clear(); strokes.addAll(newStrokes)
+        texts.clear(); texts.addAll(newTexts)
     }
 }
 
@@ -82,7 +112,7 @@ object StrokeGeometry {
 
     /** Толщина в точке: от нажима, но не тоньше трети и не толще полутора базовых. */
     fun widthAt(base: Float, pressure: Float, tool: Tool): Float =
-        if (tool == Tool.HIGHLIGHTER) base else base * (0.35f + 1.15f * pressure.coerceIn(0f, 1f)).coerceIn(0.35f, 1.5f)
+        if (tool != Tool.PEN) base else base * (0.35f + 1.15f * pressure.coerceIn(0f, 1f)).coerceIn(0.35f, 1.5f)
 
     /**
      * Контур штриха: левый край вперёд, правый назад — замкнутый многоугольник x0,y0,x1,y1…
@@ -250,7 +280,8 @@ object InkCurve {
     fun lines(s: Stroke): StrokeLines {
         val n0 = s.size
         if (n0 == 0) return StrokeLines(FloatArray(0), emptyArray(), FloatArray(0))
-        val pts = curve(s.points)
+        // Фигуры — без сглаживания: углы прямоугольника должны остаться острыми.
+        val pts = if (s.tool == Tool.SHAPE) s.points else curve(s.points)
         val n = pts.size / 3
         val tiny = s.width * 0.02f
         // Одно касание или все точки в одном месте — точка.
@@ -285,6 +316,14 @@ sealed interface InkEdit {
     data class Added(val stroke: Stroke) : InkEdit
     data class Erased(val strokes: List<Pair<Int, Stroke>>) : InkEdit
     data class Cleared(val strokes: List<Stroke>) : InkEdit
+
+    /** Любая сложная правка (лассо, частичный ластик, текст, цвет): страница «до» и «после». */
+    data class Replace(
+        val beforeStrokes: List<Stroke>,
+        val beforeTexts: List<TextBox>,
+        val afterStrokes: List<Stroke>,
+        val afterTexts: List<TextBox>,
+    ) : InkEdit
 }
 
 class UndoStack {
@@ -306,6 +345,7 @@ class UndoStack {
             is InkEdit.Added -> page.strokes.remove(e.stroke)
             is InkEdit.Erased -> e.strokes.sortedBy { it.first }.forEach { (i, s) -> page.strokes.add(i.coerceAtMost(page.strokes.size), s) }
             is InkEdit.Cleared -> page.strokes.addAll(e.strokes)
+            is InkEdit.Replace -> page.set(e.beforeStrokes, e.beforeTexts)
         }
         undone.addLast(e)
         page.touch()
@@ -318,6 +358,7 @@ class UndoStack {
             is InkEdit.Added -> page.strokes.add(e.stroke)
             is InkEdit.Erased -> page.strokes.removeAll(e.strokes.map { it.second }.toSet())
             is InkEdit.Cleared -> page.strokes.clear()
+            is InkEdit.Replace -> page.set(e.afterStrokes, e.afterTexts)
         }
         done.addLast(e)
         page.touch()
@@ -336,11 +377,12 @@ class UndoStack {
 
 /** Двоичный формат страницы: компактно и быстро даже для тысяч штрихов. */
 object InkFormat {
-    private const val MAGIC = 0x4E4B4931 // «NKI1»
+    private const val MAGIC = 0x4E4B4931 // «NKI1» — старые страницы, без текста
+    private const val MAGIC2 = 0x4E4B4932 // «NKI2» — с напечатанным текстом
 
     fun write(page: InkPage, out: OutputStream) {
         val o = DataOutputStream(out.buffered())
-        o.writeInt(MAGIC)
+        o.writeInt(MAGIC2)
         o.writeLong(page.id)
         o.writeUTF(page.paper.name)
         o.writeUTF(page.background.orEmpty())
@@ -353,12 +395,19 @@ object InkFormat {
             o.writeInt(s.size)
             for (v in s.points) o.writeFloat(v)
         }
+        o.writeInt(page.texts.size)
+        for (t in page.texts) {
+            o.writeFloat(t.x); o.writeFloat(t.y); o.writeFloat(t.width); o.writeFloat(t.size)
+            o.writeInt(t.color)
+            o.writeUTF(t.text)
+        }
         o.flush()
     }
 
     fun read(input: InputStream): InkPage {
         val i = DataInputStream(input.buffered())
-        require(i.readInt() == MAGIC) { "не страница тетради" }
+        val magic = i.readInt()
+        require(magic == MAGIC || magic == MAGIC2) { "не страница тетради" }
         val id = i.readLong()
         val paper = runCatching { Paper.valueOf(i.readUTF()) }.getOrDefault(Paper.GRID)
         val bg = i.readUTF().ifEmpty { null }
@@ -373,6 +422,14 @@ object InkFormat {
             val pts = FloatArray(n * 3) { i.readFloat() }
             strokes += Stroke(tool, color, width, pts)
         }
-        return InkPage(id, paper, bg, height, strokes)
+        val texts = ArrayList<TextBox>()
+        if (magic == MAGIC2) {
+            repeat(i.readInt()) {
+                val x = i.readFloat(); val y = i.readFloat(); val w = i.readFloat(); val size = i.readFloat()
+                val color = i.readInt()
+                texts += TextBox(x, y, w, i.readUTF(), size, color)
+            }
+        }
+        return InkPage(id, paper, bg, height, strokes, texts)
     }
 }

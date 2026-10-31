@@ -1,6 +1,10 @@
 package app.nastavnik.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Animatable
@@ -112,8 +116,11 @@ fun NotebookScreen(notebookId: Long, onBack: () -> Unit, onCleanReady: () -> Uni
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val ctl = remember(notebookId) { NotebookController(context.app, notebookId, scope) }
+    var tips by remember { mutableStateOf(false) }
     LaunchedEffect(notebookId) {
         ctl.load()
+        // Первый раз — коротко, как устроен лист.
+        if (!context.app.settings.editorTipsShown()) tips = true
         // Прогреваем движок WebView (им рисуются формулы в подсказках): первый запуск долгий,
         // пусть он случится сейчас, а не в момент, когда пришёл ответ наставника.
         delay(600)
@@ -131,12 +138,17 @@ fun NotebookScreen(notebookId: Long, onBack: () -> Unit, onCleanReady: () -> Uni
 
     val wide = LocalConfiguration.current.screenWidthDp >= 840
     var panel by rememberSaveable { mutableStateOf(wide) }
+    var pagesOpen by rememberSaveable { mutableStateOf(false) }
     val importers = rememberImporters(onImages = { ctl.addImages(it) }, onPdf = { ctl.addPdf(it) })
     // Тёмная тема доходит и до листа: тёмный стол, тёмная бумага, светлые чернила.
     val dark = Brand.dark
     SideEffect { ctl.ink.dark = dark }
     // Ответ пришёл, а панель скрыта — показываем её сами, чтобы подсказка не потерялась.
     LaunchedEffect(state.answer?.seq) { if (state.answer != null) panel = true }
+
+    if (tips) EditorTips { tips = false; context.app.settings.setEditorTipsShown() }
+    if (pagesOpen) PagesOverview(ctl, onAdd = { ctl.addPage(ctl.page?.paper ?: Paper.GRID) }) { pagesOpen = false }
+    TextDialog(ctl)
 
     Box(
         Modifier
@@ -146,7 +158,7 @@ fun NotebookScreen(notebookId: Long, onBack: () -> Unit, onCleanReady: () -> Uni
     ) {
         Row(Modifier.fillMaxSize()) {
             Column(Modifier.weight(1f).fillMaxHeight()) {
-                NotebookTopBar(ctl, panel, onBack = close, onTogglePanel = { panel = !panel }, importers = importers)
+                NotebookTopBar(ctl, panel, onBack = close, onTogglePanel = { panel = !panel }, onPages = { pagesOpen = true }, importers = importers)
                 Box(
                     Modifier
                         .weight(1f)
@@ -155,6 +167,8 @@ fun NotebookScreen(notebookId: Long, onBack: () -> Unit, onCleanReady: () -> Uni
                         .clip(RoundedCornerShape(24.dp)),
                 ) {
                     AndroidView(factory = { ctl.ink }, modifier = Modifier.fillMaxSize())
+                    SelectionMenu(ctl)
+                    EditorHint(ctl, Modifier.align(Alignment.TopCenter).padding(top = 14.dp))
                     Column(
                         Modifier.align(Alignment.BottomCenter).padding(bottom = 14.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
@@ -175,7 +189,7 @@ fun NotebookScreen(notebookId: Long, onBack: () -> Unit, onCleanReady: () -> Uni
                                     .padding(horizontal = 14.dp, vertical = 8.dp),
                             )
                         }
-                        ToolPalette(ctl)
+                        EditorToolbar(ctl)
                     }
                     androidx.compose.animation.AnimatedVisibility(
                         visible = !ctl.loaded,
@@ -186,26 +200,26 @@ fun NotebookScreen(notebookId: Long, onBack: () -> Unit, onCleanReady: () -> Uni
             }
             androidx.compose.animation.AnimatedVisibility(
                 visible = panel && wide,
-                enter = expandHorizontally(expandFrom = Alignment.Start, animationSpec = tween(320, easing = FastOutSlowInEasing)) + fadeIn(tween(260, delayMillis = 60)),
-                exit = shrinkHorizontally(shrinkTowards = Alignment.Start, animationSpec = tween(280, easing = FastOutSlowInEasing)) + fadeOut(tween(160)),
+                enter = expandHorizontally(expandFrom = Alignment.Start, animationSpec = tween(360, easing = FastOutSlowInEasing)) + fadeIn(tween(280, delayMillis = 80)),
+                exit = shrinkHorizontally(shrinkTowards = Alignment.Start, animationSpec = tween(300, easing = FastOutSlowInEasing)) + fadeOut(tween(160)),
             ) {
                 MentorPanel(
                     ctl, state.answer, onCleanReady = onCleanReady, onSettings = onSettings,
-                    modifier = Modifier.width(380.dp).fillMaxHeight().padding(12.dp),
+                    modifier = Modifier.width(390.dp).fillMaxHeight().padding(12.dp),
                 )
             }
         }
         androidx.compose.animation.AnimatedVisibility(
             visible = panel && !wide,
             modifier = Modifier.align(Alignment.BottomCenter),
-            enter = slideInVertically(tween(320, easing = FastOutSlowInEasing)) { it } + fadeIn(),
-            exit = slideOutVertically(tween(260, easing = FastOutSlowInEasing)) { it } + fadeOut(),
+            enter = slideInVertically(tween(340, easing = FastOutSlowInEasing)) { it } + fadeIn(),
+            exit = slideOutVertically(tween(280, easing = FastOutSlowInEasing)) { it } + fadeOut(),
         ) {
             MentorPanel(
                 ctl, state.answer, onCleanReady = onCleanReady, onSettings = onSettings,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height((LocalConfiguration.current.screenHeightDp * 0.45f).dp)
+                    .height((LocalConfiguration.current.screenHeightDp * 0.5f).dp)
                     .padding(12.dp),
             )
         }
@@ -215,11 +229,17 @@ fun NotebookScreen(notebookId: Long, onBack: () -> Unit, onCleanReady: () -> Uni
 // ---------------- верхняя панель ----------------
 
 @Composable
-private fun NotebookTopBar(ctl: NotebookController, panel: Boolean, onBack: () -> Unit, onTogglePanel: () -> Unit, importers: Importers) {
+private fun NotebookTopBar(
+    ctl: NotebookController,
+    panel: Boolean,
+    onBack: () -> Unit,
+    onTogglePanel: () -> Unit,
+    onPages: () -> Unit,
+    importers: Importers,
+) {
     var renaming by remember { mutableStateOf(false) }
     var addMenu by remember { mutableStateOf(false) }
     var moreMenu by remember { mutableStateOf(false) }
-    var confirmDelete by remember { mutableStateOf(false) }
     var paperDialog by remember { mutableStateOf(false) }
     if (paperDialog) PaperDialog(ctl) { paperDialog = false }
     val meta = ctl.meta
@@ -242,30 +262,37 @@ private fun NotebookTopBar(ctl: NotebookController, panel: Boolean, onBack: () -
                 .clickable { renaming = true }
                 .padding(horizontal = 6.dp, vertical = 4.dp),
         )
-        // Страницы.
+        // Страницы: стрелки и номер; номер открывает обзор всех страниц.
         Row(
             Modifier.glass(CircleShape, 4.dp, strong = true).padding(horizontal = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             BarIcon(R.drawable.ic_chevron_left, "Предыдущая страница", enabled = ctl.index > 0) { ctl.showPage(ctl.index - 1) }
-            AnimatedContent(
-                targetState = ctl.index,
-                transitionSpec = {
-                    val dir = if (targetState > initialState) 1 else -1
-                    (slideInVertically { h -> h * dir } + fadeIn()) togetherWith (slideOutVertically { h -> -h * dir } + fadeOut())
-                },
-                label = "page",
-            ) { i ->
-                Text("${i + 1} / ${ctl.pages.size.coerceAtLeast(1)}", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(horizontal = 4.dp))
+            Box(
+                Modifier
+                    .clip(CircleShape)
+                    .clickable(onClick = onPages)
+                    .semantics { contentDescription = "Все страницы" }
+                    .padding(horizontal = 6.dp, vertical = 8.dp),
+            ) {
+                AnimatedContent(
+                    targetState = ctl.index,
+                    transitionSpec = {
+                        val dir = if (targetState > initialState) 1 else -1
+                        (slideInVertically { h -> h * dir } + fadeIn()) togetherWith (slideOutVertically { h -> -h * dir } + fadeOut())
+                    },
+                    label = "page",
+                ) { i ->
+                    Text("${i + 1} / ${ctl.pages.size.coerceAtLeast(1)}", style = MaterialTheme.typography.labelLarge)
+                }
             }
             BarIcon(R.drawable.ic_chevron, "Следующая страница", enabled = ctl.index < ctl.pages.lastIndex) { ctl.showPage(ctl.index + 1) }
         }
         Box {
             BarButton(R.drawable.ic_plus, "Добавить страницу") { addMenu = true }
             DropdownMenu(expanded = addMenu, onDismissRequest = { addMenu = false }, containerColor = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(18.dp)) {
-                Paper.entries.forEach { p ->
-                    MenuItem("Лист: ${p.label.lowercase()}", R.drawable.ic_notebook) { addMenu = false; ctl.addPage(p) }
-                }
+                MenuItem("Пустая страница", R.drawable.ic_notebook) { addMenu = false; ctl.addPage(ctl.page?.paper ?: Paper.GRID) }
+                MenuItem("Копия этой страницы", R.drawable.ic_duplicate) { addMenu = false; ctl.duplicatePage() }
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 MenuItem("Сфотографировать", R.drawable.ic_camera) { addMenu = false; importers.camera() }
                 MenuItem("Фото из галереи", R.drawable.ic_image) { addMenu = false; importers.gallery() }
@@ -277,10 +304,10 @@ private fun NotebookTopBar(ctl: NotebookController, panel: Boolean, onBack: () -
         Box {
             BarButton(R.drawable.ic_more, "Ещё") { moreMenu = true }
             DropdownMenu(expanded = moreMenu, onDismissRequest = { moreMenu = false }, containerColor = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(18.dp)) {
+                MenuItem("Все страницы", R.drawable.ic_pages) { moreMenu = false; onPages() }
                 MenuItem("Бумага…", R.drawable.ic_notebook) { moreMenu = false; paperDialog = true }
                 MenuItem("Переименовать", R.drawable.ic_pen) { moreMenu = false; renaming = true }
                 MenuItem("Очистить страницу", R.drawable.ic_eraser) { moreMenu = false; ctl.clearPage() }
-                if (ctl.pages.size > 1) MenuItem("Удалить страницу", R.drawable.ic_trash) { moreMenu = false; confirmDelete = true }
             }
         }
         BarButton(R.drawable.ic_sparkle, if (panel) "Скрыть наставника" else "Показать наставника", active = panel, onClick = onTogglePanel)
@@ -293,17 +320,6 @@ private fun NotebookTopBar(ctl: NotebookController, panel: Boolean, onBack: () -
             text = { AppTextField(text, { text = it }, "Например: Матанализ, пределы") },
             confirmButton = { InkButton("Сохранить") { ctl.rename(text); renaming = false } },
             dismissButton = { SoftButton("Отмена") { renaming = false } },
-            containerColor = MaterialTheme.colorScheme.surface,
-            shape = RoundedCornerShape(28.dp),
-        )
-    }
-    if (confirmDelete) {
-        AlertDialog(
-            onDismissRequest = { confirmDelete = false },
-            title = { Text("Удалить страницу?") },
-            text = { Text("Всё, что на ней написано, пропадёт.", color = MaterialTheme.colorScheme.onSurfaceVariant) },
-            confirmButton = { InkButton("Удалить", danger = true) { ctl.deletePage(); confirmDelete = false } },
-            dismissButton = { SoftButton("Отмена") { confirmDelete = false } },
             containerColor = MaterialTheme.colorScheme.surface,
             shape = RoundedCornerShape(28.dp),
         )
@@ -350,101 +366,6 @@ private fun BarIcon(icon: Int, description: String, enabled: Boolean, onClick: (
         contentAlignment = Alignment.Center,
     ) {
         Icon(painterResource(icon), contentDescription = null, tint = if (enabled) Brand.Ink else Brand.Ink.copy(alpha = 0.25f), modifier = Modifier.size(20.dp))
-    }
-}
-
-// ---------------- палитра ----------------
-
-@Composable
-private fun ToolPalette(ctl: NotebookController) {
-    // Пока пишешь, палитра становится полупрозрачной — не отвлекает и не закрывает записи.
-    val alpha by animateFloatAsState(if (ctl.writing) 0.35f else 1f, tween(if (ctl.writing) 180 else 420), label = "palette")
-    Row(
-        Modifier
-            .graphicsLayer { this.alpha = alpha }
-            .glass(CircleShape, 12.dp, strong = true)
-            .padding(horizontal = 10.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        NotebookController.PENS.forEach { c ->
-            Swatch(Color(c), selected = ctl.tool == Tool.PEN && !ctl.eraser && ctl.penColor == c, description = penName(c)) { ctl.pickPen(c) }
-        }
-        Divider()
-        NotebookController.MARKERS.forEach { c ->
-            Swatch(Color(c), selected = ctl.tool == Tool.HIGHLIGHTER && !ctl.eraser && ctl.markerColor == c, description = "Маркер", marker = true) { ctl.pickMarker(c) }
-        }
-        Divider()
-        ToolIcon(R.drawable.ic_eraser, "Ластик", ctl.eraser) { ctl.pickEraser() }
-        // Толщина: три точки разного размера.
-        Box(
-            Modifier
-                .size(38.dp)
-                .clip(CircleShape)
-                .clickable { ctl.cycleWidth() }
-                .semantics { contentDescription = "Толщина ручки" },
-            contentAlignment = Alignment.Center,
-        ) {
-            val dot by animateDpAsState((5 + ctl.widthIndex * 4).dp, spring(dampingRatio = 0.55f, stiffness = 500f), label = "width")
-            Box(Modifier.size(dot).clip(CircleShape).background(Brand.Ink))
-        }
-        ToolIcon(R.drawable.ic_hand, if (ctl.fingerDraws) "Пальцем пишу" else "Пальцем двигаю лист", ctl.fingerDraws) { ctl.toggleFinger() }
-    }
-}
-
-private fun penName(c: Int) = when (c) {
-    NotebookController.PENS[0] -> "Синяя ручка"
-    NotebookController.PENS[1] -> "Чёрная ручка"
-    NotebookController.PENS[2] -> "Красная ручка"
-    else -> "Зелёная ручка"
-}
-
-@Composable
-private fun Swatch(color: Color, selected: Boolean, description: String, marker: Boolean = false, onClick: () -> Unit) {
-    // Выбранный цвет «вырастает» с пружинкой и получает кольцо.
-    val size by animateDpAsState(if (selected) 28.dp else 22.dp, spring(dampingRatio = 0.5f, stiffness = 600f), label = "swatch")
-    val ring by animateFloatAsState(if (selected) 1f else 0f, tween(200), label = "ring")
-    val shape = if (marker) RoundedCornerShape(7.dp) else CircleShape
-    Box(
-        Modifier
-            .size(38.dp)
-            .clip(CircleShape)
-            .clickable(onClick = onClick)
-            .semantics { contentDescription = description },
-        contentAlignment = Alignment.Center,
-    ) {
-        Box(
-            Modifier
-                .size(size)
-                .clip(shape)
-                .background(color)
-                .border(1.dp, Brand.Line, shape),
-        )
-        if (ring > 0f) {
-            Box(
-                Modifier
-                    .size(35.dp)
-                    .graphicsLayer { alpha = ring; scaleX = 0.8f + 0.2f * ring; scaleY = 0.8f + 0.2f * ring }
-                    .border(2.dp, Brand.Ink, if (marker) RoundedCornerShape(10.dp) else CircleShape),
-            )
-        }
-    }
-}
-
-@Composable
-private fun ToolIcon(icon: Int, description: String, active: Boolean, onClick: () -> Unit) {
-    val bg by animateColorAsState(if (active) Brand.Ink else Color.Transparent, tween(200), label = "tool")
-    Box(
-        Modifier
-            .size(38.dp)
-            .clip(CircleShape)
-            .background(bg)
-            .clickable(onClick = onClick)
-            .semantics { contentDescription = description },
-        contentAlignment = Alignment.Center,
-    ) {
-        val tint by animateColorAsState(if (active) Brand.OnInk else Brand.Ink, tween(200), label = "toolTint")
-        Icon(painterResource(icon), contentDescription = null, tint = tint, modifier = Modifier.size(20.dp))
     }
 }
 
@@ -511,27 +432,31 @@ private fun Divider() {
 
 // ---------------- наставник ----------------
 
+/** Быстрые вопросы наставнику: значок, название и что он сделает. */
+private class Ask(val action: QuickAction, val icon: Int, val title: String, val hint: String)
+
+private val ASKS = listOf(
+    Ask(QuickAction.NEXT_STEP, R.drawable.ic_bulb, "Подсказка", "следующий шаг"),
+    Ask(QuickAction.FIND_ERROR, R.drawable.ic_search, "Где ошибка?", "найдёт и отметит"),
+    Ask(QuickAction.CHECK_ANSWER, R.drawable.ic_check, "Проверь ответ", "сверит решение"),
+    Ask(QuickAction.THEORY, R.drawable.ic_book, "Теория", "правило с примером"),
+    Ask(QuickAction.SHOW_STEP, R.drawable.ic_chevron, "Покажи шаг", "если совсем застрял"),
+    Ask(QuickAction.SIMILAR, R.drawable.ic_refresh, "Похожая", "задача на тренировку"),
+)
+
+/**
+ * Панель наставника. Два состояния: «Вопросы» (что спросить) и «Ответ». Пока есть ответ, панель целиком
+ * отдана ему — без кнопок и полей; стрелка «Вопросы» вверху возвращает к вопросам, а ответ остаётся
+ * под рукой («Последний ответ»).
+ */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun MentorPanel(ctl: NotebookController, answer: AnswerUi?, onCleanReady: () -> Unit, onSettings: () -> Unit, modifier: Modifier) {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    var question by remember { mutableStateOf("") }
-    var listening by remember { mutableStateOf(false) }
     var problem by remember { mutableStateOf<String?>(null) }
-    var examDialog by remember { mutableStateOf(false) }
-    if (examDialog) {
-        ExamDialog(onStart = { m -> examDialog = false; ctl.startExam(m) }, onDismiss = { examDialog = false })
-    }
-    val speech = remember {
-        SpeechInput(context, object : SpeechInput.Callback {
-            override fun onListening(active: Boolean) { listening = active }
-            override fun onPartial(text: String) { question = text }
-            override fun onResult(text: String) { question = text }
-            override fun onError(message: String, needsPermission: Boolean) { problem = message }
-        })
-    }
-    DisposableEffect(Unit) { onDispose { speech.destroy() } }
+    // Новый ответ — сразу открываем его; «Вопросы» — возвращаемся.
+    var showAnswer by remember { mutableStateOf(false) }
+    LaunchedEffect(answer?.seq) { showAnswer = answer != null }
 
     fun ask(text: String, kind: AskKind) {
         val reason = context.app.settings.notReadyReason()
@@ -543,9 +468,106 @@ private fun MentorPanel(ctl: NotebookController, answer: AnswerUi?, onCleanReady
         ctl.ask(text, kind)
     }
 
+    Box(modifier.glass(RoundedCornerShape(28.dp), 14.dp)) {
+        AnimatedContent(
+            targetState = showAnswer && answer != null,
+            transitionSpec = {
+                if (targetState) {
+                    (slideInHorizontally(tween(340, easing = FastOutSlowInEasing)) { it / 3 } + fadeIn(tween(260)))
+                        .togetherWith(slideOutHorizontally(tween(300, easing = FastOutSlowInEasing)) { -it / 4 } + fadeOut(tween(180)))
+                } else {
+                    (slideInHorizontally(tween(340, easing = FastOutSlowInEasing)) { -it / 3 } + fadeIn(tween(260)))
+                        .togetherWith(slideOutHorizontally(tween(300, easing = FastOutSlowInEasing)) { it / 4 } + fadeOut(tween(180)))
+                }
+            },
+            label = "mentorMode",
+        ) { answerMode ->
+            if (answerMode && answer != null) {
+                AnswerView(ctl, answer, onBack = { showAnswer = false }, onSettings = onSettings, onRetry = { ask(answer.question, answer.kind) })
+            } else {
+                AskView(ctl, answer, problem, onSettings, onCleanReady, onOpenAnswer = { showAnswer = true }, ask = ::ask)
+            }
+        }
+    }
+}
+
+/** Только ответ: на всю панель, сверху — вернуться к вопросам. */
+@Composable
+private fun AnswerView(ctl: NotebookController, answer: AnswerUi, onBack: () -> Unit, onSettings: () -> Unit, onRetry: () -> Unit) {
+    Column(Modifier.fillMaxSize().padding(horizontal = 14.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(
+            Modifier
+                .clip(CircleShape)
+                .clickable(onClick = onBack)
+                .padding(start = 4.dp, end = 12.dp, top = 6.dp, bottom = 6.dp)
+                .semantics { contentDescription = "К вопросам" },
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Icon(painterResource(R.drawable.ic_chevron_left), contentDescription = null, tint = Brand.Ink, modifier = Modifier.size(20.dp))
+            Text("Вопросы", style = MaterialTheme.typography.labelLarge)
+        }
+        Column(
+            Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            when {
+                answer.errorText != null -> {
+                    StatusLine(answer.errorText, Tone.ERROR)
+                    if (answer.error?.needsSettings == true) LinkText("Открыть настройки", onClick = onSettings)
+                    else SoftButton("Повторить", icon = R.drawable.ic_refresh, onClick = onRetry)
+                }
+                else -> {
+                    if (answer.streaming && answer.marks.isEmpty()) ThinkingRow(answer.seq, answer.status)
+                    answer.marks.forEachIndexed { i, m ->
+                        NoteCard(i + 1, m, topic = ctl.meta?.title.orEmpty(), onLocate = { ctl.focusMark(i + 1) })
+                    }
+                    if (answer.streaming && answer.marks.isNotEmpty()) ThinkingRow(answer.seq, "Дописываю…")
+                }
+            }
+        }
+    }
+}
+
+/** Вопросы наставнику: плитки с понятными подписями, свой вопрос, проверка «когда остановлюсь». */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun AskView(
+    ctl: NotebookController,
+    answer: AnswerUi?,
+    problem: String?,
+    onSettings: () -> Unit,
+    onCleanReady: () -> Unit,
+    onOpenAnswer: () -> Unit,
+    ask: (String, AskKind) -> Unit,
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var question by remember { mutableStateOf("") }
+    var listening by remember { mutableStateOf(false) }
+    var speechProblem by remember { mutableStateOf<String?>(null) }
+    var examDialog by remember { mutableStateOf(false) }
+    if (examDialog) {
+        ExamDialog(onStart = { m -> examDialog = false; ctl.startExam(m) }, onDismiss = { examDialog = false })
+    }
+    val speech = remember {
+        SpeechInput(context, object : SpeechInput.Callback {
+            override fun onListening(active: Boolean) { listening = active }
+            override fun onPartial(text: String) { question = text }
+            override fun onResult(text: String) { question = text }
+            override fun onError(message: String, needsPermission: Boolean) { speechProblem = message }
+        })
+    }
+    DisposableEffect(Unit) { onDispose { speech.destroy() } }
+    val busy = answer?.streaming == true
+
     Column(
-        modifier
-            .glass(RoundedCornerShape(28.dp), 14.dp)
+        Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
             .padding(18.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -562,26 +584,66 @@ private fun MentorPanel(ctl: NotebookController, answer: AnswerUi?, onCleanReady
         }
         if (ctl.examActive) {
             ExamCard(ctl)
-        } else {
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf(
-                QuickAction.NEXT_STEP, QuickAction.FIND_ERROR, QuickAction.CHECK_ANSWER,
-                QuickAction.THEORY, QuickAction.SHOW_STEP, QuickAction.SIMILAR,
-            ).forEach { a ->
-                ChipButton(a.short, enabled = answer?.streaming != true) { ask(a.prompt, AskKind.QUICK) }
-            }
-            ChipButton("Контрольная", enabled = answer?.streaming != true) { examDialog = true }
+            return@Column
         }
+        ctl.meta?.tasks?.takeIf { it.isNotEmpty() }?.let { VariantCard(it) }
+        (problem ?: speechProblem)?.let { p ->
+            StatusLine(p, Tone.ERROR)
+            if (p.contains("настройки")) LinkText("Открыть настройки", onClick = onSettings)
+        }
+        // Последний ответ под рукой — одно касание, и он снова на всю панель.
+        if (answer != null) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(Brand.Line)
+                    .clickable(onClick = onOpenAnswer)
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(if (busy) "Наставник отвечает…" else "Последний ответ", style = MaterialTheme.typography.labelLarge)
+                    answer.marks.firstOrNull()?.text?.let {
+                        Text(it.replace(Regex("[$*_]"), ""), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+                Icon(painterResource(R.drawable.ic_chevron), contentDescription = null, tint = Brand.InkSoft, modifier = Modifier.size(18.dp))
+            }
+            // Решение верное — дальше чистовик или такая же задача.
+            if (answer.done && !busy) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    InkButton("Сделать чистовик", icon = R.drawable.ic_note) {
+                        scope.launch {
+                            val images = ctl.pageImages()
+                            val clean = context.app.clean
+                            clean.cancel()
+                            clean.addImages(images)
+                            clean.build()
+                            onCleanReady()
+                        }
+                    }
+                }
+            }
+        }
+        // Плитки вопросов: два столбца, понятные подписи.
+        ASKS.chunked(2).forEach { row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                row.forEach { a -> AskTile(a, enabled = !busy, modifier = Modifier.weight(1f)) { ask(a.action.prompt, AskKind.QUICK) } }
+            }
+        }
+        AskTile(Ask(QuickAction.NEXT_STEP, R.drawable.ic_timer, "Контрольная", "таймер, подсказок нет"), enabled = !busy, modifier = Modifier.fillMaxWidth()) { examDialog = true }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Box(Modifier.weight(1f)) {
                 AppTextField(
-                    question, { question = it }, if (listening) "Говори…" else "Спросить своими словами",
+                    question, { question = it }, if (listening) "Говори…" else "Свой вопрос",
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                     keyboardActions = KeyboardActions(onSend = { if (question.isNotBlank()) { ask(question.trim(), AskKind.USER); question = "" } }),
                 )
             }
             BarButton(R.drawable.ic_mic, if (listening) "Остановить запись" else "Сказать голосом", active = listening) { speech.toggle() }
-            BarButton(R.drawable.ic_send, "Отправить", enabled = question.isNotBlank()) {
+            BarButton(R.drawable.ic_send, "Отправить", enabled = question.isNotBlank() && !busy) {
                 ask(question.trim(), AskKind.USER)
                 question = ""
             }
@@ -596,58 +658,36 @@ private fun MentorPanel(ctl: NotebookController, answer: AnswerUi?, onCleanReady
         ) {
             Column(Modifier.weight(1f)) {
                 Text("Проверять, когда остановлюсь", style = MaterialTheme.typography.labelLarge)
-                Text("Перестал писать на 7 с — наставник тихо проверит страницу и отметит ошибку.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Перестал писать на 7 с — наставник тихо проверит страницу.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             AppSwitch(ctl.autoCheck) { ctl.toggleAutoCheck() }
         }
-        }
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        if (answer == null) EmptyMentor()
+    }
+}
 
-        Column(
-            Modifier
-                .weight(1f)
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            ctl.meta?.tasks?.takeIf { it.isNotEmpty() }?.let { VariantCard(it) }
-            problem?.let { p ->
-                StatusLine(p, Tone.ERROR)
-                if (p.contains("настройки")) LinkText("Открыть настройки", onClick = onSettings)
-            }
-            when {
-                answer == null -> EmptyMentor()
-                answer.errorText != null -> {
-                    StatusLine(answer.errorText, Tone.ERROR)
-                    if (answer.error?.needsSettings == true) LinkText("Открыть настройки", onClick = onSettings)
-                    else SoftButton("Повторить", icon = R.drawable.ic_refresh) { ask(answer.question, answer.kind) }
-                }
-                else -> {
-                    if (answer.streaming && answer.marks.isEmpty()) ThinkingRow(answer.seq, answer.status)
-                    answer.marks.forEachIndexed { i, m ->
-                        NoteCard(i + 1, m, topic = ctl.meta?.title.orEmpty(), onLocate = { ctl.focusMark(i + 1) })
-                    }
-                    if (!answer.streaming && answer.marks.isNotEmpty()) {
-                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            if (answer.done) {
-                                InkButton("Сделать чистовик", icon = R.drawable.ic_note) {
-                                    scope.launch {
-                                        val images = ctl.pageImages()
-                                        val clean = context.app.clean
-                                        clean.cancel()
-                                        clean.addImages(images)
-                                        clean.build()
-                                        onCleanReady()
-                                    }
-                                }
-                                SoftButton("Похожая задача", icon = R.drawable.ic_refresh) { ask(QuickAction.SIMILAR.prompt, AskKind.QUICK) }
-                            } else {
-                                SoftButton("Ещё подсказка", icon = R.drawable.ic_bulb) { ask(QuickAction.NEXT_STEP.prompt, AskKind.QUICK) }
-                            }
-                        }
-                    }
-                }
-            }
+/** Плитка вопроса: значок, название и коротко — что будет. Нажатие «проседает». */
+@Composable
+private fun AskTile(a: Ask, enabled: Boolean, modifier: Modifier, onClick: () -> Unit) {
+    val source = remember { MutableInteractionSource() }
+    val pressed by source.collectIsPressedAsState()
+    val scale by animateFloatAsState(if (pressed) 0.96f else 1f, spring(dampingRatio = 0.6f, stiffness = 800f), label = "tile")
+    Row(
+        modifier
+            .graphicsLayer { scaleX = scale; scaleY = scale; alpha = if (enabled) 1f else 0.45f }
+            .clip(RoundedCornerShape(18.dp))
+            .background(Brand.Glass.copy(alpha = 0.7f))
+            .border(0.6.dp, Brand.Line, RoundedCornerShape(18.dp))
+            .clickable(interactionSource = source, indication = null, enabled = enabled, onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 10.dp)
+            .semantics { contentDescription = a.title },
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Icon(painterResource(a.icon), contentDescription = null, tint = Brand.Ink, modifier = Modifier.size(20.dp))
+        Column(Modifier.weight(1f)) {
+            Text(a.title, style = MaterialTheme.typography.labelLarge, maxLines = 1)
+            Text(a.hint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }

@@ -137,6 +137,7 @@ class MentorFlowTest {
         s.setActiveConversation(0)
         s.setWatchPauseSec(0)
         s.setDebugBaseUrl(server.url("/").toString().trimEnd('/'))
+        s.setEditorTipsShown()
     }
 
     @After
@@ -353,12 +354,15 @@ class MentorFlowTest {
         screenshot("notebook_written")
 
         // Наставник: отметка на листе и заметка в панели.
-        device.wait(Until.findObject(By.text("Подсказка")), 5000)!!.click()
+        device.wait(Until.findObject(By.desc("Подсказка")), 5000)!!.click()
         val until = SystemClock.uptimeMillis() + 40000
         while (app.nastavnik.ink.InkView.shownMarks.isEmpty() && SystemClock.uptimeMillis() < until) SystemClock.sleep(300)
         SystemClock.sleep(1500)
         screenshot("notebook_answer")
         assertEquals("нет отметки на листе", 1, app.nastavnik.ink.InkView.shownMarks.size)
+        // Пока на экране ответ, в панели только он: плиток вопросов нет, есть «К вопросам».
+        assertNotNull("нет кнопки «К вопросам»", device.wait(Until.findObject(By.desc("К вопросам")), 5000))
+        assertTrue("в режиме ответа видны плитки вопросов", !device.hasObject(By.desc("Где ошибка?")))
         val req = bodies.last { it.contains("\"stream\":true") }
         assertTrue("вопрос ушёл без снимка страницы", req.contains("\"type\":\"image\""))
 
@@ -367,6 +371,12 @@ class MentorFlowTest {
         device.wait(Until.findObject(By.text("В карточки +")), 5000)!!.click()
         assertNotNull("карточка не добавилась", device.wait(Until.findObject(By.text("✓ В повторении")), 15000))
         assertEquals(cardsBefore + 1, runBlocking { ctx.app.db.cards().observeCount().first() })
+        // «К вопросам» — плитки возвращаются, последний ответ остаётся под рукой.
+        device.findObject(By.desc("К вопросам"))!!.click()
+        assertNotNull("плитки не вернулись", device.wait(Until.findObject(By.desc("Где ошибка?")), 5000))
+        assertNotNull(device.wait(Until.findObject(By.text("Последний ответ")), 3000))
+        SystemClock.sleep(600)
+        screenshot("notebook_ask")
         scenario.close()
 
         // Фото тетради с бумаги → новая тетрадь.
@@ -599,6 +609,149 @@ class MentorFlowTest {
         val host = android.widget.FrameLayout(ctx)
         val v = views.apply(ctx, host)
         assertNotNull(v.findViewById<android.widget.TextView>(R.id.widget_due))
+    }
+
+    /** Одно событие пера (или пальца) с заданными временами. */
+    private fun touch(action: Int, x: Float, y: Float, down: Long, at: Long, finger: Boolean = false) {
+        val props = arrayOf(MotionEvent.PointerProperties().apply { id = 0; toolType = if (finger) MotionEvent.TOOL_TYPE_FINGER else MotionEvent.TOOL_TYPE_STYLUS })
+        val coords = arrayOf(MotionEvent.PointerCoords().apply { this.x = x; this.y = y; pressure = 0.6f; size = 1f })
+        val src = if (finger) InputDevice.SOURCE_TOUCHSCREEN else InputDevice.SOURCE_STYLUS or InputDevice.SOURCE_TOUCHSCREEN
+        val ev = MotionEvent.obtain(down, at, action, 1, props, coords, 0, 0, 1f, 1f, 0, 0, src, 0)
+        instr.uiAutomation.injectInputEvent(ev, true)
+        ev.recycle()
+    }
+
+    /** Касание двумя пальцами (без движения) — «Отменить». */
+    private fun twoFingerTap(x: Float, y: Float) {
+        val down = SystemClock.uptimeMillis()
+        fun ev(action: Int, n: Int): MotionEvent {
+            val props = Array(n) { i -> MotionEvent.PointerProperties().apply { id = i; toolType = MotionEvent.TOOL_TYPE_FINGER } }
+            val coords = Array(n) { i -> MotionEvent.PointerCoords().apply { this.x = x + i * 120f; this.y = y; pressure = 1f; size = 1f } }
+            return MotionEvent.obtain(down, SystemClock.uptimeMillis(), action, n, props, coords, 0, 0, 1f, 1f, 0, 0, InputDevice.SOURCE_TOUCHSCREEN, 0)
+        }
+        listOf(
+            ev(MotionEvent.ACTION_DOWN, 1),
+            ev(MotionEvent.ACTION_POINTER_DOWN or (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT), 2),
+            ev(MotionEvent.ACTION_POINTER_UP or (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT), 2),
+            ev(MotionEvent.ACTION_UP, 1),
+        ).forEach { instr.uiAutomation.injectInputEvent(it, true); it.recycle(); SystemClock.sleep(20) }
+    }
+
+    /** Редактор: все инструменты и жесты пером, как у человека. */
+    @Test
+    fun editorToolsAndGestures() {
+        val nbs = ctx.app.notebooks
+        val (meta, _) = nbs.store.create("Редактор", app.nastavnik.ink.Paper.GRID)
+        // Подсказки по жестам показываются при первом открытии.
+        ctx.getSharedPreferences("settings", android.content.Context.MODE_PRIVATE).edit().remove("editor_tips_shown").commit()
+        val sc = ActivityScenario.launch<MainActivity>(
+            Intent(ctx, MainActivity::class.java)
+                .putExtra(MainActivity.EXTRA_SCREEN, MainActivity.SCREEN_NOTEBOOK)
+                .putExtra(MainActivity.EXTRA_NOTEBOOK, meta.id),
+        )
+        assertNotNull("нет подсказок по жестам", device.wait(Until.findObject(By.text("Как устроен лист")), 10000))
+        SystemClock.sleep(600)
+        screenshot("editor_tips")
+        device.findObject(By.text("Понятно"))!!.click()
+        val sheet = device.wait(Until.findObject(By.desc("Лист тетради")), 10000)!!.visibleBounds
+        SystemClock.sleep(800)
+        fun page() = run { SystemClock.sleep(1600); nbs.store.loadPages(nbs.store.meta(meta.id)!!).first() }
+        val x0 = sheet.left + sheet.width() * 0.15f
+        val y0 = sheet.top + sheet.height() * 0.2f
+
+        // 1. Ручка.
+        penStroke((0..30).map { k -> (x0 + k * 10f) to (y0 + (k % 5) * 3f) })
+        assertEquals(1, page().strokes.size)
+
+        // 2. Задержал перо на месте — ластик, пока держишь; стёр линию; отпустил — снова ручка.
+        var down = SystemClock.uptimeMillis()
+        touch(MotionEvent.ACTION_DOWN, x0 + 150f, y0 + 6f, down, down)
+        SystemClock.sleep(1300)
+        assertTrue("временный ластик не включился", app.nastavnik.ink.InkView.debugTempEraser)
+        screenshot("editor_hold_eraser")
+        for (k in 0..10) touch(MotionEvent.ACTION_MOVE, x0 + 100f + k * 10f, y0 + 6f, down, SystemClock.uptimeMillis())
+        touch(MotionEvent.ACTION_UP, x0 + 200f, y0 + 6f, down, SystemClock.uptimeMillis())
+        assertEquals("перо-ластик не стёр линию", 0, page().strokes.size)
+
+        // 3. Нарисовал прямоугольник и задержал перо — он стал ровным.
+        down = SystemClock.uptimeMillis()
+        val rect = listOf(0f to 0f, 300f to 4f, 302f to 200f, 2f to 198f, 3f to 3f)
+        var t = down
+        touch(MotionEvent.ACTION_DOWN, x0, y0 + 80f, down, t)
+        for (i in 0 until rect.size - 1) {
+            val (ax, ay) = rect[i]; val (bx, by) = rect[i + 1]
+            for (k in 1..20) {
+                t += 8
+                touch(MotionEvent.ACTION_MOVE, x0 + ax + (bx - ax) * k / 20f, y0 + 80f + ay + (by - ay) * k / 20f, down, t)
+            }
+        }
+        SystemClock.sleep(900)
+        SystemClock.sleep(400)
+        screenshot("editor_snap")
+        touch(MotionEvent.ACTION_UP, x0 + 3f, y0 + 83f, down, SystemClock.uptimeMillis())
+        val snapped = page().strokes
+        assertEquals(1, snapped.size)
+        assertEquals("фигура не выровнялась", app.nastavnik.ink.Tool.SHAPE, snapped.single().tool)
+
+        // 4. Лассо: обвёл прямоугольник — выделен; перетащил; удалил из меню.
+        device.findObject(By.desc("Лассо"))!!.click()
+        SystemClock.sleep(400)
+        penStroke(listOf(x0 - 30f to y0 + 50f, x0 + 340f to y0 + 50f, x0 + 340f to y0 + 310f, x0 - 30f to y0 + 310f, x0 - 30f to y0 + 50f).let { pts ->
+            pts.zipWithNext().flatMap { (a, b) -> (0..12).map { k -> (a.first + (b.first - a.first) * k / 12f) to (a.second + (b.second - a.second) * k / 12f) } }
+        })
+        SystemClock.sleep(500)
+        assertEquals("лассо ничего не выделило", 1, app.nastavnik.ink.InkView.debugSelectionCount)
+        assertNotNull("нет меню выделения", device.wait(Until.findObject(By.desc("Удалить")), 3000))
+        screenshot("editor_lasso")
+        val before = page().strokes.single().x(0)
+        penStroke((0..15).map { k -> (x0 + 150f + k * 8f) to (y0 + 180f) })
+        val after = page().strokes.single().x(0)
+        assertTrue("выделение не сдвинулось: $before -> $after", after > before + 30f)
+        device.findObject(By.desc("Удалить"))!!.click()
+        assertEquals("не удалилось", 0, page().strokes.size)
+
+        // 5. Фигуры: овал.
+        device.findObject(By.desc("Фигуры"))!!.click()
+        device.wait(Until.findObject(By.desc("Овал")), 3000)!!.click()
+        penStroke((0..20).map { k -> (x0 + k * 12f) to (y0 + 120f + k * 8f) })
+        assertEquals(app.nastavnik.ink.Tool.SHAPE, page().strokes.single().tool)
+        screenshot("editor_shapes")
+
+        // 6. Текст: коснулся листа — ввёл — «Готово».
+        device.findObject(By.desc("Текст"))!!.click()
+        SystemClock.sleep(300)
+        down = SystemClock.uptimeMillis()
+        touch(MotionEvent.ACTION_DOWN, x0, y0 + 420f, down, down)
+        touch(MotionEvent.ACTION_UP, x0, y0 + 420f, down, down + 60)
+        device.wait(Until.findObject(By.clazz("android.widget.EditText")), 5000)!!.text = "Дано: f(x) = x² − 3x"
+        device.findObject(By.text("Готово"))!!.click()
+        assertEquals("текст не напечатался", "Дано: f(x) = x² − 3x", page().texts.singleOrNull()?.text)
+        screenshot("editor_text")
+
+        // 7. Частичный ластик режет линию на две.
+        device.findObject(By.desc("Ручка"))!!.click()
+        penStroke((0..40).map { k -> (x0 + k * 10f) to (y0 + 560f) })
+        device.findObject(By.desc("Ластик"))!!.click()
+        device.wait(Until.findObject(By.text("Часть линии")), 3000)!!.click()
+        penStroke((0..10).map { k -> (x0 + 200f) to (y0 + 520f + k * 8f) })
+        assertEquals("частичный ластик не разрезал линию", 3, page().strokes.size)
+
+        // 8. Два пальца — «Отменить»: разрезанная линия снова целая.
+        twoFingerTap(sheet.centerX() - 60f, sheet.centerY())
+        assertEquals("касание двумя пальцами не отменило", 2, page().strokes.size)
+
+        // 9. Обзор страниц.
+        device.findObject(By.desc("Все страницы"))!!.click()
+        assertNotNull(device.wait(Until.findObject(By.text("Страницы")), 5000))
+        SystemClock.sleep(1200)
+        screenshot("pages_overview")
+        device.findObject(By.text("Копия"))!!.click()
+        SystemClock.sleep(1500)
+        assertEquals("страница не скопировалась", 2, nbs.store.meta(meta.id)!!.pages.size)
+        device.pressBack()
+        SystemClock.sleep(500)
+        screenshot("editor_toolbar")
+        sc.close()
     }
 
     /** Наставник видит весь конспект: пролистанные страницы уходят вместе со следующим вопросом. */
