@@ -737,7 +737,7 @@ class MentorFlowTest {
         assertEquals("частичный ластик не разрезал линию", 3, page().strokes.size)
 
         // 8. Два пальца — «Отменить»: разрезанная линия снова целая.
-        twoFingerTap(sheet.centerX() - 60f, sheet.centerY())
+        twoFingerTap(sheet.centerX() - 60f, sheet.centerY().toFloat())
         assertEquals("касание двумя пальцами не отменило", 2, page().strokes.size)
 
         // 9. Обзор страниц.
