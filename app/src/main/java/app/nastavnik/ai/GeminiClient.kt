@@ -150,6 +150,11 @@ class GeminiClient(
                 putJsonObject("generationConfig") {
                     put("maxOutputTokens", request.maxTokens)
                     if (request.jsonOutput) put("responseMimeType", "application/json")
+                    // Быстрый ответ: Flash без размышлений, Pro — с минимальным бюджетом.
+                    if (request.fast) {
+                        val m = request.modelId.lowercase()
+                        putJsonObject("thinkingConfig") { put("thinkingBudget", if (m.contains("pro")) 128 else 0) }
+                    }
                 }
             }
         }

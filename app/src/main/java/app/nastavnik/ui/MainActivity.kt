@@ -63,7 +63,8 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val prefs by remember { app.settings.flow() }.collectAsStateWithLifecycle(initialValue = null)
-            val mode = remember(prefs) { runCatching { ThemeMode.valueOf(app.settings.themeMode()) }.getOrDefault(ThemeMode.LIGHT) }
+            // Тема входит в настройки: поменяли — поток выдаёт новые настройки, и экран сразу перекрашивается.
+            val mode = runCatching { ThemeMode.valueOf(prefs?.themeMode ?: app.settings.themeMode()) }.getOrDefault(ThemeMode.LIGHT)
             val dark = when (mode) {
                 ThemeMode.SYSTEM -> isSystemInDarkTheme()
                 ThemeMode.LIGHT -> false

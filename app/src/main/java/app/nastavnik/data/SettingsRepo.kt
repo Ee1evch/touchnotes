@@ -49,6 +49,10 @@ data class AppSettings(
     val onboardingDone: Boolean,
     val projectionExplained: Boolean,
     val activeConversationId: Long,
+    /** Тема: SYSTEM / LIGHT / DARK. Здесь, чтобы смена темы сразу доходила до экранов через [SettingsRepo.flow]. */
+    val themeMode: String = "LIGHT",
+    /** Быстрые ответы: меньше «размышлений» модели и меньше картинок в запросе. */
+    val fastAnswers: Boolean = true,
 )
 
 /**
@@ -93,7 +97,11 @@ class SettingsRepo(private val context: Context) {
         onboardingDone = prefs.getBoolean(K_ONBOARDING, false),
         projectionExplained = prefs.getBoolean(K_PROJ_EXPLAINED, false),
         activeConversationId = prefs.getLong(K_ACTIVE_CONV, 0L),
+        themeMode = themeMode(),
+        fastAnswers = prefs.getBoolean(K_FAST, true),
     )
+
+    fun setFastAnswers(on: Boolean) = prefs.edit { putBoolean(K_FAST, on) }
 
     /** Поток настроек: выдаёт текущее значение и каждое изменение. */
     fun flow(): Flow<AppSettings> = callbackFlow {
@@ -264,6 +272,7 @@ class SettingsRepo(private val context: Context) {
         private const val K_EXAMS = "exams"
         private const val K_USAGE = "usage_log"
         private const val K_THEME = "theme_mode"
+        private const val K_FAST = "fast_answers"
         private const val K_LIMIT = "daily_limit_usd"
         private const val K_PROVIDER = "provider"
         private const val K_OPENAI_BASE = "openai_base_url"

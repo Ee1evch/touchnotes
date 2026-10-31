@@ -120,6 +120,8 @@ data class ChatRequest(
     val maxTokens: Int,
     /** Просим ответ строго в JSON (если провайдер это умеет). */
     val jsonOutput: Boolean = false,
+    /** Быстрый ответ: модель меньше «размышляет» (у каждого провайдера по-своему). */
+    val fast: Boolean = false,
 )
 
 /** Общий интерфейс клиентов: Anthropic, Gemini, OpenAI-совместимые. Все методы бросают [AiException]. */

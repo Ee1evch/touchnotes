@@ -147,4 +147,12 @@ class OpenAiClientTest {
         }
         assertEquals(0, server.requestCount)
     }
+
+    @Test
+    fun fastAnswerLowersReasoningOnlyForReasoningModels() {
+        assertEquals("\"low\"", OpenAiClient.buildBody(req().copy(modelId = "gpt-5-mini", fast = true), stream = true)["reasoning_effort"].toString())
+        assertEquals("\"low\"", OpenAiClient.buildBody(req().copy(modelId = "openai/o4-mini", fast = true), stream = true)["reasoning_effort"].toString())
+        assertEquals(null, OpenAiClient.buildBody(req().copy(modelId = "llama-3.3-70b", fast = true), stream = true)["reasoning_effort"])
+        assertEquals(null, OpenAiClient.buildBody(req().copy(modelId = "gpt-5-mini"), stream = true)["reasoning_effort"])
+    }
 }

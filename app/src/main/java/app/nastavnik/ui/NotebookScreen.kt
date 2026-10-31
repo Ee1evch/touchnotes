@@ -1,6 +1,34 @@
 package app.nastavnik.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.graphics.graphicsLayer
+import kotlin.math.abs
+import kotlin.math.roundToInt
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -98,6 +126,11 @@ fun NotebookScreen(notebookId: Long, onBack: () -> Unit, onCleanReady: () -> Uni
     val wide = LocalConfiguration.current.screenWidthDp >= 840
     var panel by rememberSaveable { mutableStateOf(wide) }
     val importers = rememberImporters(onImages = { ctl.addImages(it) }, onPdf = { ctl.addPdf(it) })
+    // Тёмная тема доходит и до листа: тёмный стол, тёмная бумага, светлые чернила.
+    val dark = Brand.dark
+    SideEffect { ctl.ink.dark = dark }
+    // Ответ пришёл, а панель скрыта — показываем её сами, чтобы подсказка не потерялась.
+    LaunchedEffect(state.answer?.seq) { if (state.answer != null) panel = true }
 
     Box(
         Modifier
@@ -116,22 +149,55 @@ fun NotebookScreen(notebookId: Long, onBack: () -> Unit, onCleanReady: () -> Uni
                         .clip(RoundedCornerShape(24.dp)),
                 ) {
                     AndroidView(factory = { ctl.ink }, modifier = Modifier.fillMaxSize())
-                    ToolPalette(ctl, Modifier.align(Alignment.BottomCenter).padding(bottom = 14.dp))
-                    if (!ctl.loaded) CircularProgressIndicator(Modifier.align(Alignment.Center), color = Brand.Ink)
+                    Column(
+                        Modifier.align(Alignment.BottomCenter).padding(bottom = 14.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        // Лист увеличен — видно насколько; нажатие возвращает по ширине.
+                        AnimatedVisibility(
+                            visible = abs(ctl.zoom - 1f) > 0.04f,
+                            enter = fadeIn() + scaleIn(initialScale = 0.8f),
+                            exit = fadeOut() + scaleOut(targetScale = 0.8f),
+                        ) {
+                            Text(
+                                "${(ctl.zoom * 100).roundToInt()} %  ·  по ширине",
+                                style = MaterialTheme.typography.labelMedium,
+                                modifier = Modifier
+                                    .glass(CircleShape, 6.dp, strong = true)
+                                    .clickable { ctl.fitWidth() }
+                                    .padding(horizontal = 14.dp, vertical = 8.dp),
+                            )
+                        }
+                        ToolPalette(ctl)
+                    }
+                    androidx.compose.animation.AnimatedVisibility(
+                        visible = !ctl.loaded,
+                        modifier = Modifier.align(Alignment.Center),
+                        exit = fadeOut(),
+                    ) { CircularProgressIndicator(color = Brand.Ink) }
                 }
             }
-            if (panel && wide) {
+            androidx.compose.animation.AnimatedVisibility(
+                visible = panel && wide,
+                enter = expandHorizontally(expandFrom = Alignment.Start, animationSpec = tween(320, easing = FastOutSlowInEasing)) + fadeIn(tween(260, delayMillis = 60)),
+                exit = shrinkHorizontally(shrinkTowards = Alignment.Start, animationSpec = tween(280, easing = FastOutSlowInEasing)) + fadeOut(tween(160)),
+            ) {
                 MentorPanel(
                     ctl, state.answer, onCleanReady = onCleanReady, onSettings = onSettings,
                     modifier = Modifier.width(380.dp).fillMaxHeight().padding(12.dp),
                 )
             }
         }
-        if (panel && !wide) {
+        androidx.compose.animation.AnimatedVisibility(
+            visible = panel && !wide,
+            modifier = Modifier.align(Alignment.BottomCenter),
+            enter = slideInVertically(tween(320, easing = FastOutSlowInEasing)) { it } + fadeIn(),
+            exit = slideOutVertically(tween(260, easing = FastOutSlowInEasing)) { it } + fadeOut(),
+        ) {
             MentorPanel(
                 ctl, state.answer, onCleanReady = onCleanReady, onSettings = onSettings,
                 modifier = Modifier
-                    .align(Alignment.BottomCenter)
                     .fillMaxWidth()
                     .height((LocalConfiguration.current.screenHeightDp * 0.45f).dp)
                     .padding(12.dp),
@@ -148,6 +214,8 @@ private fun NotebookTopBar(ctl: NotebookController, panel: Boolean, onBack: () -
     var addMenu by remember { mutableStateOf(false) }
     var moreMenu by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
+    var paperDialog by remember { mutableStateOf(false) }
+    if (paperDialog) PaperDialog(ctl) { paperDialog = false }
     val meta = ctl.meta
     Row(
         Modifier
@@ -174,7 +242,16 @@ private fun NotebookTopBar(ctl: NotebookController, panel: Boolean, onBack: () -
             verticalAlignment = Alignment.CenterVertically,
         ) {
             BarIcon(R.drawable.ic_chevron_left, "Предыдущая страница", enabled = ctl.index > 0) { ctl.showPage(ctl.index - 1) }
-            Text("${ctl.index + 1} / ${ctl.pages.size.coerceAtLeast(1)}", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(horizontal = 4.dp))
+            AnimatedContent(
+                targetState = ctl.index,
+                transitionSpec = {
+                    val dir = if (targetState > initialState) 1 else -1
+                    (slideInVertically { h -> h * dir } + fadeIn()) togetherWith (slideOutVertically { h -> -h * dir } + fadeOut())
+                },
+                label = "page",
+            ) { i ->
+                Text("${i + 1} / ${ctl.pages.size.coerceAtLeast(1)}", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(horizontal = 4.dp))
+            }
             BarIcon(R.drawable.ic_chevron, "Следующая страница", enabled = ctl.index < ctl.pages.lastIndex) { ctl.showPage(ctl.index + 1) }
         }
         Box {
@@ -194,13 +271,7 @@ private fun NotebookTopBar(ctl: NotebookController, panel: Boolean, onBack: () -
         Box {
             BarButton(R.drawable.ic_more, "Ещё") { moreMenu = true }
             DropdownMenu(expanded = moreMenu, onDismissRequest = { moreMenu = false }, containerColor = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(18.dp)) {
-                Paper.entries.forEach { p ->
-                    MenuItem(
-                        (if (ctl.page?.paper == p) "✓ " else "") + "Бумага: ${p.label.lowercase()}",
-                        R.drawable.ic_notebook,
-                    ) { moreMenu = false; ctl.setPaper(p) }
-                }
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                MenuItem("Бумага…", R.drawable.ic_notebook) { moreMenu = false; paperDialog = true }
                 MenuItem("Переименовать", R.drawable.ic_pen) { moreMenu = false; renaming = true }
                 MenuItem("Очистить страницу", R.drawable.ic_eraser) { moreMenu = false; ctl.clearPage() }
                 if (ctl.pages.size > 1) MenuItem("Удалить страницу", R.drawable.ic_trash) { moreMenu = false; confirmDelete = true }
@@ -279,9 +350,12 @@ private fun BarIcon(icon: Int, description: String, enabled: Boolean, onClick: (
 // ---------------- палитра ----------------
 
 @Composable
-private fun ToolPalette(ctl: NotebookController, modifier: Modifier) {
+private fun ToolPalette(ctl: NotebookController) {
+    // Пока пишешь, палитра становится полупрозрачной — не отвлекает и не закрывает записи.
+    val alpha by animateFloatAsState(if (ctl.writing) 0.35f else 1f, tween(if (ctl.writing) 180 else 420), label = "palette")
     Row(
-        modifier
+        Modifier
+            .graphicsLayer { this.alpha = alpha }
             .glass(CircleShape, 12.dp, strong = true)
             .padding(horizontal = 10.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -305,7 +379,8 @@ private fun ToolPalette(ctl: NotebookController, modifier: Modifier) {
                 .semantics { contentDescription = "Толщина ручки" },
             contentAlignment = Alignment.Center,
         ) {
-            Box(Modifier.size((5 + ctl.widthIndex * 4).dp).clip(CircleShape).background(Brand.Ink))
+            val dot by animateDpAsState((5 + ctl.widthIndex * 4).dp, spring(dampingRatio = 0.55f, stiffness = 500f), label = "width")
+            Box(Modifier.size(dot).clip(CircleShape).background(Brand.Ink))
         }
         ToolIcon(R.drawable.ic_hand, if (ctl.fingerDraws) "Пальцем пишу" else "Пальцем двигаю лист", ctl.fingerDraws) { ctl.toggleFinger() }
     }
@@ -320,6 +395,10 @@ private fun penName(c: Int) = when (c) {
 
 @Composable
 private fun Swatch(color: Color, selected: Boolean, description: String, marker: Boolean = false, onClick: () -> Unit) {
+    // Выбранный цвет «вырастает» с пружинкой и получает кольцо.
+    val size by animateDpAsState(if (selected) 28.dp else 22.dp, spring(dampingRatio = 0.5f, stiffness = 600f), label = "swatch")
+    val ring by animateFloatAsState(if (selected) 1f else 0f, tween(200), label = "ring")
+    val shape = if (marker) RoundedCornerShape(7.dp) else CircleShape
     Box(
         Modifier
             .size(38.dp)
@@ -330,28 +409,93 @@ private fun Swatch(color: Color, selected: Boolean, description: String, marker:
     ) {
         Box(
             Modifier
-                .size(if (selected) 30.dp else 24.dp)
-                .clip(if (marker) RoundedCornerShape(7.dp) else CircleShape)
+                .size(size)
+                .clip(shape)
                 .background(color)
-                .then(if (selected) Modifier.border(3.dp, Color.White, if (marker) RoundedCornerShape(7.dp) else CircleShape) else Modifier),
+                .border(1.dp, Brand.Line, shape),
         )
-        if (selected) Box(Modifier.size(34.dp).border(1.5.dp, Brand.Ink, if (marker) RoundedCornerShape(9.dp) else CircleShape))
+        if (ring > 0f) {
+            Box(
+                Modifier
+                    .size(35.dp)
+                    .graphicsLayer { alpha = ring; scaleX = 0.8f + 0.2f * ring; scaleY = 0.8f + 0.2f * ring }
+                    .border(2.dp, Brand.Ink, if (marker) RoundedCornerShape(10.dp) else CircleShape),
+            )
+        }
     }
 }
 
 @Composable
 private fun ToolIcon(icon: Int, description: String, active: Boolean, onClick: () -> Unit) {
+    val bg by animateColorAsState(if (active) Brand.Ink else Color.Transparent, tween(200), label = "tool")
     Box(
         Modifier
             .size(38.dp)
             .clip(CircleShape)
-            .background(if (active) Brand.Ink else Color.Transparent)
+            .background(bg)
             .clickable(onClick = onClick)
             .semantics { contentDescription = description },
         contentAlignment = Alignment.Center,
     ) {
-        Icon(painterResource(icon), contentDescription = null, tint = if (active) Brand.OnInk else Brand.Ink, modifier = Modifier.size(20.dp))
+        val tint by animateColorAsState(if (active) Brand.OnInk else Brand.Ink, tween(200), label = "toolTint")
+        Icon(painterResource(icon), contentDescription = null, tint = tint, modifier = Modifier.size(20.dp))
     }
+}
+
+/** Бумага: превью и выбор — для этой страницы или для всей тетради. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun PaperDialog(ctl: NotebookController, onDismiss: () -> Unit) {
+    var all by remember { mutableStateOf(false) }
+    val current = ctl.page?.paper
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Бумага") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Paper.entries.forEach { p ->
+                        val on = p == current
+                        Column(
+                            Modifier
+                                .width(92.dp)
+                                .clip(RoundedCornerShape(14.dp))
+                                .clickable {
+                                    if (all) ctl.setPaperAll(p) else ctl.setPaper(p)
+                                    onDismiss()
+                                }
+                                .padding(4.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Box(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .aspectRatio(1f / 1.414f)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(Color(PageDrawer.PAPER))
+                                    .border(if (on) 2.dp else 1.dp, if (on) Brand.Ink else Brand.Line, RoundedCornerShape(10.dp)),
+                            ) { PaperPreview(p) }
+                            Text(p.label, style = MaterialTheme.typography.labelLarge)
+                        }
+                    }
+                }
+                Row(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { all = !all }.padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("Для всей тетради", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                    AppSwitch(all) { all = it }
+                }
+                if (ctl.page?.background != null) {
+                    Text("На фото и страницах PDF разлиновка рисуется поверх картинки.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        },
+        confirmButton = { SoftButton("Закрыть", onClick = onDismiss) },
+        containerColor = MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(28.dp),
+    )
 }
 
 @Composable
@@ -473,12 +617,7 @@ private fun MentorPanel(ctl: NotebookController, answer: AnswerUi?, onCleanReady
                     else SoftButton("Повторить", icon = R.drawable.ic_refresh) { ask(answer.question, answer.kind) }
                 }
                 else -> {
-                    if (answer.streaming && answer.marks.isEmpty()) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.5.dp, color = Brand.Ink, trackColor = Brand.Ink.copy(alpha = 0.1f))
-                            Text(answer.status ?: "Думаю…", style = MaterialTheme.typography.bodyMedium)
-                        }
-                    }
+                    if (answer.streaming && answer.marks.isEmpty()) ThinkingRow(answer.seq, answer.status)
                     answer.marks.forEachIndexed { i, m ->
                         NoteCard(i + 1, m, topic = ctl.meta?.title.orEmpty(), onLocate = { ctl.focusMark(i + 1) })
                     }
@@ -507,6 +646,47 @@ private fun MentorPanel(ctl: NotebookController, answer: AnswerUi?, onCleanReady
     }
 }
 
+/** Наставник думает: три «дышащие» точки и секунды — видно, что работа идёт. */
+@Composable
+private fun ThinkingRow(seq: Long, status: String?) {
+    val start = remember(seq) { System.currentTimeMillis() }
+    val seconds by produceState(0, seq) {
+        while (true) {
+            value = ((System.currentTimeMillis() - start) / 1000).toInt()
+            delay(250)
+        }
+    }
+    val pulse = rememberInfiniteTransition(label = "thinking")
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .glass(RoundedCornerShape(20.dp), 4.dp, strong = true)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+            repeat(3) { i ->
+                val a by pulse.animateFloat(
+                    initialValue = 0.25f,
+                    targetValue = 1f,
+                    animationSpec = infiniteRepeatable(tween(520, delayMillis = i * 160, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+                    label = "dot$i",
+                )
+                Box(
+                    Modifier
+                        .size(8.dp)
+                        .graphicsLayer { alpha = a; scaleX = 0.7f + 0.3f * a; scaleY = 0.7f + 0.3f * a }
+                        .clip(CircleShape)
+                        .background(Brand.Ink),
+                )
+            }
+        }
+        Text(status ?: "Думаю…", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+        if (seconds > 0) Text("$seconds с", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
 @Composable
 private fun EmptyMentor() {
     Column(Modifier.fillMaxWidth().padding(top = 6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -531,9 +711,17 @@ private fun NoteCard(number: Int, m: Mark, topic: String, onLocate: () -> Unit) 
     var carded by remember(m.text) { mutableStateOf<String?>(null) }
     var carding by remember(m.text) { mutableStateOf(false) }
     val kindColor = Color(PageDrawer.kindColor(m.kind))
+    // Заметка въезжает снизу и проявляется — видно, что пришло новое.
+    val appear = remember(number) { Animatable(0f) }
+    LaunchedEffect(number) { appear.animateTo(1f, tween(360, easing = FastOutSlowInEasing)) }
     Column(
         Modifier
             .fillMaxWidth()
+            .graphicsLayer {
+                alpha = appear.value
+                translationY = (1 - appear.value) * 18.dp.toPx()
+            }
+            .animateContentSize(tween(220))
             .glass(RoundedCornerShape(20.dp), 4.dp, strong = true)
             .clickable(enabled = m.box != null, onClick = onLocate)
             .padding(14.dp),

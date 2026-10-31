@@ -17,6 +17,19 @@ class MeteredBackend(private val inner: AiBackend, private val meter: UsageMeter
 
     override suspend fun stream(apiKey: String, request: ChatRequest, onUpdate: (StreamUpdate) -> Unit): String? {
         meter.check()
+        // Сервис не понял параметры быстрого ответа (старая модель, прокси) — повторяем обычным запросом.
+        if (request.fast) {
+            try {
+                return streamMetered(apiKey, request, onUpdate)
+            } catch (e: AiException) {
+                if (e.kind != AiException.Kind.BAD_REQUEST) throw e
+            }
+            return streamMetered(apiKey, request.copy(fast = false), onUpdate)
+        }
+        return streamMetered(apiKey, request, onUpdate)
+    }
+
+    private suspend fun streamMetered(apiKey: String, request: ChatRequest, onUpdate: (StreamUpdate) -> Unit): String? {
         var input: Int? = null
         var output: Int? = null
         var chars = 0
@@ -43,7 +56,16 @@ class MeteredBackend(private val inner: AiBackend, private val meter: UsageMeter
 
     override suspend fun complete(apiKey: String, request: ChatRequest): Completion {
         meter.check()
-        val c = inner.complete(apiKey, request)
+        val c = if (request.fast) {
+            try {
+                inner.complete(apiKey, request)
+            } catch (e: AiException) {
+                if (e.kind != AiException.Kind.BAD_REQUEST) throw e
+                inner.complete(apiKey, request.copy(fast = false))
+            }
+        } else {
+            inner.complete(apiKey, request)
+        }
         meter.record(request.modelId, c.usage ?: Usage(TokenEstimate.request(request), TokenEstimate.text(c.text)))
         return c
     }

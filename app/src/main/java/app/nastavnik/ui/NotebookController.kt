@@ -111,12 +111,14 @@ class NotebookController(val app: NastavnikApp, val notebookId: Long, private va
     fun showPage(i: Int) {
         val p = pages.getOrNull(i) ?: return
         flushSave()
+        // Листаем с анимацией: вперёд — новая страница въезжает справа.
+        val direction = if (!loaded || i == index) 0 else if (i > index) 1 else -1
         index = i
         val stack = undos.getOrPut(p.id) { UndoStack() }
         scope.launch {
             val bg = nbs.background(notebookId, p)
             if (pages.getOrNull(index)?.id == p.id) {
-                ink.setPage(p, bg, stack)
+                ink.setPage(p, bg, stack, direction)
                 refreshMarks()
             }
         }
@@ -168,9 +170,32 @@ class NotebookController(val app: NastavnikApp, val notebookId: Long, private va
         val p = page ?: return
         p.paper = paper
         p.touch()
-        ink.invalidate()
+        ink.pageChanged()
         onPageEdited()
     }
+
+    /** Одна бумага на всю тетрадь: все страницы без подложки (фото и PDF не трогаем). */
+    fun setPaperAll(paper: Paper) {
+        val m = meta ?: return
+        pages.filter { it.background == null }.forEach { it.paper = paper; it.touch() }
+        ink.pageChanged()
+        scope.launch {
+            withContext(NonCancellable + Dispatchers.IO) {
+                pages.forEach { nbs.store.savePage(m.id, it) }
+                nbs.store.saveMeta(m.copy(paper = paper.name, updatedAt = System.currentTimeMillis()).also { meta = it })
+            }
+        }
+    }
+
+    /** Масштаб листа: 1 — по ширине экрана. */
+    var zoom by mutableStateOf(1f)
+        private set
+
+    override fun onZoomChanged(zoom: Float) {
+        this.zoom = zoom
+    }
+
+    fun fitWidth() = ink.animateFitWidth()
 
     fun rename(title: String) {
         val m = meta ?: return
@@ -231,8 +256,19 @@ class NotebookController(val app: NastavnikApp, val notebookId: Long, private va
         this.canRedo = canRedo
     }
 
+    /** Пишут прямо сейчас — палитра становится прозрачнее, чтобы не отвлекать. */
+    var writing by mutableStateOf(false)
+        private set
+    private var writingJob: Job? = null
+
     override fun onWritingStarted() {
         autoJob?.cancel()
+        writing = true
+        writingJob?.cancel()
+        writingJob = scope.launch {
+            delay(1400)
+            writing = false
+        }
     }
 
     override fun onPageEdited() {
@@ -288,7 +324,12 @@ class NotebookController(val app: NastavnikApp, val notebookId: Long, private va
     fun ask(question: String, kind: AskKind) {
         if (app.settings.notReadyReason() != null) return
         autoJob?.cancel()
-        mentor.ask(question, kind) { shot(if (kind == AskKind.WATCH) WATCH_CONTEXT else CONTEXT_PAGES) }
+        val pages = when {
+            kind == AskKind.WATCH -> WATCH_CONTEXT
+            app.settings.load().fastAnswers -> FAST_CONTEXT
+            else -> CONTEXT_PAGES
+        }
+        mentor.ask(question, kind) { shot(pages) }
     }
 
     // ---------------- контрольная ----------------
@@ -391,5 +432,6 @@ class NotebookController(val app: NastavnikApp, val notebookId: Long, private va
         private const val AUTO_GAP_MS = 40_000L
         private const val CONTEXT_PAGES = 8
         private const val WATCH_CONTEXT = 3
+        private const val FAST_CONTEXT = 2
     }
 }

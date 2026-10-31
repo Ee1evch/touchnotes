@@ -81,4 +81,45 @@ class InkTest {
         assertEquals(0f, t[0]); assertEquals(10f, t[t.size - 3])
         assertTrue(t.size / 3 in 10..13)
     }
+
+    /** Покрыта ли точка (x, y) нарисованными отрезками: расстояние до отрезка не больше половины толщины. */
+    private fun covered(g: StrokeLines, x: Float, y: Float): Boolean {
+        for (k in g.widths.indices) {
+            val a = g.lines[k]
+            var i = 0
+            while (i + 3 < a.size) {
+                if (StrokeGeometry.segmentDistance(x, y, a[i], a[i + 1], a[i + 2], a[i + 3]) <= g.widths[k] / 2 + 0.01f) return true
+                i += 4
+            }
+        }
+        return false
+    }
+
+    @Test
+    fun retracedStrokeHasNoGaps() {
+        // Буква с разворотом пера: вниз, потом вверх по той же линии (как в «и», «м», «л»).
+        val pts = ArrayList<Float>()
+        for (i in 0..20) { pts += 100f; pts += 100f + i * 3f; pts += 0.6f }
+        for (i in 20 downTo 0) { pts += 100.5f; pts += 100f + i * 3f; pts += 0.6f }
+        val s = Stroke(Tool.PEN, 0xFF16161A.toInt(), 3f, pts.toFloatArray())
+        val g = InkCurve.lines(s)
+        // Вся линия закрашена: и вершина разворота, и начало с концом.
+        for (y in 100..160 step 2) assertTrue("щель на y=$y", covered(g, 100.2f, y.toFloat()))
+        assertTrue(covered(g, 100f, 100f))
+        assertTrue(g.dot.isEmpty())
+    }
+
+    @Test
+    fun curveKeepsEndsAndTapIsADot() {
+        val s = line(10f, 10f, 200f, 80f, n = 12)
+        val c = InkCurve.curve(s.points)
+        assertEquals(10f, c[0], 1e-4f); assertEquals(10f, c[1], 1e-4f)
+        assertEquals(200f, c[c.size - 3], 1e-4f); assertEquals(80f, c[c.size - 2], 1e-4f)
+        assertTrue(c.size >= s.points.size)
+        val g = InkCurve.lines(s)
+        assertTrue(covered(g, 10f, 10f) && covered(g, 200f, 80f) && covered(g, 105f, 45f))
+        val tap = InkCurve.lines(Stroke(Tool.PEN, 0, 4f, floatArrayOf(5f, 5f, 0.5f, 5f, 5f, 0.6f)))
+        assertEquals(3, tap.dot.size)
+        assertEquals(5f, tap.dot[0], 1e-4f)
+    }
 }

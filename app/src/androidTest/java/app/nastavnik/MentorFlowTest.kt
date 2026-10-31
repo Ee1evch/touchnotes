@@ -558,6 +558,26 @@ class MentorFlowTest {
             SystemClock.sleep(800)
             screenshot("settings_backup_dark")
             sc.close()
+
+            // Тетрадь в тёмной теме: тёмный стол и бумага, светлые чернила; пишем букву с разворотом пера.
+            val (nb, _) = ctx.app.notebooks.store.create("Тёмная тетрадь", app.nastavnik.ink.Paper.LINED)
+            sc = ActivityScenario.launch<MainActivity>(
+                Intent(ctx, MainActivity::class.java)
+                    .putExtra(MainActivity.EXTRA_SCREEN, MainActivity.SCREEN_NOTEBOOK)
+                    .putExtra(MainActivity.EXTRA_NOTEBOOK, nb.id),
+            )
+            val sheet = device.wait(Until.findObject(By.desc("Лист тетради")), 10000)!!.visibleBounds
+            for (row in 0 until 3) {
+                val x0 = sheet.left + sheet.width() * 0.12f
+                val y0 = sheet.top + sheet.height() * (0.2f + row * 0.1f)
+                // «и»: вниз, вверх по той же линии, вниз по диагонали, вверх и вниз.
+                penStroke((0..10).map { k -> x0 to y0 + k * 6f } + (10 downTo 0).map { k -> (x0 + 1f) to y0 + k * 6f } +
+                    (0..10).map { k -> (x0 + k * 4f) to y0 + k * 6f } + (10 downTo 0).map { k -> (x0 + 40f) to y0 + k * 6f } +
+                    (0..10).map { k -> (x0 + 40f) to y0 + k * 6f })
+            }
+            SystemClock.sleep(1500)
+            screenshot("notebook_dark")
+            sc.close()
         } finally {
             na.settings.setThemeMode("LIGHT")
         }

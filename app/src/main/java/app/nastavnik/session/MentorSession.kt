@@ -284,6 +284,7 @@ class MentorSession(
                 // Сначала страницы всего конспекта, последним — текущий экран с номерами строк.
                 images = shot.context.map { ImagePart(it) } + ImagePart(shot.jpeg),
                 maxTokens = MAX_TOKENS,
+                fast = settings.fastAnswers,
             )
             val stop = app.ai(settings).stream(app.settings.apiKey(settings.provider), request) { update ->
                 when (update) {

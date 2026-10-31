@@ -20,7 +20,21 @@ data class PageMark(val number: Int, val kind: MarkKind, val rect: RectF)
  * Один и тот же код рисует и лист на экране, и снимок для наставника, и превью.
  */
 class PageDrawer {
-    private val paths = WeakHashMap<Stroke, Path>()
+    private val lines = WeakHashMap<Stroke, StrokeLines>()
+    private val markerPaths = WeakHashMap<Stroke, Path>()
+
+    /**
+     * Тёмная тема: бумага тёмная, разлиновка приглушённая, тёмные чернила рисуются светлыми.
+     * В файле и в снимках для наставника цвета не меняются — это только отображение.
+     */
+    var dark: Boolean = false
+        set(value) {
+            field = value
+            paperPaint.color = if (value) PAPER_DARK else PAPER
+            linePaint.color = if (value) RULE_DARK else RULE
+            dotPaint.color = if (value) DOT_DARK else DOT
+            markerPaint.blendMode = if (value) BlendMode.SCREEN else BlendMode.MULTIPLY
+        }
 
     private val paperPaint = Paint().apply { color = PAPER }
     private val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -35,25 +49,35 @@ class PageDrawer {
     }
     private val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = DOT }
     private val bitmapPaint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
-    private val inkPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+
+    /** Ручка: отрезки с круглыми концами — без щелей и «перекрученных» мест на разворотах пера. */
+    private val inkPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeCap = Paint.Cap.ROUND
+        strokeJoin = Paint.Join.ROUND
+    }
+    private val dotFill = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+
+    /** Маркер — одной обводкой постоянной толщины: перекрытия не темнеют. */
     private val markerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.FILL
+        style = Paint.Style.STROKE
+        strokeCap = Paint.Cap.ROUND
+        strokeJoin = Paint.Join.ROUND
         // Маркер как настоящий: умножается на бумагу и не закрывает текст под собой.
         blendMode = BlendMode.MULTIPLY
     }
 
-    /** Контур штриха кэшируется: штрихи не меняются, а рисуются на каждом кадре. */
-    fun pathOf(s: Stroke): Path = paths.getOrPut(s) { toPath(StrokeGeometry.outline(s)) }
+    /** Подготовленный к рисованию штрих кэшируется: штрихи не меняются, а рисуются часто. */
+    fun linesOf(s: Stroke): StrokeLines = lines.getOrPut(s) { InkCurve.lines(s) }
 
-    fun toPath(o: FloatArray): Path = Path().apply {
-        if (o.size < 4) return@apply
-        moveTo(o[0], o[1])
-        var i = 2
-        while (i + 1 < o.size) {
-            lineTo(o[i], o[i + 1])
-            i += 2
-        }
-        close()
+    private fun markerPathOf(s: Stroke): Path = markerPaths.getOrPut(s) { polyline(s.points) }
+
+    private fun polyline(pts: FloatArray): Path = Path().apply {
+        val n = pts.size / 3
+        if (n == 0) return@apply
+        moveTo(pts[0], pts[1])
+        if (n == 1) lineTo(pts[0] + 0.01f, pts[1])
+        for (i in 1 until n) lineTo(pts[i * 3], pts[i * 3 + 1])
     }
 
     /**
@@ -67,60 +91,47 @@ class PageDrawer {
             c.drawBitmap(background, null, RectF(0f, 0f, PAGE_W, h), bitmapPaint)
         }
         drawPaper(c, page.paper, h, visible)
-        for (s in page.strokes) if (s.tool == Tool.HIGHLIGHTER) drawStroke(c, s)
-        for (s in page.strokes) if (s.tool == Tool.PEN) drawStroke(c, s)
+        for (s in page.strokes) if (s.tool == Tool.HIGHLIGHTER && visibleStroke(s, visible)) drawStroke(c, s)
+        for (s in page.strokes) if (s.tool == Tool.PEN && visibleStroke(s, visible)) drawStroke(c, s)
     }
 
-    fun drawStroke(c: Canvas, s: Stroke, path: Path = pathOf(s)) {
-        val p = if (s.tool == Tool.HIGHLIGHTER) markerPaint else inkPaint
-        p.color = s.color
-        if (s.tool == Tool.HIGHLIGHTER) p.alpha = MARKER_ALPHA
-        c.drawPath(path, p)
+    private fun visibleStroke(s: Stroke, v: RectF?): Boolean {
+        if (v == null) return true
+        val b = s.bounds()
+        return b[2] >= v.left && b[0] <= v.right && b[3] >= v.top && b[1] <= v.bottom
     }
 
-    private fun drawPaper(c: Canvas, paper: Paper, h: Float, visible: RectF?) {
-        val top = (visible?.top ?: 0f).coerceAtLeast(0f)
-        val bottom = (visible?.bottom ?: h).coerceAtMost(h)
-        val left = (visible?.left ?: 0f).coerceAtLeast(0f)
-        val right = (visible?.right ?: PAGE_W).coerceAtMost(PAGE_W)
-        when (paper) {
-            Paper.GRID -> {
-                var y = CELL
-                while (y < h) {
-                    if (y in top..bottom) c.drawLine(left, y, right, y, linePaint)
-                    y += CELL
-                }
-                var x = CELL
-                while (x < PAGE_W) {
-                    if (x in left..right) c.drawLine(x, top, x, bottom, linePaint)
-                    x += CELL
-                }
-                // Поля справа, как в школьной тетради.
-                c.drawLine(PAGE_W - CELL * 2, top, PAGE_W - CELL * 2, bottom, marginPaint)
-            }
-            Paper.LINED -> {
-                var y = LINE_TOP
-                while (y < h - CELL) {
-                    if (y in top..bottom) c.drawLine(left, y, right, y, linePaint)
-                    y += LINE_STEP
-                }
-                c.drawLine(LINE_MARGIN, top, LINE_MARGIN, bottom, marginPaint)
-            }
-            Paper.DOTS -> {
-                var y = CELL
-                while (y < h) {
-                    if (y in top..bottom) {
-                        var x = CELL
-                        while (x < PAGE_W) {
-                            if (x in left..right) c.drawCircle(x, y, 1.6f, dotPaint)
-                            x += CELL
-                        }
-                    }
-                    y += CELL
-                }
-            }
-            Paper.BLANK -> Unit
+    /** Один штрих (и уже записанный, и тот, что пишется сейчас). */
+    fun drawStroke(c: Canvas, s: Stroke, prepared: StrokeLines? = null) {
+        if (s.tool == Tool.HIGHLIGHTER) {
+            markerPaint.color = displayColor(s.color)
+            markerPaint.alpha = if (dark) MARKER_ALPHA_DARK else MARKER_ALPHA
+            markerPaint.strokeWidth = s.width
+            c.drawPath(if (prepared == null) markerPathOf(s) else polyline(s.points), markerPaint)
+            return
         }
+        val g = prepared ?: linesOf(s)
+        val color = displayColor(s.color)
+        if (g.dot.isNotEmpty()) {
+            dotFill.color = color
+            c.drawCircle(g.dot[0], g.dot[1], g.dot[2], dotFill)
+            return
+        }
+        inkPaint.color = color
+        for (k in g.widths.indices) {
+            inkPaint.strokeWidth = g.widths[k]
+            c.drawLines(g.lines[k], inkPaint)
+        }
+    }
+
+    /** Цвет чернил на экране: в тёмной теме тёмные чернила светлеют, цветные — чуть ярче. */
+    fun displayColor(c: Int): Int {
+        if (!dark) return c
+        val r = Color.red(c); val g = Color.green(c); val b = Color.blue(c)
+        val lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255
+        val t = if (lum < 0.3) 0.86f else 0.32f
+        fun mix(v: Int) = (v + (236 - v) * t).toInt().coerceIn(0, 255)
+        return Color.argb(Color.alpha(c), mix(r), mix(g), mix(b))
     }
 
     // ---------------- отметки наставника ----------------
@@ -199,7 +210,11 @@ class PageDrawer {
 
     companion object {
         const val PAPER = 0xFFFFFEFB.toInt()
+        const val PAPER_DARK = 0xFF202025.toInt()
         const val RULE = 0xFFD9E2EC.toInt()
+        const val RULE_DARK = 0xFF34353D.toInt()
+        const val DOT_DARK = 0xFF4A4B55.toInt()
+        const val MARKER_ALPHA_DARK = 90
         const val MARGIN = 0x66E5484D
         const val DOT = 0xFFC4CBD5.toInt()
         const val MARKER_ALPHA = 110

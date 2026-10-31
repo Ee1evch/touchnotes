@@ -169,7 +169,14 @@ class OpenAiClient(
                     }
                 })
                 if (stream) put("stream", true)
+                // Быстрый ответ у моделей с рассуждениями (GPT-5, o-серия) — низкое усилие.
+                if (request.fast && reasoningModel(request.modelId)) put("reasoning_effort", "low")
             }
+        }
+
+        internal fun reasoningModel(id: String): Boolean {
+            val m = id.lowercase().substringAfterLast('/')
+            return m.startsWith("gpt-5") || Regex("^o\\d").containsMatchIn(m)
         }
 
         internal fun mapFinish(reason: String?): String? = when (reason) {

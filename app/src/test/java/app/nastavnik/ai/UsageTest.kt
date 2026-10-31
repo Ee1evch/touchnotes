@@ -96,4 +96,32 @@ class UsageTest {
         }
         assertEquals(3, meter.records.size)
     }
+
+    private class PickyBackend : AiBackend {
+        val seen = ArrayList<Boolean>()
+        override val provider = AiProvider.OPENAI_COMPAT
+        override suspend fun stream(apiKey: String, request: ChatRequest, onUpdate: (StreamUpdate) -> Unit): String? {
+            seen += request.fast
+            if (request.fast) throw AiException(AiException.Kind.BAD_REQUEST, "unknown parameter")
+            onUpdate(StreamUpdate.Text("ok"))
+            return "end_turn"
+        }
+        override suspend fun complete(apiKey: String, request: ChatRequest): Completion {
+            seen += request.fast
+            if (request.fast) throw AiException(AiException.Kind.BAD_REQUEST, "unknown parameter")
+            return Completion("ok", "end_turn")
+        }
+        override suspend fun checkKey(apiKey: String, modelId: String): KeyCheck = KeyCheck.Ok
+        override suspend fun listModels(apiKey: String) = emptyList<String>()
+    }
+
+    @Test
+    fun fastRequestFallsBackToNormalWhenServiceRejectsIt() = runBlocking<Unit> {
+        val b = PickyBackend()
+        val m = MeteredBackend(b, FakeMeter())
+        val req = ChatRequest("proxy-model", "s", listOf(ChatTurn(Role.USER, "q")), maxTokens = 10, fast = true)
+        assertEquals("end_turn", m.stream("k", req) {})
+        assertEquals("ok", m.complete("k", req).text)
+        assertEquals(listOf(true, false, true, false), b.seen)
+    }
 }

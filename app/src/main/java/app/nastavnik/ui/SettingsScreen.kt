@@ -68,6 +68,13 @@ fun SettingsScreen(onBack: () -> Unit) {
         }
 
         SectionCard("Наставник") {
+            FieldLabel(
+                "Скорость ответа",
+                if (s.fastAnswers) "Быстро: модель почти не «размышляет», а в запрос уходит меньше соседних страниц. Подсказка приходит за секунды."
+                else "Вдумчиво: модель дольше думает и смотрит больше страниц конспекта — точнее на сложных задачах, но ждать дольше.",
+            )
+            Segmented(listOf(true to "Быстро", false to "Вдумчиво"), s.fastAnswers) { repo.setFastAnswers(it) }
+            HorizontalDivider(Modifier.padding(vertical = 6.dp), color = MaterialTheme.colorScheme.outlineVariant)
             FieldLabel("Строгость", s.strictness.label)
             Segmented(
                 listOf(Strictness.QUESTIONS_ONLY to "Только вопросы", Strictness.HINTS to "Подсказки", Strictness.DETAILED to "Подробно"),

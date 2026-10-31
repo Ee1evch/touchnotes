@@ -189,6 +189,97 @@ object StrokeGeometry {
     }
 }
 
+/**
+ * Штрих, готовый к рисованию: отрезки, сгруппированные по толщине. Каждый отрезок рисуется линией
+ * со скруглёнными концами — соседние отрезки перекрываются, поэтому линия сплошная при любых разворотах
+ * пера (у контура-многоугольника на развороте «перекручивается» заливка, и часть буквы пропадает).
+ */
+class StrokeLines(
+    /** Толщина каждой группы. */
+    val widths: FloatArray,
+    /** Отрезки группы: x0,y0,x1,y1 подряд — прямо для Canvas.drawLines. */
+    val lines: Array<FloatArray>,
+    /** Штрих-точка (одно касание): x, y, радиус; иначе пусто. */
+    val dot: FloatArray,
+)
+
+object InkCurve {
+    /**
+     * Плавная кривая через точки пера: между серединами соседних отрезков — квадратичная кривая
+     * с вершиной в точке пера. Концы штриха не сдвигаются; нажим сглаживается по соседям.
+     */
+    fun curve(points: FloatArray, step: Float = 1.6f): FloatArray {
+        val n = points.size / 3
+        if (n < 3) return points
+        val p = FloatArray(n) { i ->
+            val a = points[(maxOf(i - 1, 0)) * 3 + 2]
+            val b = points[i * 3 + 2]
+            val c = points[(minOf(i + 1, n - 1)) * 3 + 2]
+            (a + 2 * b + c) / 4f
+        }
+        val out = ArrayList<Float>(points.size * 2)
+        fun add(x: Float, y: Float, pr: Float) { out += x; out += y; out += pr }
+        add(points[0], points[1], p[0])
+        var sx = points[0]
+        var sy = points[1]
+        var sp = p[0]
+        for (i in 1 until n - 1) {
+            val cx = points[i * 3]
+            val cy = points[i * 3 + 1]
+            val ex = (cx + points[(i + 1) * 3]) / 2
+            val ey = (cy + points[(i + 1) * 3 + 1]) / 2
+            val ep = (p[i] + p[i + 1]) / 2
+            val len = hypot(cx - sx, cy - sy) + hypot(ex - cx, ey - cy)
+            val k = (len / step).toInt().coerceIn(1, 12)
+            for (j in 1..k) {
+                val t = j / k.toFloat()
+                val u = 1 - t
+                add(
+                    u * u * sx + 2 * u * t * cx + t * t * ex,
+                    u * u * sy + 2 * u * t * cy + t * t * ey,
+                    u * sp + t * ep,
+                )
+            }
+            sx = ex; sy = ey; sp = ep
+        }
+        add(points[(n - 1) * 3], points[(n - 1) * 3 + 1], p[n - 1])
+        return out.toFloatArray()
+    }
+
+    /** Отрезки штриха ручки, сгруппированные по толщине (шаг — 4 % базовой). */
+    fun lines(s: Stroke): StrokeLines {
+        val n0 = s.size
+        if (n0 == 0) return StrokeLines(FloatArray(0), emptyArray(), FloatArray(0))
+        val pts = curve(s.points)
+        val n = pts.size / 3
+        val tiny = s.width * 0.02f
+        // Одно касание или все точки в одном месте — точка.
+        var moved = false
+        for (i in 1 until n) if (hypot(pts[i * 3] - pts[0], pts[i * 3 + 1] - pts[1]) > tiny) { moved = true; break }
+        if (!moved) {
+            val r = StrokeGeometry.widthAt(s.width, pts[2], s.tool) / 2
+            return StrokeLines(FloatArray(0), emptyArray(), floatArrayOf(pts[0], pts[1], r))
+        }
+        val quantum = maxOf(s.width * 0.04f, 0.04f)
+        val groups = HashMap<Int, ArrayList<Float>>()
+        for (i in 0 until n - 1) {
+            val x0 = pts[i * 3]; val y0 = pts[i * 3 + 1]
+            val x1 = pts[(i + 1) * 3]; val y1 = pts[(i + 1) * 3 + 1]
+            if (x0 == x1 && y0 == y1) continue
+            val w = StrokeGeometry.widthAt(s.width, (pts[i * 3 + 2] + pts[(i + 1) * 3 + 2]) / 2, s.tool)
+            val key = Math.round(w / quantum)
+            val g = groups.getOrPut(key) { ArrayList() }
+            g += x0; g += y0; g += x1; g += y1
+        }
+        val keys = groups.keys.sorted()
+        return StrokeLines(
+            FloatArray(keys.size) { keys[it] * quantum },
+            Array(keys.size) { groups.getValue(keys[it]).toFloatArray() },
+            FloatArray(0),
+        )
+    }
+}
+
 /** Отмена и повтор: что сделали со штрихами страницы. */
 sealed interface InkEdit {
     data class Added(val stroke: Stroke) : InkEdit

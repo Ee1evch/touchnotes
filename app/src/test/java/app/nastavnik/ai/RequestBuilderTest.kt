@@ -112,4 +112,23 @@ class RequestBuilderTest {
         assertTrue(clean.contains("Предмет определи сам"))
         assertTrue(clean.contains("\$формулами\$"))
     }
+
+    @Test
+    fun fastAnswersLowerEffortAndSwitchThinkingOffWherePossible() {
+        val sonnet = RequestBuilder.build(request().copy(fast = true))
+        assertEquals("low", (sonnet["output_config"] as JsonObject)["effort"]!!.jsonPrimitive.content)
+        assertEquals("between_tools", (sonnet["thinking"] as JsonObject)["type"]!!.jsonPrimitive.content)
+        // С выключенными размышлениями серверный резерв не шлём — он может их не принять.
+        val fastReq = MessageRequest(ClaudeModel.SONNET.id, "s", listOf(ChatTurn(Role.USER, "x")), maxTokens = 10, stream = true, fast = true)
+        assertFalse(fastReq.useFallbacks)
+        assertNull(RequestBuilder.build(fastReq)["fallbacks"])
+        assertEquals("disabled", RequestBuilder.thinkingOff("claude-haiku-5-5", fast = true, compat = false))
+        assertNull(RequestBuilder.thinkingOff("claude-opus-5-5", fast = true, compat = false))
+        assertNull(RequestBuilder.thinkingOff("claude-sonnet-5-5", fast = false, compat = false))
+        assertNull(RequestBuilder.thinkingOff("claude-sonnet-5-5", fast = true, compat = true))
+        // Обычный режим — как раньше.
+        val normal = RequestBuilder.build(request())
+        assertNull(normal["thinking"])
+        assertEquals("medium", (normal["output_config"] as JsonObject)["effort"]!!.jsonPrimitive.content)
+    }
 }

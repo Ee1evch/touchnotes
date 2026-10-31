@@ -31,7 +31,9 @@ data class MessageRequest(
     val effort: String = "medium",
     /** Прокси/свой сервер: только стандартные поля, без бета-возможностей Anthropic. */
     val compat: Boolean = false,
-    val useFallbacks: Boolean = !compat && ClaudeModel.supportsFallbacks(model),
+    /** Быстрый ответ: низкое «усилие» и без размышлений, где модель это позволяет. */
+    val fast: Boolean = false,
+    val useFallbacks: Boolean = !compat && ClaudeModel.supportsFallbacks(model) && RequestBuilder.thinkingOff(model, fast, compat) == null,
 )
 
 /** Тело и заголовки запроса к Anthropic `/v1/messages`. */
@@ -74,7 +76,8 @@ object RequestBuilder {
             put("system", req.system)
             put("messages", messages)
             // effort понимают модели Claude 4.6 и новее; для старых id не отправляем.
-            if (!req.compat && supportsEffort(req.model)) putJsonObject("output_config") { put("effort", req.effort) }
+            if (!req.compat && supportsEffort(req.model)) putJsonObject("output_config") { put("effort", if (req.fast) "low" else req.effort) }
+            thinkingOff(req.model, req.fast, req.compat)?.let { type -> putJsonObject("thinking") { put("type", type) } }
             if (req.stream) put("stream", true)
             if (req.useFallbacks) put("fallbacks", "default")
         }
@@ -94,6 +97,21 @@ object RequestBuilder {
     private val OLD_MODEL = Regex("""claude-(3|instant|2|haiku-4|sonnet-4-[0-5]|opus-4-[0-4])""")
 
     internal fun supportsEffort(modelId: String): Boolean = !OLD_MODEL.containsMatchIn(modelId)
+
+    /**
+     * Как выключить размышления для быстрого ответа: у Sonnet 5.5 — `between_tools`, у Haiku 5.5, Sonnet 5
+     * и Opus 5 — `disabled`; у Opus 5.5 и Fable их выключить нельзя (там только низкое усилие).
+     */
+    fun thinkingOff(modelId: String, fast: Boolean, compat: Boolean): String? {
+        if (!fast || compat) return null
+        val m = modelId.lowercase()
+        return when {
+            m.contains("sonnet-5-5") -> "between_tools"
+            m.contains("haiku-5-5") -> "disabled"
+            m.endsWith("sonnet-5") || m.endsWith("opus-5") -> "disabled"
+            else -> null
+        }
+    }
 
     internal fun normalize(input: List<ChatTurn>): List<ChatTurn> = Turns.normalize(input)
 }

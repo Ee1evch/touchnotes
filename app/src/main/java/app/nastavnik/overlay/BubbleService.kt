@@ -783,7 +783,11 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
     }
 
     /** Снимок без наших окон, без системных панелей, не больше 1500 px и 1,15 Мп, JPEG 85%. [contextPages] — сколько страниц конспекта приложить. */
-    private suspend fun takeShot(numberLines: Boolean = true, contextPages: Int = CONTEXT_PAGES): ShotResult {
+    private suspend fun takeShot(
+        numberLines: Boolean = true,
+        // Быстрые ответы: меньше соседних страниц — запрос легче, ответ раньше.
+        contextPages: Int = if (napp.settings.load().fastAnswers) FAST_CONTEXT_PAGES else CONTEXT_PAGES,
+    ): ShotResult {
         if (!ensureProjection()) {
             return ShotResult.Failed(
                 "Нет разрешения на снимок экрана — без него наставник не видит записи. Нажми кнопку ещё раз и выбери «Весь экран».",
@@ -1269,6 +1273,7 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
 
         /** Сколько других страниц конспекта прикладывать к вопросу и к тихой проверке. */
         private const val CONTEXT_PAGES = 8
+        private const val FAST_CONTEXT_PAGES = 3
         private const val WATCH_CONTEXT_PAGES = 4
         private const val MIN_WATCH_GAP_MS = 45_000L
 

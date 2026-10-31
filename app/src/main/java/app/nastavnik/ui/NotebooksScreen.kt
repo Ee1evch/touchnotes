@@ -160,7 +160,7 @@ private fun PaperChoice(p: Paper, onClick: () -> Unit) {
 }
 
 @Composable
-private fun PaperPreview(p: Paper) {
+internal fun PaperPreview(p: Paper) {
     val line = Color(PageDrawer.RULE)
     val margin = Color(PageDrawer.MARGIN)
     Canvas(Modifier.fillMaxSize().padding(6.dp)) {

@@ -140,4 +140,14 @@ class GeminiClientTest {
         )
         assertEquals(listOf("gemini-flash-latest", "gemini-pro-latest"), client.listModels("k"))
     }
+
+    @Test
+    fun fastAnswerTurnsThinkingDown() {
+        val flash = GeminiClient.buildBody(req().copy(modelId = "gemini-flash-latest", fast = true))
+        val cfg = (flash["generationConfig"] as kotlinx.serialization.json.JsonObject)["thinkingConfig"] as kotlinx.serialization.json.JsonObject
+        assertEquals("0", cfg["thinkingBudget"].toString())
+        val pro = GeminiClient.buildBody(req().copy(modelId = "gemini-pro-latest", fast = true))
+        assertEquals("128", ((pro["generationConfig"] as kotlinx.serialization.json.JsonObject)["thinkingConfig"] as kotlinx.serialization.json.JsonObject)["thinkingBudget"].toString())
+        assertEquals(null, (GeminiClient.buildBody(req())["generationConfig"] as kotlinx.serialization.json.JsonObject)["thinkingConfig"])
+    }
 }

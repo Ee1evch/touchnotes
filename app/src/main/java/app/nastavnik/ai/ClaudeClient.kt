@@ -48,6 +48,7 @@ class ClaudeClient(
         maxTokens = maxTokens,
         stream = stream,
         compat = compat,
+        fast = fast,
     )
 
     /** Потоковый запрос. Каждое обновление уходит в [onUpdate] (в фоновом потоке). Возвращает stop_reason. */
