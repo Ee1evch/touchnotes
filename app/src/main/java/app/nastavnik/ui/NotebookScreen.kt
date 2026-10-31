@@ -112,7 +112,13 @@ fun NotebookScreen(notebookId: Long, onBack: () -> Unit, onCleanReady: () -> Uni
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val ctl = remember(notebookId) { NotebookController(context.app, notebookId, scope) }
-    LaunchedEffect(notebookId) { ctl.load() }
+    LaunchedEffect(notebookId) {
+        ctl.load()
+        // Прогреваем движок WebView (им рисуются формулы в подсказках): первый запуск долгий,
+        // пусть он случится сейчас, а не в момент, когда пришёл ответ наставника.
+        delay(600)
+        runCatching { android.webkit.WebView(context).destroy() }
+    }
     DisposableEffect(ctl) { onDispose { ctl.close() } }
     val close = {
         ctl.close()
