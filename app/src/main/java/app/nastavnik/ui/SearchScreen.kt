@@ -30,6 +30,7 @@ import app.nastavnik.app
 import app.nastavnik.data.CleanNoteEntity
 import app.nastavnik.notes.CleanNoteParser
 import app.nastavnik.notes.NoteApps
+import app.nastavnik.notes.NoteExport
 import app.nastavnik.notes.NoteStorage
 import app.nastavnik.notes.Search
 import app.nastavnik.study.NoteText
@@ -144,11 +145,16 @@ private fun HitRow(h: Hit, expanded: Boolean, onClick: () -> Unit) {
             } else if (expanded && h is Hit.Card) {
                 MathText(h.snippet, 15)
             } else if (h.snippet.isNotBlank()) {
-                Text(h.snippet, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                Text(clean(h.snippet), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 3, overflow = TextOverflow.Ellipsis)
             }
         }
     }
 }
+
+/** Выдержка без разметки: жирный, `$…$` и команды LaTeX — понятными символами. */
+private fun clean(s: String): String = NoteExport.prettyTex(s.replace("**", "").replace("__", ""))
+    .replace("$", "")
+    .replace(Regex("\\\\([a-zA-Z]+)"), "$1")
 
 /** Служебная разметка ответа наставника (@@ …, [[ГОТОВО]]) в поиске не нужна. */
 private fun readable(text: String): String = text.lines()

@@ -111,7 +111,7 @@ private fun Stat(title: String, value: String, hint: String?, modifier: Modifier
     Column(
         modifier
             .clip(RoundedCornerShape(16.dp))
-            .background(Brand.Line.copy(alpha = 0.5f))
+            .background(Brand.Line)
             .padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
