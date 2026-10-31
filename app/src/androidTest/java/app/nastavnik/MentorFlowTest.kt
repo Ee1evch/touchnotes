@@ -754,6 +754,56 @@ class MentorFlowTest {
         sc.close()
     }
 
+    /** Оформление: темы применяются сразу, а лист тетради в любой теме белый. */
+    @Test
+    fun themesApplyAndSheetStaysWhite() {
+        val st = ctx.app.settings
+        try {
+            var sc = ActivityScenario.launch<MainActivity>(Intent(ctx, MainActivity::class.java).putExtra(MainActivity.EXTRA_SCREEN, MainActivity.SCREEN_APPEARANCE))
+            assertNotNull("нет экрана оформления", device.wait(Until.findObject(By.desc("Тема Океан")), 8000))
+            SystemClock.sleep(800)
+            screenshot("appearance_light")
+            device.findObject(By.desc("Тема Океан"))!!.click()
+            SystemClock.sleep(900)
+            assertEquals("ocean", st.load().lightTheme)
+            screenshot("appearance_ocean")
+            // Тёмная тема из галереи сразу включает тёмный режим.
+            findScrolling(By.desc("Тема Полночь"), 10000)!!.click()
+            SystemClock.sleep(900)
+            assertEquals("DARK", st.load().themeMode)
+            assertEquals("midnight", st.load().darkTheme)
+            screenshot("appearance_midnight")
+            sc.close()
+
+            sc = ActivityScenario.launch<MainActivity>(Intent(ctx, MainActivity::class.java).putExtra(MainActivity.EXTRA_SCREEN, MainActivity.SCREEN_HOME))
+            SystemClock.sleep(1500)
+            screenshot("home_midnight")
+            sc.close()
+
+            // Тетрадь в тёмной теме: стол тёмный, лист — белый.
+            val (nb, _) = ctx.app.notebooks.store.create("Белый лист", app.nastavnik.ink.Paper.BLANK)
+            sc = ActivityScenario.launch<MainActivity>(
+                Intent(ctx, MainActivity::class.java)
+                    .putExtra(MainActivity.EXTRA_SCREEN, MainActivity.SCREEN_NOTEBOOK)
+                    .putExtra(MainActivity.EXTRA_NOTEBOOK, nb.id),
+            )
+            val sheet = device.wait(Until.findObject(By.desc("Лист тетради")), 10000)!!.visibleBounds
+            SystemClock.sleep(1500)
+            screenshot("notebook_midnight")
+            val f = File(ctx.cacheDir, "sheet.png")
+            assertTrue(device.takeScreenshot(f))
+            val bmp = BitmapFactory.decodeFile(f.absolutePath)
+            val px = bmp.getPixel(sheet.left + sheet.width() / 3, sheet.top + sheet.height() / 3)
+            val r = android.graphics.Color.red(px); val g = android.graphics.Color.green(px); val b = android.graphics.Color.blue(px)
+            assertTrue("лист не белый в тёмной теме: $r,$g,$b", r > 235 && g > 235 && b > 235)
+            val desk = bmp.getPixel(sheet.left + 4, sheet.top + 4)
+            assertTrue("стол не тёмный", android.graphics.Color.red(desk) < 90)
+            sc.close()
+        } finally {
+            st.setThemeMode("LIGHT"); st.setLightTheme("paper"); st.setDarkTheme("graphite"); st.setAccent(0)
+        }
+    }
+
     /** Наставник видит весь конспект: пролистанные страницы уходят вместе со следующим вопросом. */
     @Test
     fun questionCarriesWholeNotebook() {

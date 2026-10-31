@@ -1,6 +1,20 @@
 package app.nastavnik.ui
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.material3.ripple
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.lerp
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.sin
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -74,16 +88,38 @@ fun Modifier.glass(shape: Shape = RoundedCornerShape(24.dp), elevation: Dp = 10.
         .border(0.6.dp, Brand.Line, shape)
         .border(1.2.dp, Brush.verticalGradient(listOf(Color.White.copy(alpha = if (Brand.dark) 0.16f else 0.95f), Color.White.copy(alpha = if (Brand.dark) 0.03f else 0.25f))), shape)
 
-/** Бумага с мягкими цветными пятнами — фон всех экранов, под стеклом. */
+/**
+ * Фон всех экранов под стеклом — по настройке «Фон»: мягкие пятна, «живые» (медленно плывут),
+ * градиент или ровный цвет темы.
+ */
 fun Modifier.paperBackdrop(): Modifier = drawBehind {
     drawRect(Brand.Paper)
     val w = size.width
     val h = size.height
-    fun blob(c: Color, x: Float, y: Float, r: Float) =
-        drawCircle(Brush.radialGradient(listOf(c, c.copy(alpha = 0f)), center = Offset(x, y), radius = r), r, Offset(x, y))
-    blob(Brand.BlobCool, w * 0.88f, h * 0.06f, maxOf(w, h) * 0.5f)
-    blob(Brand.BlobWarm, w * 0.04f, h * 0.42f, maxOf(w, h) * 0.42f)
-    blob(Brand.BlobMint, w * 0.92f, h * 0.9f, maxOf(w, h) * 0.45f)
+    val m = maxOf(w, h)
+    when (Brand.backdrop) {
+        Backdrop.PLAIN -> Unit
+        Backdrop.GRADIENT -> {
+            drawRect(Brush.linearGradient(listOf(Brand.BlobCool, Brand.Paper.copy(alpha = 0f)), Offset(w, 0f), Offset(w * 0.2f, h * 0.7f)))
+            drawRect(Brush.linearGradient(listOf(Brand.BlobWarm.copy(alpha = 0.9f), Brand.Paper.copy(alpha = 0f)), Offset(0f, h), Offset(w * 0.6f, h * 0.3f)))
+        }
+        Backdrop.BLOBS, Backdrop.LIVE -> {
+            fun blob(c: Color, x: Float, y: Float, r: Float) =
+                drawCircle(Brush.radialGradient(listOf(c, c.copy(alpha = 0f)), center = Offset(x, y), radius = r), r, Offset(x, y))
+            val t = if (Brand.backdrop == Backdrop.LIVE) Brand.phase * 2 * PI.toFloat() else 0f
+            blob(Brand.BlobCool, w * (0.88f + 0.07f * sin(t)), h * (0.06f + 0.05f * cos(t)), m * (0.5f + 0.04f * sin(t * 2)))
+            blob(Brand.BlobWarm, w * (0.04f + 0.08f * cos(t + 2.1f)), h * (0.42f + 0.07f * sin(t + 2.1f)), m * 0.42f)
+            blob(Brand.BlobMint, w * (0.92f + 0.06f * sin(t + 4.2f)), h * (0.9f + 0.05f * cos(t + 4.2f)), m * (0.45f + 0.03f * cos(t)))
+        }
+    }
+}
+
+/** Кнопка «проседает» под пальцем — мягко, с пружинкой. */
+@Composable
+fun Modifier.pressable(source: MutableInteractionSource): Modifier {
+    val pressed by source.collectIsPressedAsState()
+    val k by animateFloatAsState(if (pressed) 0.95f else 1f, spring(dampingRatio = 0.55f, stiffness = 900f), label = "press")
+    return this.graphicsLayer { scaleX = k; scaleY = k }
 }
 
 @Composable
@@ -178,18 +214,25 @@ fun InkButton(
     icon: Int? = null,
     onClick: () -> Unit,
 ) {
-    val bg = when {
-        !enabled -> Color(0xFFB9B7BF)
-        danger -> Brand.Error
-        else -> Brand.Ink
-    }
-    val fg = Brand.OnInk
+    val bg by animateColorAsState(
+        when {
+            !enabled -> Brand.Ink.copy(alpha = 0.18f)
+            danger -> Brand.Error
+            else -> Brand.Accent
+        },
+        tween(220),
+        label = "inkBtn",
+    )
+    val fg = if (danger || !enabled) Color.White else Brand.OnAccent
+    val source = remember { MutableInteractionSource() }
     Row(
         modifier
+            .pressable(source)
             .heightIn(min = 50.dp)
+            .shadow(if (enabled) 8.dp else 0.dp, CircleShape, ambientColor = bg.copy(alpha = 0.3f), spotColor = bg.copy(alpha = 0.45f))
             .clip(CircleShape)
-            .background(bg)
-            .clickable(enabled = enabled, onClick = onClick)
+            .background(Brush.verticalGradient(listOf(lerp(bg, Color.White, 0.12f), bg)))
+            .clickable(interactionSource = source, indication = ripple(), enabled = enabled, onClick = onClick)
             .padding(horizontal = 22.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
@@ -203,11 +246,13 @@ fun InkButton(
 @Composable
 fun SoftButton(text: String, modifier: Modifier = Modifier, icon: Int? = null, onClick: () -> Unit) {
     val fg = MaterialTheme.colorScheme.onSurface
+    val source = remember { MutableInteractionSource() }
     Row(
         modifier
+            .pressable(source)
             .heightIn(min = 50.dp)
             .glass(CircleShape, 4.dp, strong = true)
-            .clickable(onClick = onClick)
+            .clickable(interactionSource = source, indication = ripple(), onClick = onClick)
             .padding(horizontal = 20.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
@@ -348,19 +393,25 @@ fun AppTextField(
 /** Небольшая кнопка-«таблетка»: варианты адреса, второстепенные действия в строке. */
 @Composable
 fun ChipButton(text: String, selected: Boolean = false, enabled: Boolean = true, onClick: () -> Unit) {
-    val bg = if (selected) Brand.Ink else Brand.Glass.copy(alpha = 0.62f)
-    val fg = when {
-        !enabled -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-        selected -> Brand.OnInk
-        else -> MaterialTheme.colorScheme.onSurface
-    }
+    val bg by animateColorAsState(if (selected) Brand.Accent else Brand.Glass.copy(alpha = 0.62f), tween(220), label = "chipBg")
+    val fg by animateColorAsState(
+        when {
+            !enabled -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+            selected -> Brand.OnAccent
+            else -> MaterialTheme.colorScheme.onSurface
+        },
+        tween(220),
+        label = "chipFg",
+    )
+    val source = remember { MutableInteractionSource() }
     Box(
         Modifier
+            .pressable(source)
             .heightIn(min = 40.dp)
             .clip(CircleShape)
             .background(bg)
             .border(0.6.dp, Brand.Line, CircleShape)
-            .clickable(enabled = enabled, onClick = onClick)
+            .clickable(interactionSource = source, indication = ripple(), enabled = enabled, onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 10.dp),
         contentAlignment = Alignment.Center,
     ) {
@@ -428,8 +479,8 @@ fun AppSlider(value: Float, onValueChange: (Float) -> Unit, onValueChangeFinishe
         valueRange = valueRange,
         steps = steps,
         colors = SliderDefaults.colors(
-            thumbColor = Brand.Ink,
-            activeTrackColor = Brand.Ink,
+            thumbColor = Brand.Accent,
+            activeTrackColor = Brand.Accent,
             inactiveTrackColor = Brand.Ink.copy(alpha = 0.12f),
             activeTickColor = Color.White.copy(alpha = 0.7f),
             inactiveTickColor = Brand.Ink.copy(alpha = 0.3f),

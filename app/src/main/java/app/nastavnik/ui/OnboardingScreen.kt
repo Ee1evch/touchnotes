@@ -124,7 +124,7 @@ fun OnboardingScreen(resumeTick: Int, onDone: () -> Unit, onSkip: () -> Unit) {
                         .weight(1f)
                         .height(5.dp)
                         .clip(CircleShape)
-                        .background(if (i <= index) Brand.Ink else Brand.Ink.copy(alpha = 0.12f)),
+                        .background(if (i <= index) Brand.Accent else Brand.Ink.copy(alpha = 0.12f)),
                 )
             }
         }

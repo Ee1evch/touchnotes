@@ -20,6 +20,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.runtime.remember
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -63,19 +71,23 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val prefs by remember { app.settings.flow() }.collectAsStateWithLifecycle(initialValue = null)
-            // Тема входит в настройки: поменяли — поток выдаёт новые настройки, и экран сразу перекрашивается.
-            val mode = runCatching { ThemeMode.valueOf(prefs?.themeMode ?: app.settings.themeMode()) }.getOrDefault(ThemeMode.LIGHT)
-            val dark = when (mode) {
-                ThemeMode.SYSTEM -> isSystemInDarkTheme()
-                ThemeMode.LIGHT -> false
-                ThemeMode.DARK -> true
-            }
+            // Оформление входит в настройки: поменяли — поток выдаёт новые настройки, и экран сразу перекрашивается.
+            val st = prefs ?: app.settings.load()
+            val appearance = Appearance(
+                mode = runCatching { ThemeMode.valueOf(st.themeMode) }.getOrDefault(ThemeMode.LIGHT),
+                light = st.lightTheme,
+                dark = st.darkTheme,
+                accent = st.accent,
+                backdrop = runCatching { Backdrop.valueOf(st.backdrop) }.getOrDefault(Backdrop.BLOBS),
+                textScale = st.textScale,
+            )
+            val dark = appearance.resolve(isSystemInDarkTheme()).dark
             LaunchedEffect(dark) {
                 val t = android.graphics.Color.TRANSPARENT
                 val style = if (dark) SystemBarStyle.dark(t) else SystemBarStyle.light(t, t)
                 enableEdgeToEdge(statusBarStyle = style, navigationBarStyle = style)
             }
-            NastavnikTheme(mode) {
+            NastavnikTheme(appearance) {
                 val go: (String) -> Unit = {
                     fromOverlay = false
                     screen = it
@@ -89,48 +101,66 @@ class MainActivity : ComponentActivity() {
                     notebookId = id
                     go(SCREEN_NOTEBOOK)
                 }
-                BackHandler(enabled = screen != SCREEN_HOME) { if (screen == SCREEN_CLEAN_TEST) go(SCREEN_CLEAN) else home() }
+                BackHandler(enabled = screen != SCREEN_HOME) {
+                    when (screen) {
+                        SCREEN_CLEAN_TEST -> go(SCREEN_CLEAN)
+                        SCREEN_APPEARANCE -> go(SCREEN_SETTINGS)
+                        else -> home()
+                    }
+                }
                 if (importing) {
                     ImportingScreen()
                     return@NastavnikTheme
                 }
-                when (screen) {
-                    SCREEN_NOTEBOOKS -> NotebooksScreen(resumeTick, onBack = home, onOpen = openNotebook)
-                    SCREEN_NOTEBOOK -> if (notebookId != 0L) {
-                        NotebookScreen(
-                            notebookId,
-                            onBack = { go(SCREEN_NOTEBOOKS) },
-                            onCleanReady = { go(SCREEN_CLEAN) },
+                // Экраны сменяются мягко: новый проявляется и чуть «подъезжает», старый тает.
+                AnimatedContent(
+                    targetState = screen,
+                    transitionSpec = {
+                        val back = targetState == SCREEN_HOME
+                        (fadeIn(tween(320, delayMillis = 40)) + scaleIn(tween(380, easing = FastOutSlowInEasing), initialScale = if (back) 1.03f else 0.97f))
+                            .togetherWith(fadeOut(tween(200)) + scaleOut(tween(300), targetScale = if (back) 0.98f else 1.02f))
+                    },
+                    label = "screen",
+                ) { target ->
+                    when (target) {
+                        SCREEN_NOTEBOOKS -> NotebooksScreen(resumeTick, onBack = home, onOpen = openNotebook)
+                        SCREEN_NOTEBOOK -> if (notebookId != 0L) {
+                            NotebookScreen(
+                                notebookId,
+                                onBack = { go(SCREEN_NOTEBOOKS) },
+                                onCleanReady = { go(SCREEN_CLEAN) },
+                                onSettings = { go(SCREEN_SETTINGS) },
+                            )
+                        } else {
+                            NotebooksScreen(resumeTick, onBack = home, onOpen = openNotebook)
+                        }
+                        SCREEN_TRAINING, SCREEN_EXAMS -> TrainingScreen(
+                            initialTab = if (target == SCREEN_EXAMS) TrainTab.EXAMS else TrainTab.VARIANT,
+                            onBack = home,
+                            onOpenNotebook = openNotebook,
+                            onReview = { go(SCREEN_REVIEW) },
                             onSettings = { go(SCREEN_SETTINGS) },
                         )
-                    } else {
-                        NotebooksScreen(resumeTick, onBack = home, onOpen = openNotebook)
+                        SCREEN_ONBOARDING -> OnboardingScreen(resumeTick, onDone = { screen = SCREEN_HOME; moveTaskToBack(true) }, onSkip = { screen = SCREEN_HOME })
+                        SCREEN_SETTINGS -> SettingsScreen(onBack = home, onAppearance = { go(SCREEN_APPEARANCE) })
+                        SCREEN_APPEARANCE -> AppearanceScreen(onBack = { go(SCREEN_SETTINGS) })
+                        SCREEN_HISTORY -> HistoryScreen(onBack = home, onCleanReady = { go(SCREEN_CLEAN) })
+                        SCREEN_SEARCH -> SearchScreen(
+                            onBack = home,
+                            onOpenNotebook = openNotebook,
+                            onHistory = { go(SCREEN_HISTORY) },
+                        )
+                        SCREEN_CLEAN_TEST -> CleanTestScreen(onBack = { go(SCREEN_CLEAN) })
+                        SCREEN_REVIEW -> ReviewScreen(onBack = home, onExample = { go(SCREEN_CLEAN_TEST) })
+                        SCREEN_PROGRESS -> ProgressScreen(onBack = home, onReview = { go(SCREEN_REVIEW) })
+                        SCREEN_CLEAN -> CleanScreen(
+                            // Чистовик открыла кнопка наставника — закрыв его, возвращаемся к записям.
+                            onClose = home,
+                            onSettings = { go(SCREEN_SETTINGS) },
+                            onExample = { go(SCREEN_CLEAN_TEST) },
+                        )
+                        else -> HomeScreen(resumeTick, go, openNotebook)
                     }
-                    SCREEN_TRAINING, SCREEN_EXAMS -> TrainingScreen(
-                        initialTab = if (screen == SCREEN_EXAMS) TrainTab.EXAMS else TrainTab.VARIANT,
-                        onBack = home,
-                        onOpenNotebook = openNotebook,
-                        onReview = { go(SCREEN_REVIEW) },
-                        onSettings = { go(SCREEN_SETTINGS) },
-                    )
-                    SCREEN_ONBOARDING -> OnboardingScreen(resumeTick, onDone = { screen = SCREEN_HOME; moveTaskToBack(true) }, onSkip = { screen = SCREEN_HOME })
-                    SCREEN_SETTINGS -> SettingsScreen(onBack = home)
-                    SCREEN_HISTORY -> HistoryScreen(onBack = home, onCleanReady = { go(SCREEN_CLEAN) })
-                    SCREEN_SEARCH -> SearchScreen(
-                        onBack = home,
-                        onOpenNotebook = openNotebook,
-                        onHistory = { go(SCREEN_HISTORY) },
-                    )
-                    SCREEN_CLEAN_TEST -> CleanTestScreen(onBack = { go(SCREEN_CLEAN) })
-                    SCREEN_REVIEW -> ReviewScreen(onBack = home, onExample = { go(SCREEN_CLEAN_TEST) })
-                    SCREEN_PROGRESS -> ProgressScreen(onBack = home, onReview = { go(SCREEN_REVIEW) })
-                    SCREEN_CLEAN -> CleanScreen(
-                        // Чистовик открыла кнопка наставника — закрыв его, возвращаемся к записям.
-                        onClose = home,
-                        onSettings = { go(SCREEN_SETTINGS) },
-                        onExample = { go(SCREEN_CLEAN_TEST) },
-                    )
-                    else -> HomeScreen(resumeTick, go, openNotebook)
                 }
             }
         }
@@ -213,6 +243,7 @@ class MainActivity : ComponentActivity() {
         const val SCREEN_NOTEBOOKS = "notebooks"
         const val SCREEN_TRAINING = "training"
         const val SCREEN_SEARCH = "search"
+        const val SCREEN_APPEARANCE = "appearance"
         const val SCREEN_EXAMS = "exams"
         const val SCREEN_NOTEBOOK = "notebook"
         const val EXTRA_NOTEBOOK = "notebook_id"
@@ -230,7 +261,7 @@ class MainActivity : ComponentActivity() {
 private fun ImportingScreen() {
     Box(Modifier.fillMaxSize().paperBackdrop(), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            CircularProgressIndicator(color = Brand.Ink, trackColor = Brand.Ink.copy(alpha = 0.1f))
+            CircularProgressIndicator(color = Brand.Accent, trackColor = Brand.Accent.copy(alpha = 0.12f))
             Text("Готовлю страницы тетради…", style = MaterialTheme.typography.titleMedium)
         }
     }

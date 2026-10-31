@@ -53,6 +53,12 @@ data class AppSettings(
     val themeMode: String = "LIGHT",
     /** Быстрые ответы: меньше «размышлений» модели и меньше картинок в запросе. */
     val fastAnswers: Boolean = true,
+    /** Оформление: светлая и тёмная тема, свой акцент (0 — как в теме), фон и размер текста. */
+    val lightTheme: String = "paper",
+    val darkTheme: String = "graphite",
+    val accent: Int = 0,
+    val backdrop: String = "BLOBS",
+    val textScale: Float = 1f,
 )
 
 /**
@@ -99,7 +105,18 @@ class SettingsRepo(private val context: Context) {
         activeConversationId = prefs.getLong(K_ACTIVE_CONV, 0L),
         themeMode = themeMode(),
         fastAnswers = prefs.getBoolean(K_FAST, true),
+        lightTheme = prefs.getString(K_LIGHT, "paper").orEmpty(),
+        darkTheme = prefs.getString(K_DARK, "graphite").orEmpty(),
+        accent = prefs.getInt(K_ACCENT, 0),
+        backdrop = prefs.getString(K_BACKDROP, "BLOBS").orEmpty(),
+        textScale = prefs.getFloat(K_TEXT_SCALE, 1f),
     )
+
+    fun setLightTheme(id: String) = prefs.edit { putString(K_LIGHT, id) }
+    fun setDarkTheme(id: String) = prefs.edit { putString(K_DARK, id) }
+    fun setAccent(c: Int) = prefs.edit { putInt(K_ACCENT, c) }
+    fun setBackdrop(name: String) = prefs.edit { putString(K_BACKDROP, name) }
+    fun setTextScale(k: Float) = prefs.edit { putFloat(K_TEXT_SCALE, k.coerceIn(0.9f, 1.25f)) }
 
     /** Подсказки по жестам листа показаны (один раз). */
     fun editorTipsShown(): Boolean = prefs.getBoolean(K_TIPS, false)
@@ -278,6 +295,11 @@ class SettingsRepo(private val context: Context) {
         private const val K_THEME = "theme_mode"
         private const val K_FAST = "fast_answers"
         private const val K_TIPS = "editor_tips_shown"
+        private const val K_LIGHT = "theme_light"
+        private const val K_DARK = "theme_dark"
+        private const val K_ACCENT = "theme_accent"
+        private const val K_BACKDROP = "theme_backdrop"
+        private const val K_TEXT_SCALE = "text_scale"
         private const val K_LIMIT = "daily_limit_usd"
         private const val K_PROVIDER = "provider"
         private const val K_OPENAI_BASE = "openai_base_url"

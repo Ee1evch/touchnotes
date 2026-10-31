@@ -95,7 +95,7 @@ fun CleanScreen(onClose: () -> Unit, onSettings: () -> Unit, onExample: () -> Un
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                 if (s is CleanState.Generating || s is CleanState.Saving) {
                     Box(Modifier.size(42.dp), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(Modifier.size(28.dp), strokeWidth = 3.dp, color = Brand.Ink, trackColor = Brand.Ink.copy(alpha = 0.1f))
+                        CircularProgressIndicator(Modifier.size(28.dp), strokeWidth = 3.dp, color = Brand.Accent, trackColor = Brand.Accent.copy(alpha = 0.12f))
                     }
                 } else {
                     IconBadge(icon)

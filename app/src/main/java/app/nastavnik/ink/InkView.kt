@@ -106,16 +106,18 @@ class InkView(context: Context) : View(context) {
     /** Перо, задержанное на месте, включает ластик. */
     var holdToErase: Boolean = true
 
-    /** Тёмная тема: тёмный стол и бумага, светлые чернила (только на экране). */
+    /** Тёмная тема — только тёмный «стол» вокруг листа. Сам лист всегда белый, чернила — как есть. */
     var dark: Boolean = false
-        set(value) {
-            if (field == value) return
-            field = value
-            drawer.dark = value
-            desk = if (value) DESK_DARK else DESK
-            invalidateCache()
-        }
+        private set
     private var desk = DESK
+
+    /** Тема приложения: цвет стола вокруг белого листа. */
+    fun setTheme(dark: Boolean, deskColor: Int) {
+        if (this.dark == dark && desk == deskColor) return
+        this.dark = dark
+        desk = deskColor
+        invalidateCache()
+    }
 
     /** Отметки наставника; новые проявляются плавно. */
     var marks: List<PageMark> = emptyList()
@@ -578,7 +580,7 @@ class InkView(context: Context) : View(context) {
         c.save()
         c.translate(moveDx, moveDy)
         // Поднятое выделение: мягкий ореол, само содержимое — поверх.
-        val glow = if (dark) 0x405B8CFF else 0x335B8CFF
+        val glow = 0x335B8CFF
         for (s in selStrokes) drawer.drawGlow(c, s, glow, 7f / k)
         for (s in selStrokes) if (s.tool == Tool.HIGHLIGHTER) drawer.drawStroke(c, s)
         for (t in selTexts) drawer.drawText(c, t)
@@ -589,7 +591,7 @@ class InkView(context: Context) : View(context) {
         val grow = (1 - selectionAppear) * 10f / k
         b.inset(-grow, -grow)
         selFrame.strokeWidth = 1.5f / k
-        selFrame.color = if (dark) 0xCC8EB0FF.toInt() else 0xCC3A6FE0.toInt()
+        selFrame.color = 0xCC3A6FE0.toInt()
         selFrame.pathEffect = DashPathEffect(floatArrayOf(7f / k, 5f / k), -antsPhase * 12f / k)
         c.drawRoundRect(b, 8f / k, 8f / k, selFrame)
     }
@@ -602,10 +604,10 @@ class InkView(context: Context) : View(context) {
             path.lineTo(lassoPath[i], lassoPath[i + 1])
             i += 2
         }
-        lassoFill.color = if (dark) 0x1A8EB0FF else 0x143A6FE0
+        lassoFill.color = 0x143A6FE0
         c.drawPath(path, lassoFill)
         lassoPaint.strokeWidth = 1.6f / k
-        lassoPaint.color = if (dark) 0xDD8EB0FF.toInt() else 0xDD3A6FE0.toInt()
+        lassoPaint.color = 0xDD3A6FE0.toInt()
         lassoPaint.pathEffect = DashPathEffect(floatArrayOf(8f / k, 6f / k), 0f)
         c.drawPath(path, lassoPaint)
     }
@@ -726,9 +728,9 @@ class InkView(context: Context) : View(context) {
         val y = if (erasing) touchY else hoverY
         if (editTool == EditTool.ERASER || erasing) {
             val r = ERASER_RADIUS * density * (if (tempEraser) eraserRing else 1f)
-            cursorFill.color = if (dark) 0x22FFFFFF else 0x1816161A
+            cursorFill.color = 0x1816161A
             c.drawCircle(x, y, r, cursorFill)
-            cursorRing.color = if (dark) 0x99FFFFFF.toInt() else 0x8816161A.toInt()
+            cursorRing.color = 0x8816161A.toInt()
             cursorRing.strokeWidth = 1.2f * density
             c.drawCircle(x, y, r, cursorRing)
         } else if (editTool == EditTool.PEN || editTool == EditTool.HIGHLIGHTER || editTool == EditTool.SHAPE) {

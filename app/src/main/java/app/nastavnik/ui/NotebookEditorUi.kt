@@ -129,7 +129,7 @@ fun EditorToolbar(ctl: NotebookController, modifier: Modifier = Modifier) {
                         .offset(x = indicator)
                         .size(TOOL_SIZE)
                         .clip(CircleShape)
-                        .background(Brand.Ink),
+                        .background(Brand.Accent),
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(TOOL_GAP)) {
                     TOOLS.forEach { t ->
@@ -160,7 +160,7 @@ fun EditorToolbar(ctl: NotebookController, modifier: Modifier = Modifier) {
 
 @Composable
 private fun ToggleIcon(icon: Int, description: String, active: Boolean, onClick: () -> Unit) {
-    val bg by animateColorAsState(if (active) Brand.Ink else Color.Transparent, tween(220), label = "toggleBg")
+    val bg by animateColorAsState(if (active) Brand.Accent else Color.Transparent, tween(220), label = "toggleBg")
     val tint by animateColorAsState(if (active) Brand.OnInk else Brand.Ink, tween(220), label = "toggleTint")
     Box(
         Modifier
@@ -223,7 +223,7 @@ private fun ToolOptions(ctl: NotebookController) {
                 EditTool.SHAPE -> {
                     SHAPES.forEach { (k, icon) ->
                         val on = ctl.shapeKind == k
-                        val bg by animateColorAsState(if (on) Brand.Ink else Color.Transparent, tween(200), label = "shapeBg")
+                        val bg by animateColorAsState(if (on) Brand.Accent else Color.Transparent, tween(200), label = "shapeBg")
                         val tint by animateColorAsState(if (on) Brand.OnInk else Brand.Ink, tween(200), label = "shapeTint")
                         Box(
                             Modifier
@@ -277,7 +277,7 @@ private fun OptionDivider() {
 
 @Composable
 private fun Pill(text: String, selected: Boolean, icon: Int? = null, onClick: () -> Unit) {
-    val bg by animateColorAsState(if (selected) Brand.Ink else Color.Transparent, tween(200), label = "pillBg")
+    val bg by animateColorAsState(if (selected) Brand.Accent else Color.Transparent, tween(200), label = "pillBg")
     val fg by animateColorAsState(if (selected) Brand.OnInk else Brand.Ink, tween(200), label = "pillFg")
     Row(
         Modifier
@@ -315,7 +315,7 @@ fun Swatch(color: Color, selected: Boolean, description: String, marker: Boolean
                 Modifier
                     .size(if (small) 30.dp else 35.dp)
                     .graphicsLayer { alpha = ring; scaleX = 0.8f + 0.2f * ring; scaleY = 0.8f + 0.2f * ring }
-                    .border(2.dp, Brand.Ink, if (marker) RoundedCornerShape(10.dp) else CircleShape),
+                    .border(2.dp, Brand.Accent, if (marker) RoundedCornerShape(10.dp) else CircleShape),
             )
         }
     }
@@ -538,7 +538,7 @@ private fun PageThumb(ctl: NotebookController, p: InkPage, i: Int, selected: Boo
                 .aspectRatio(1f / 1.35f)
                 .clip(RoundedCornerShape(14.dp))
                 .background(Color(PageDrawer.PAPER))
-                .border((1 + ring * 1.5f).dp, if (selected) Brand.Ink else Brand.Line, RoundedCornerShape(14.dp)),
+                .border((1 + ring * 1.5f).dp, if (selected) Brand.Accent else Brand.Line, RoundedCornerShape(14.dp)),
         ) {
             val t = thumb
             if (t != null) Image(t, contentDescription = null, contentScale = ContentScale.Crop, alignment = Alignment.TopCenter, modifier = Modifier.fillMaxSize())

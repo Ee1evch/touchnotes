@@ -37,12 +37,14 @@ import app.nastavnik.study.Reminders
 import kotlin.math.roundToInt
 
 @Composable
-fun SettingsScreen(onBack: () -> Unit) {
+fun SettingsScreen(onBack: () -> Unit, onAppearance: () -> Unit = {}) {
     val context = LocalContext.current
     val repo = context.app.settings
     val s by remember { repo.flow() }.collectAsStateWithLifecycle(initialValue = repo.load())
 
     ScreenScaffold(title = "Настройки", onBack = onBack) {
+        // Оформление — первым: темы, акцент, фон, размер текста.
+        AppearanceEntry(onAppearance)
         SectionCard("Нейросеть") {
             ProviderEditor(onChanged = {})
         }
@@ -206,7 +208,6 @@ fun SettingsScreen(onBack: () -> Unit) {
             }
         }
 
-        ThemeSection()
         BackupSection()
         UpdateSection()
     }

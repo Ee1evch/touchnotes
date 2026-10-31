@@ -583,7 +583,7 @@ private fun LevelDots(level: Int) {
                 Modifier
                     .size(6.dp)
                     .clip(CircleShape)
-                    .background(if (i < level) Brand.Ink else Brand.Ink.copy(alpha = 0.15f)),
+                    .background(if (i < level) Brand.Accent else Brand.Ink.copy(alpha = 0.15f)),
             )
         }
         Spacer(Modifier.width(4.dp))
@@ -602,7 +602,7 @@ private fun LevelDots(level: Int) {
 @Composable
 private fun Working(text: String) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.5.dp, color = Brand.Ink, trackColor = Brand.Ink.copy(alpha = 0.1f))
+        CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.5.dp, color = Brand.Accent, trackColor = Brand.Accent.copy(alpha = 0.12f))
         Text(text, style = MaterialTheme.typography.bodyMedium)
     }
 }

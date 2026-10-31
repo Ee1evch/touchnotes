@@ -44,21 +44,6 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-/** Тема: как в системе, светлая или тёмная. */
-@Composable
-fun ThemeSection() {
-    val context = LocalContext.current
-    val repo = context.app.settings
-    var mode by remember { mutableStateOf(runCatching { ThemeMode.valueOf(repo.themeMode()) }.getOrDefault(ThemeMode.LIGHT)) }
-    SectionCard("Оформление") {
-        FieldLabel("Тема", "Тёмная — графитовое стекло, и лист тетради тоже тёмный (чернила светлеют). Чистовик и PDF остаются светлыми.")
-        Segmented(ThemeMode.entries.map { it to it.label }, mode) {
-            mode = it
-            repo.setThemeMode(it.name)
-        }
-    }
-}
-
 /** Расходы на нейросеть: сегодня, неделя, месяц и дневной лимит. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -190,7 +175,7 @@ fun UpdateSection() {
         when {
             progress >= 0f -> {
                 Box(Modifier.fillMaxWidth().height(6.dp).clip(CircleShape).background(Brand.Line)) {
-                    Box(Modifier.fillMaxWidth(progress).height(6.dp).clip(CircleShape).background(Brand.Ink))
+                    Box(Modifier.fillMaxWidth(progress).height(6.dp).clip(CircleShape).background(Brand.Accent))
                 }
                 Text("Скачиваю… ${(progress * 100).toInt()}%", style = MaterialTheme.typography.bodySmall)
             }

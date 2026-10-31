@@ -31,6 +31,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.toArgb
 import kotlin.math.abs
 import kotlin.math.roundToInt
 import androidx.compose.foundation.background
@@ -140,9 +141,10 @@ fun NotebookScreen(notebookId: Long, onBack: () -> Unit, onCleanReady: () -> Uni
     var panel by rememberSaveable { mutableStateOf(wide) }
     var pagesOpen by rememberSaveable { mutableStateOf(false) }
     val importers = rememberImporters(onImages = { ctl.addImages(it) }, onPdf = { ctl.addPdf(it) })
-    // Тёмная тема доходит и до листа: тёмный стол, тёмная бумага, светлые чернила.
+        // Лист всегда белый, как бумага; от темы зависит только стол вокруг него.
     val dark = Brand.dark
-    SideEffect { ctl.ink.dark = dark }
+    val desk = Brand.Desk.toArgb()
+    SideEffect { ctl.ink.setTheme(dark, desk) }
     // Ответ пришёл, а панель скрыта — показываем её сами, чтобы подсказка не потерялась.
     LaunchedEffect(state.answer?.seq) { if (state.answer != null) panel = true }
 
@@ -195,7 +197,7 @@ fun NotebookScreen(notebookId: Long, onBack: () -> Unit, onCleanReady: () -> Uni
                         visible = !ctl.loaded,
                         modifier = Modifier.align(Alignment.Center),
                         exit = fadeOut(),
-                    ) { CircularProgressIndicator(color = Brand.Ink) }
+                    ) { CircularProgressIndicator(color = Brand.Accent) }
                 }
             }
             androidx.compose.animation.AnimatedVisibility(
@@ -346,7 +348,7 @@ private fun BarButton(icon: Int, description: String, enabled: Boolean = true, a
     Box(
         Modifier
             .size(44.dp)
-            .then(if (active) Modifier.clip(CircleShape).background(Brand.Ink) else Modifier.glass(CircleShape, 4.dp, strong = true))
+            .then(if (active) Modifier.clip(CircleShape).background(Brand.Accent) else Modifier.glass(CircleShape, 4.dp, strong = true))
             .clickable(enabled = enabled, onClick = onClick)
             .semantics { contentDescription = description },
         contentAlignment = Alignment.Center,
@@ -401,7 +403,7 @@ private fun PaperDialog(ctl: NotebookController, onDismiss: () -> Unit) {
                                     .aspectRatio(1f / 1.414f)
                                     .clip(RoundedCornerShape(10.dp))
                                     .background(Color(PageDrawer.PAPER))
-                                    .border(if (on) 2.dp else 1.dp, if (on) Brand.Ink else Brand.Line, RoundedCornerShape(10.dp)),
+                                    .border(if (on) 2.dp else 1.dp, if (on) Brand.Accent else Brand.Line, RoundedCornerShape(10.dp)),
                             ) { PaperPreview(p) }
                             Text(p.label, style = MaterialTheme.typography.labelLarge)
                         }
@@ -864,7 +866,7 @@ private fun ExamCard(ctl: NotebookController) {
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(20.dp))
-            .background(Brand.Ink)
+            .background(Brand.Accent)
             .padding(18.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
@@ -926,9 +928,9 @@ fun AppSwitch(checked: Boolean, onChange: (Boolean) -> Unit) {
         checked = checked,
         onCheckedChange = onChange,
         colors = androidx.compose.material3.SwitchDefaults.colors(
-            checkedTrackColor = Brand.Ink,
+            checkedTrackColor = Brand.Accent,
             checkedThumbColor = Brand.OnInk,
-            uncheckedTrackColor = Brand.Ink.copy(alpha = 0.12f),
+            uncheckedTrackColor = Brand.Accent.copy(alpha = 0.12f),
             uncheckedThumbColor = Color.White,
             uncheckedBorderColor = Brand.Ink.copy(alpha = 0.2f),
         ),

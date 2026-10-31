@@ -187,6 +187,8 @@ private fun Header(now: Long, go: (String) -> Unit) {
             Text(greeting, style = MaterialTheme.typography.headlineSmall)
             Text(date, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
+        RoundIconButton(R.drawable.ic_palette_dot, "Оформление") { go(MainActivity.SCREEN_APPEARANCE) }
+        Spacer(Modifier.width(10.dp))
         RoundIconButton(R.drawable.ic_search, "Поиск") { go(MainActivity.SCREEN_SEARCH) }
         Spacer(Modifier.width(10.dp))
         RoundIconButton(R.drawable.ic_tune, "Настройки") { go(MainActivity.SCREEN_SETTINGS) }
@@ -269,7 +271,7 @@ private fun NewNotebookCard(busy: Boolean, onNew: () -> Unit, onPhoto: () -> Uni
                 .fillMaxWidth()
                 .aspectRatio(1f / 1.25f)
                 .clip(RoundedCornerShape(20.dp))
-                .background(Brand.Ink)
+                .background(Brand.Accent)
                 .clickable(onClick = onNew),
             contentAlignment = Alignment.Center,
         ) {
@@ -507,7 +509,7 @@ private fun TodayPanel(due: Int, streak: Int, week: List<Int>, exam: Exam?, go: 
                         Modifier
                             .size(12.dp)
                             .clip(CircleShape)
-                            .background(if (n > 0) Brand.Ink else Brand.Line)
+                            .background(if (n > 0) Brand.Accent else Brand.Line)
                             .then(if (isToday && n == 0) Modifier.border(1.2.dp, Brand.InkSoft, CircleShape) else Modifier),
                     )
                 }
