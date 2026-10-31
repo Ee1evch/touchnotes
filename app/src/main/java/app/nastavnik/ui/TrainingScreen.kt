@@ -4,6 +4,11 @@ import android.content.Context
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.runtime.LaunchedEffect
+import kotlinx.coroutines.delay
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -143,6 +148,7 @@ private suspend fun material(context: Context, topic: String, noteId: Long?): Ma
     return if (fromNote != null) fromNote.copy(topic = topic.ifBlank { fromNote.topic }) else Material(topic)
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun VariantTab(topic: String, noteId: Long?, onOpenNotebook: (Long) -> Unit, onSettings: () -> Unit) {
     val context = LocalContext.current
@@ -187,9 +193,15 @@ private fun VariantTab(topic: String, noteId: Long?, onOpenNotebook: (Long) -> U
     }
 
     if (tasks.isNotEmpty()) {
+        val bring = remember { BringIntoViewRequester() }
+        LaunchedEffect(tasks.firstOrNull()) {
+            delay(200)
+            bring.bringIntoView()
+        }
         Column(
             Modifier
                 .fillMaxWidth()
+                .bringIntoViewRequester(bring)
                 .glass(RoundedCornerShape(28.dp))
                 .padding(horizontal = 22.dp, vertical = 20.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
@@ -245,6 +257,7 @@ private fun FlowRow2(content: @Composable () -> Unit) {
     FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) { content() }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun QuizTab(topic: String, noteId: Long?, onReview: () -> Unit, onSettings: () -> Unit) {
     val context = LocalContext.current
@@ -375,7 +388,13 @@ private fun QuizTab(topic: String, noteId: Long?, onReview: () -> Unit, onSettin
                         .padding(horizontal = 14.dp, vertical = 10.dp),
                 ) { MathText(q.why, 15) }
             }
-            InkButton(if (index == questions.lastIndex) "Итог" else "Дальше", Modifier.fillMaxWidth()) {
+            // Ответил — разбор и кнопка «Дальше» сами въезжают на экран.
+            val bring = remember { BringIntoViewRequester() }
+            LaunchedEffect(index) {
+                delay(150)
+                bring.bringIntoView()
+            }
+            InkButton(if (index == questions.lastIndex) "Итог" else "Дальше", Modifier.fillMaxWidth().bringIntoViewRequester(bring)) {
                 if (index == questions.lastIndex) {
                     scope.launch { context.app.study.record(Progress.KIND_QUIZ, quizTopic, wrong.size) }
                 }

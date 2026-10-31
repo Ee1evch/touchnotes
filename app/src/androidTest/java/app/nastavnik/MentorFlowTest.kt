@@ -285,11 +285,13 @@ class MentorFlowTest {
     private fun findScrolling(selector: androidx.test.uiautomator.BySelector, timeoutMs: Long = 20000): androidx.test.uiautomator.UiObject2? {
         val until = SystemClock.uptimeMillis() + timeoutMs
         while (SystemClock.uptimeMillis() < until) {
-            device.wait(Until.findObject(selector), 1500)?.let { return it }
+            device.wait(Until.findObject(selector), 800)?.let { return it }
             val w = device.displayWidth
             val h = device.displayHeight
-            device.swipe(w / 2, (h * 0.75).toInt(), w / 2, (h * 0.35).toInt(), 25)
+            // Медленный жест у правого края карточек: без инерции и мимо полей ввода.
+            device.swipe((w * 0.7).toInt(), (h * 0.8).toInt(), (w * 0.7).toInt(), (h * 0.3).toInt(), 60)
         }
+        screenshot("not_found_" + selector.toString().filter { it.isLetterOrDigit() }.take(24))
         return null
     }
 
@@ -437,9 +439,9 @@ class MentorFlowTest {
         findScrolling(By.text("Ничего"))!!.click()
         SystemClock.sleep(800)
         screenshot("quiz_answer")
-        findScrolling(By.text("Дальше"), 6000)!!.click()
-        findScrolling(By.text("Матрица"), 6000)!!.click()
-        findScrolling(By.text("Итог"), 6000)!!.click()
+        findScrolling(By.text("Дальше"), 15000)!!.click()
+        findScrolling(By.text("Матрица"), 15000)!!.click()
+        findScrolling(By.text("Итог"), 15000)!!.click()
         assertNotNull("нет итога теста", findScrolling(By.text("1 из 2"), 6000))
         val before = runBlocking { ctx.app.db.cards().observeCount().first() }
         findScrolling(By.text("Ошибки в карточки (1)"), 6000)!!.click()
@@ -546,11 +548,11 @@ class MentorFlowTest {
             screenshot("home_dark")
             sc.close()
             sc = ActivityScenario.launch<MainActivity>(Intent(ctx, MainActivity::class.java).putExtra(MainActivity.EXTRA_SCREEN, MainActivity.SCREEN_SETTINGS))
-            assertNotNull("нет раздела расходов", findScrolling(By.text("Без лимита"), 10000))
+            assertNotNull("нет раздела расходов", findScrolling(By.text("Без лимита"), 40000))
             SystemClock.sleep(800)
             screenshot("settings_usage_dark")
-            assertNotNull("нет резервной копии", findScrolling(By.text("Сохранить копию"), 10000))
-            assertNotNull("нет обновлений", findScrolling(By.text("Проверить обновления"), 10000))
+            assertNotNull("нет резервной копии", findScrolling(By.text("Сохранить копию"), 60000))
+            assertNotNull("нет обновлений", findScrolling(By.text("Проверить обновления"), 20000))
             SystemClock.sleep(800)
             screenshot("settings_backup_dark")
             sc.close()

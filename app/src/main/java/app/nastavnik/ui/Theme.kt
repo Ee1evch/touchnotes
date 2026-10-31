@@ -2,6 +2,8 @@ package app.nastavnik.ui
 
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.Typography
 import androidx.compose.material3.lightColorScheme
@@ -171,6 +173,8 @@ fun NastavnikTheme(mode: ThemeMode = ThemeMode.LIGHT, content: @Composable () ->
             large = RoundedCornerShape(24.dp),
             extraLarge = RoundedCornerShape(28.dp),
         ),
-        content = content,
-    )
+    ) {
+        // Текст без явного цвета — цвета темы (на прозрачном фоне Scaffold иначе остаётся чёрным).
+        CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurface, content = content)
+    }
 }

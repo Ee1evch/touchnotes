@@ -93,7 +93,7 @@ fun ScreenScaffold(
     scrollable: Boolean = true,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    Scaffold(modifier = Modifier.paperBackdrop(), containerColor = Color.Transparent) { inner ->
+    Scaffold(modifier = Modifier.paperBackdrop(), containerColor = Color.Transparent, contentColor = MaterialTheme.colorScheme.onSurface) { inner ->
         val base = Modifier
             .fillMaxSize()
             .padding(inner)
