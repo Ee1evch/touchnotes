@@ -552,8 +552,9 @@ class MentorFlowTest {
             assertNotNull("нет раздела расходов", findScrolling(By.text("Без лимита"), 40000))
             SystemClock.sleep(800)
             screenshot("settings_usage_dark")
-            assertNotNull("нет резервной копии", findScrolling(By.text("Сохранить копию"), 60000))
-            assertNotNull("нет обновлений", findScrolling(By.text("Проверить обновления"), 20000))
+            // Подписи разделов — обычный текст: их UiAutomator находит надёжнее, чем кнопки со значком.
+            assertNotNull("нет резервной копии", findScrolling(By.text("Все записи в одном файле"), 60000))
+            assertNotNull("нет обновлений", findScrolling(By.textStartsWith("Новые сборки выходят на GitHub"), 20000))
             SystemClock.sleep(800)
             screenshot("settings_backup_dark")
             sc.close()
