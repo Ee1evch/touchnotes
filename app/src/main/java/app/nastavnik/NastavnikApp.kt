@@ -16,6 +16,7 @@ import app.nastavnik.data.SettingsRepo
 import app.nastavnik.ink.Notebooks
 import app.nastavnik.session.CleanSession
 import app.nastavnik.study.Reminders
+import app.nastavnik.study.Speaker
 import app.nastavnik.study.StudyRepo
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.MainScope
@@ -34,6 +35,9 @@ class NastavnikApp : Application() {
 
     /** Живёт, пока живёт процесс: чистовик продолжает сохраняться, даже если экран закрыли. */
     val appScope: CoroutineScope = MainScope()
+
+    /** Читает подсказки вслух. */
+    val speaker: Speaker by lazy { Speaker(this) }
 
     /** Тетради, в которых пишут прямо в приложении (и фото, и PDF). */
     val notebooks: Notebooks by lazy { Notebooks(this) }

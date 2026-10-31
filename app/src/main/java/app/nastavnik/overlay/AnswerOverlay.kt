@@ -49,6 +49,9 @@ class AnswerOverlay(baseContext: Context, private val wm: WindowManager, private
 
         /** Студент закрыл все заметки. */
         fun onAllClosed()
+
+        /** Прочитать заметку вслух. */
+        fun onSpeak(text: String)
     }
 
     private val ctx = ContextThemeWrapper(baseContext, R.style.Theme_Nastavnik_Overlay)
@@ -372,6 +375,16 @@ class AnswerOverlay(baseContext: Context, private val wm: WindowManager, private
                     contentDescription = if (hidden) "Показать выделение" else "Скрыть выделение"
                 }
             }
+            val speak = ImageView(ctx).apply {
+                setImageResource(R.drawable.ic_volume)
+                setColorFilter(0xFF6B6A73.toInt())
+                setPadding(dp(7f), dp(7f), dp(7f), dp(7f))
+                contentDescription = "Прочитать вслух"
+                setOnClickListener {
+                    listener.onSpeak(if (expanded && detailText != null) "$shortText. ${detailText.orEmpty()}" else shortText)
+                }
+            }
+            header.addView(speak, LinearLayout.LayoutParams(dp(32f), dp(32f)))
             header.addView(eye, LinearLayout.LayoutParams(dp(32f), dp(32f)))
             header.addView(GripView(ctx), LinearLayout.LayoutParams(dp(20f), dp(32f)))
             val close = ImageView(ctx).apply {

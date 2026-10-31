@@ -191,8 +191,8 @@ class MentorFlowTest {
         val scenario = ActivityScenario.launch(MainActivity::class.java)
         SystemClock.sleep(800)
         scenario.onActivity { BubbleService.start(it) }
-        target = device.wait(Until.findObject(By.text("КАК ЭТО РАБОТАЕТ")), 5000)?.visibleBounds
-        assertNotNull("на главном экране нет заголовка «Как это работает»", target)
+        target = device.wait(Until.findObject(By.text("Пиши прямо здесь")), 5000)?.visibleBounds
+        assertNotNull("на главном экране нет заголовка «Пиши прямо здесь»", target)
         askHint()
 
         // Ответ пришёл → строка подсвечена, рядом заметка с кнопкой «Сделать чистовик».
@@ -303,6 +303,7 @@ class MentorFlowTest {
                 .putExtra(MainActivity.EXTRA_NOTEBOOK, meta.id),
         )
         val sheet = device.wait(Until.findObject(By.desc("Лист тетради")), 10000)
+        if (sheet == null) screenshot("notebook_missing")
         assertNotNull("лист тетради не открылся", sheet)
         SystemClock.sleep(1500)
         dismissSystemAnr()

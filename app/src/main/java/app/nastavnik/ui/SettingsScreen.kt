@@ -3,6 +3,8 @@ package app.nastavnik.ui
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.ui.Alignment
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.lazy.LazyColumn
@@ -77,6 +79,23 @@ fun SettingsScreen(onBack: () -> Unit) {
             )
             Segmented(listOf(0 to "Выкл.", 5 to "через 5 с", 10 to "через 10 с", 20 to "через 20 с"), s.watchPauseSec) {
                 repo.setWatchPauseSec(it)
+            }
+        }
+
+        SectionCard("Голос") {
+            var speak by remember { mutableStateOf(repo.speakHints()) }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    FieldLabel(
+                        "Читать подсказки вслух",
+                        "Наставник сам прочитает короткую подсказку, когда ответит: удобно, когда в руке стилус. " +
+                            "У каждой заметки есть и кнопка «прочитать».",
+                    )
+                }
+                AppSwitch(speak) {
+                    speak = it
+                    repo.setSpeakHints(it)
+                }
             }
         }
 

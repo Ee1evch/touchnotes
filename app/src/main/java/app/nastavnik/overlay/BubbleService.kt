@@ -453,8 +453,11 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
         items += BarItem(QuickAction.NEXT_STEP.short, R.drawable.ic_bulb) { quick(QuickAction.NEXT_STEP) }
         items += BarItem(QuickAction.FIND_ERROR.short, R.drawable.ic_search) { quick(QuickAction.FIND_ERROR) }
         items += BarItem(QuickAction.THEORY.short, R.drawable.ic_book) { quick(QuickAction.THEORY) }
+        items += BarItem(QuickAction.CHECK_ANSWER.short, R.drawable.ic_check) { quick(QuickAction.CHECK_ANSWER) }
+        items += BarItem(QuickAction.SHOW_STEP.short, R.drawable.ic_open) { quick(QuickAction.SHOW_STEP) }
         items += BarItem(QuickAction.SIMILAR.short, R.drawable.ic_refresh) { quick(QuickAction.SIMILAR) }
-        items += BarItem("Спросить…", R.drawable.ic_mic) { askBar.show(anchor()) }
+        items += BarItem("Спросить голосом", R.drawable.ic_mic) { askByVoice() }
+        items += BarItem("Спросить текстом", R.drawable.ic_pen) { askBar.show(anchor()) }
         items += BarItem("Чистовик", R.drawable.ic_note) { startClean() }
         if (overlay.isShowing) {
             items += BarItem("Убрать заметки", R.drawable.ic_close) { mentor.dismiss() }
@@ -643,6 +646,8 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
     override fun onMore() = quick(QuickAction.NEXT_STEP)
 
     override fun onSimilar() = quick(QuickAction.SIMILAR)
+
+    override fun onSpeak(text: String) = napp.speaker.speak(text)
 
     private fun toggleRegion() {
         regionMode = !regionMode
@@ -1181,10 +1186,38 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
 
     // ---------------- голос ----------------
 
-    override fun onListening(active: Boolean) = askBar.setListening(active)
-    override fun onPartial(text: String) = askBar.setText(text)
-    override fun onResult(text: String) = askBar.setText(text)
+    /** «Спросить голосом»: говоришь — и вопрос сразу уходит наставнику, без строки ввода. */
+    private var voiceDirect = false
+
+    private fun askByVoice() {
+        if (!requireKey()) return
+        voiceDirect = true
+        message(BarOwner.STATUS, "Слушаю… Задай вопрос голосом.", listOf(BarItem("Отмена") { voiceDirect = false; speech.stop(); bar.dismiss() }), busy = true)
+        speech.start()
+    }
+
+    override fun onListening(active: Boolean) {
+        askBar.setListening(active)
+        // Замолчал, ничего не распознав, — убираем «Слушаю…».
+        if (!active && voiceDirect) main.postDelayed({ if (voiceDirect) { voiceDirect = false; dismissBar(BarOwner.STATUS) } }, 1500)
+    }
+
+    override fun onPartial(text: String) {
+        if (voiceDirect) message(BarOwner.STATUS, "Слушаю… «$text»", listOf(BarItem("Отмена") { voiceDirect = false; speech.stop(); bar.dismiss() }), busy = true)
+        else askBar.setText(text)
+    }
+
+    override fun onResult(text: String) {
+        if (voiceDirect) {
+            voiceDirect = false
+            dismissBar(BarOwner.STATUS)
+            if (text.isNotBlank()) ask(text.trim(), AskKind.USER)
+        } else {
+            askBar.setText(text)
+        }
+    }
     override fun onError(message: String, needsPermission: Boolean) {
+        voiceDirect = false
         if (needsPermission) {
             message(BarOwner.ERROR, message, listOf(BarItem("Разрешить", primary = true) { bar.dismiss(); openScreen(MainActivity.SCREEN_ONBOARDING) }))
         } else {

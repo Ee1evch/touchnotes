@@ -21,6 +21,8 @@ import app.nastavnik.geom.LineMap
 import app.nastavnik.geom.PageImage
 import app.nastavnik.geom.PlaceRef
 import app.nastavnik.geom.Thumb
+import app.nastavnik.study.Mistake
+import app.nastavnik.study.MistakeMemory
 import app.nastavnik.study.Progress
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -273,7 +275,7 @@ class MentorSession(
         try {
             val request = ChatRequest(
                 modelId = settings.model,
-                system = Prompts.mentorSystem(settings.strictness, mode),
+                system = Prompts.mentorSystem(settings.strictness, mode, MistakeMemory.forPrompt(MistakeMemory.decode(app.settings.mistakesJson()))),
                 turns = turns,
                 // Сначала страницы всего конспекта, последним — текущий экран с номерами строк.
                 images = shot.context.map { ImagePart(it) } + ImagePart(shot.jpeg),
@@ -326,6 +328,13 @@ class MentorSession(
             }
             // Для «Прогресса»: тема задачи и сколько ошибок нашёл наставник.
             val topic = (if (convId != 0L) db.conversations().get(convId)?.title else null) ?: final.topic.orEmpty()
+            // Память о типичных ошибках: короткие подсказки к найденным ошибкам.
+            val found = final.marks.filter { it.kind == MarkKind.ERROR && it.text.isNotBlank() }
+            if (found.isNotEmpty()) {
+                val at = System.currentTimeMillis()
+                val list = MistakeMemory.add(MistakeMemory.decode(app.settings.mistakesJson()), found.map { Mistake(it.text, topic, at) })
+                app.settings.setMistakesJson(MistakeMemory.encode(list))
+            }
             app.study.record(
                 if (silent) Progress.KIND_WATCH else Progress.KIND_ASK,
                 topic,
@@ -333,6 +342,10 @@ class MentorSession(
             )
             _state.update {
                 it.copy(answer = base.copy(marks = final.marks, streaming = false, status = null, done = final.done, allGood = final.allGood))
+            }
+            // Читать подсказки вслух, если студент так попросил в настройках (короткие части по порядку).
+            if (app.settings.speakHints() && final.marks.isNotEmpty()) {
+                app.speaker.speak(final.marks.joinToString(". ") { it.text })
             }
         } catch (e: CancellationException) {
             withContext(NonCancellable) {

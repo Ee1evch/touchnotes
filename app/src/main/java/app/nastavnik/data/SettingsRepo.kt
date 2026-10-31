@@ -114,6 +114,14 @@ class SettingsRepo(private val context: Context) {
     fun setReminderHour(h: Int) = prefs.edit { putInt(K_REMINDER, h.coerceIn(-1, 23)) }
     fun setSeeNotebook(on: Boolean) = prefs.edit { putBoolean(K_NOTEBOOK, on) }
 
+    /** Память о типичных ошибках студента (JSON, см. MistakeMemory). */
+    fun mistakesJson(): String? = prefs.getString(K_MISTAKES, null)
+    fun setMistakesJson(json: String) = prefs.edit { putString(K_MISTAKES, json) }
+
+    /** Озвучивать подсказки вслух. */
+    fun speakHints(): Boolean = prefs.getBoolean(K_SPEAK, false)
+    fun setSpeakHints(on: Boolean) = prefs.edit { putBoolean(K_SPEAK, on) }
+
     /** Приложение для записей, выбранное студентом (пакет), или пусто — определять самим. */
     fun notesApp(): String = prefs.getString(K_NOTES_APP, "").orEmpty()
     fun setNotesApp(pkg: String) = prefs.edit { putString(K_NOTES_APP, pkg) }
@@ -123,6 +131,10 @@ class SettingsRepo(private val context: Context) {
     fun setPenColor(c: Int) = prefs.edit { putInt(K_PEN_COLOR, c) }
     fun fingerDraws(): Boolean = prefs.getBoolean(K_FINGER, false)
     fun setFingerDraws(on: Boolean) = prefs.edit { putBoolean(K_FINGER, on) }
+    /** Экзамены (JSON списка [app.nastavnik.study.Exam]). */
+    fun examsJson(): String? = prefs.getString(K_EXAMS, null)
+    fun setExamsJson(json: String) = prefs.edit { putString(K_EXAMS, json) }
+
     fun notebookAutoCheck(): Boolean = prefs.getBoolean(K_NB_AUTO, false)
     fun setNotebookAutoCheck(on: Boolean) = prefs.edit { putBoolean(K_NB_AUTO, on) }
 
@@ -239,6 +251,7 @@ class SettingsRepo(private val context: Context) {
 
         private const val PREFS = "settings"
         private const val SECURE_PREFS = "secure_settings"
+        private const val K_EXAMS = "exams"
         private const val K_PROVIDER = "provider"
         private const val K_OPENAI_BASE = "openai_base_url"
         private const val K_ANTHROPIC_COMPAT_BASE = "anthropic_compat_base_url"
@@ -249,6 +262,8 @@ class SettingsRepo(private val context: Context) {
         private const val K_NOTEBOOK = "see_notebook"
         private const val K_PEN_COLOR = "pen_color"
         private const val K_NOTES_APP = "notes_app"
+        private const val K_MISTAKES = "mistakes"
+        private const val K_SPEAK = "speak_hints"
         private const val K_FINGER = "finger_draws"
         private const val K_NB_AUTO = "notebook_auto_check"
         const val DEFAULT_REMINDER_HOUR = 18

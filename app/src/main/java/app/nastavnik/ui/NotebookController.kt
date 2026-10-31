@@ -5,6 +5,7 @@ import android.graphics.RectF
 import android.net.Uri
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import app.nastavnik.NastavnikApp
@@ -39,7 +40,10 @@ import kotlin.math.abs
  */
 class NotebookController(val app: NastavnikApp, val notebookId: Long, private val scope: CoroutineScope) : InkView.Listener {
     private val nbs = app.notebooks
-    val ink = InkView(app).also { it.listener = this }
+    val ink = InkView(app).also {
+        it.listener = this
+        it.contentDescription = "Лист тетради"
+    }
 
     var meta by mutableStateOf<NotebookMeta?>(null)
         private set
@@ -71,6 +75,12 @@ class NotebookController(val app: NastavnikApp, val notebookId: Long, private va
     /** Сам проверять страницу, когда студент перестал писать. */
     var autoCheck by mutableStateOf(app.settings.notebookAutoCheck())
         private set
+
+    /** Контрольная: до какого момента идёт (0 — не идёт). Наставник молчит, пока её не сдадут. */
+    var examEndsAt by mutableLongStateOf(0L)
+        private set
+    val examActive: Boolean get() = examEndsAt > 0L
+    private var examJob: Job? = null
 
     private val undos = HashMap<Long, UndoStack>()
     private var saveJob: Job? = null
@@ -253,6 +263,7 @@ class NotebookController(val app: NastavnikApp, val notebookId: Long, private va
     /** Уходим из тетради: сохранить страницу и обновить превью. */
     fun close() {
         autoJob?.cancel()
+        examJob?.cancel()
         mentor.cancel()
         val m = meta ?: return
         val first = pages.firstOrNull() ?: return
@@ -278,10 +289,36 @@ class NotebookController(val app: NastavnikApp, val notebookId: Long, private va
         mentor.ask(question, kind) { shot(if (kind == AskKind.WATCH) WATCH_CONTEXT else CONTEXT_PAGES) }
     }
 
-    /** Студент перестал писать — через паузу тихо проверяем страницу (только если включено). */
+    // ---------------- контрольная ----------------
+
+    /** Начать контрольную на [minutes] минут: подсказок нет, по времени работа сдаётся сама. */
+    fun startExam(minutes: Int) {
+        autoJob?.cancel()
+        mentor.dismiss()
+        examEndsAt = System.currentTimeMillis() + minutes * 60_000L
+        examJob?.cancel()
+        examJob = scope.launch {
+            delay(minutes * 60_000L)
+            submitExam()
+        }
+    }
+
+    /** Сдать работу: наставник проверяет всё и ставит оценку. */
+    fun submitExam() {
+        examJob?.cancel()
+        examEndsAt = 0L
+        ask(Prompts.EXAM_PROMPT, AskKind.USER)
+    }
+
+    fun cancelExam() {
+        examJob?.cancel()
+        examEndsAt = 0L
+    }
+
+    /** Студент перестал писать — через паузу тихо проверяем страницу (только если включено и не идёт контрольная). */
     private fun scheduleAutoCheck() {
         autoJob?.cancel()
-        if (!autoCheck || app.settings.notReadyReason() != null) return
+        if (!autoCheck || examActive || app.settings.notReadyReason() != null) return
         autoJob = scope.launch {
             delay(AUTO_PAUSE_MS)
             if (System.currentTimeMillis() - lastAutoAt < AUTO_GAP_MS || mentor.isBusy) return@launch

@@ -39,6 +39,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -68,6 +69,7 @@ import app.nastavnik.overlay.SpeechInput
 import app.nastavnik.session.AnswerUi
 import app.nastavnik.session.AskKind
 import app.nastavnik.study.ruPlural
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
@@ -111,12 +113,7 @@ fun NotebookScreen(notebookId: Long, onBack: () -> Unit, onCleanReady: () -> Uni
                         .padding(start = 12.dp, end = if (panel && wide) 0.dp else 12.dp, bottom = 12.dp)
                         .clip(RoundedCornerShape(24.dp)),
                 ) {
-                    AndroidView(
-                        factory = { ctl.ink },
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .semantics { contentDescription = "Лист тетради" },
-                    )
+                    AndroidView(factory = { ctl.ink }, modifier = Modifier.fillMaxSize())
                     ToolPalette(ctl, Modifier.align(Alignment.BottomCenter).padding(bottom = 14.dp))
                     if (!ctl.loaded) CircularProgressIndicator(Modifier.align(Alignment.Center), color = Brand.Ink)
                 }
@@ -370,6 +367,10 @@ private fun MentorPanel(ctl: NotebookController, answer: AnswerUi?, onCleanReady
     var question by remember { mutableStateOf("") }
     var listening by remember { mutableStateOf(false) }
     var problem by remember { mutableStateOf<String?>(null) }
+    var examDialog by remember { mutableStateOf(false) }
+    if (examDialog) {
+        ExamDialog(onStart = { m -> examDialog = false; ctl.startExam(m) }, onDismiss = { examDialog = false })
+    }
     val speech = remember {
         SpeechInput(context, object : SpeechInput.Callback {
             override fun onListening(active: Boolean) { listening = active }
@@ -407,10 +408,17 @@ private fun MentorPanel(ctl: NotebookController, answer: AnswerUi?, onCleanReady
                 )
             }
         }
+        if (ctl.examActive) {
+            ExamCard(ctl)
+        } else {
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf(QuickAction.NEXT_STEP, QuickAction.FIND_ERROR, QuickAction.THEORY, QuickAction.SIMILAR).forEach { a ->
+            listOf(
+                QuickAction.NEXT_STEP, QuickAction.FIND_ERROR, QuickAction.CHECK_ANSWER,
+                QuickAction.THEORY, QuickAction.SHOW_STEP, QuickAction.SIMILAR,
+            ).forEach { a ->
                 ChipButton(a.short, enabled = answer?.streaming != true) { ask(a.prompt, AskKind.QUICK) }
             }
+            ChipButton("Контрольная", enabled = answer?.streaming != true) { examDialog = true }
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Box(Modifier.weight(1f)) {
@@ -439,6 +447,7 @@ private fun MentorPanel(ctl: NotebookController, answer: AnswerUi?, onCleanReady
                 Text("Перестал писать на 7 с — наставник тихо проверит страницу и отметит ошибку.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             AppSwitch(ctl.autoCheck) { ctl.toggleAutoCheck() }
+        }
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
@@ -511,6 +520,7 @@ private fun EmptyMentor() {
 /** Заметка наставника в панели: номер как на листе, вид, короткая подсказка и «Подробнее». */
 @Composable
 private fun NoteCard(number: Int, m: Mark, onLocate: () -> Unit) {
+    val speak: (String) -> Unit = LocalContext.current.app.speaker::speak
     var expanded by rememberSaveable(number, m.text) { mutableStateOf(false) }
     val kindColor = Color(PageDrawer.kindColor(m.kind))
     Column(
@@ -528,6 +538,16 @@ private fun NoteCard(number: Int, m: Mark, onLocate: () -> Unit) {
             Text(NoteColors.title(m.kind), style = MaterialTheme.typography.labelLarge, color = kindColor)
             Spacer(Modifier.weight(1f))
             if (m.box != null) Text("показать ↗", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Box(
+                Modifier
+                    .size(32.dp)
+                    .clip(CircleShape)
+                    .clickable { speak(if (expanded && m.detail != null) "${m.text}. ${m.detail}" else m.text) }
+                    .semantics { contentDescription = "Прочитать вслух" },
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(painterResource(R.drawable.ic_volume), contentDescription = null, tint = Brand.InkSoft, modifier = Modifier.size(18.dp))
+            }
         }
         RichText(m.text, sizePx = 16)
         if (m.detail != null) {
@@ -535,6 +555,76 @@ private fun NoteCard(number: Int, m: Mark, onLocate: () -> Unit) {
             LinkText(if (expanded) "Коротко ↑" else "Подробнее ↓") { expanded = !expanded }
         }
     }
+}
+
+/** Идёт контрольная: сколько осталось, «Сдать работу». Подсказок нет — как на настоящей контрольной. */
+@Composable
+private fun ExamCard(ctl: NotebookController) {
+    val left by produceState(ctl.examEndsAt - System.currentTimeMillis(), ctl.examEndsAt) {
+        while (true) {
+            value = (ctl.examEndsAt - System.currentTimeMillis()).coerceAtLeast(0)
+            delay(1000)
+        }
+    }
+    val min = left / 60_000
+    val sec = (left / 1000) % 60
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .background(Brand.Ink)
+            .padding(18.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Icon(painterResource(R.drawable.ic_timer), contentDescription = null, tint = Color.White, modifier = Modifier.size(22.dp))
+            Text("Контрольная · осталось %d:%02d".format(min, sec), style = MaterialTheme.typography.titleMedium, color = Color.White)
+        }
+        Text(
+            "Наставник молчит, пока не сдашь работу. Потом он проверит всё целиком и поставит оценку.",
+            style = MaterialTheme.typography.bodySmall,
+            color = Color.White.copy(alpha = 0.75f),
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Box(
+                Modifier
+                    .clip(CircleShape)
+                    .background(Color.White)
+                    .clickable { ctl.submitExam() }
+                    .padding(horizontal = 18.dp, vertical = 11.dp),
+            ) { Text("Сдать работу", style = MaterialTheme.typography.labelLarge, color = Brand.Ink) }
+            Box(
+                Modifier
+                    .clip(CircleShape)
+                    .background(Color.White.copy(alpha = 0.14f))
+                    .clickable { ctl.cancelExam() }
+                    .padding(horizontal = 18.dp, vertical = 11.dp),
+            ) { Text("Прервать", style = MaterialTheme.typography.labelLarge, color = Color.White) }
+        }
+    }
+}
+
+@Composable
+private fun ExamDialog(onStart: (Int) -> Unit, onDismiss: () -> Unit) {
+    var minutes by remember { mutableStateOf(45) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Контрольная") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    "Реши задачи в тетради без подсказок. Когда время выйдет или ты нажмёшь «Сдать работу», наставник " +
+                        "проверит всё целиком, отметит ошибки и поставит оценку от 2 до 5.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Segmented(listOf(20 to "20 мин", 45 to "45 мин", 60 to "60 мин", 90 to "90 мин"), minutes) { minutes = it }
+            }
+        },
+        confirmButton = { InkButton("Начать", icon = R.drawable.ic_timer) { onStart(minutes) } },
+        dismissButton = { SoftButton("Отмена", onClick = onDismiss) },
+        containerColor = Color.White,
+        shape = RoundedCornerShape(28.dp),
+    )
 }
 
 /** Переключатель в общем стиле: графитовый, когда включён. */
