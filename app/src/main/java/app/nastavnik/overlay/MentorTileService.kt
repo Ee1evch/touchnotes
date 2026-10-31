@@ -10,7 +10,7 @@ import android.service.quicksettings.TileService
 import app.nastavnik.ui.ToggleActivity
 
 /**
- * Плитка «Наставник» в шторке быстрых настроек: одно касание включает или выключает кнопку поверх Touchnotes,
+ * Плитка «Наставник» в шторке быстрых настроек: одно касание включает или выключает кнопку поверх приложения для записей,
  * не открывая приложение.
  */
 class MentorTileService : TileService() {

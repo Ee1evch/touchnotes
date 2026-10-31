@@ -1,5 +1,18 @@
 package app.nastavnik.ui
 
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Text
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.graphics.Color
+import app.nastavnik.R
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -17,7 +30,7 @@ import app.nastavnik.ai.ModelPresets
 import app.nastavnik.ai.Strictness
 import app.nastavnik.data.BubbleSide
 import app.nastavnik.data.SettingsRepo
-import app.nastavnik.notes.TouchnotesSender
+import app.nastavnik.notes.NoteApps
 import app.nastavnik.study.Reminders
 import kotlin.math.roundToInt
 
@@ -117,13 +130,43 @@ fun SettingsScreen(onBack: () -> Unit) {
             Segmented(listOf(BubbleSide.LEFT to "Слева", BubbleSide.RIGHT to "Справа"), s.bubbleSide) { repo.setBubbleSide(it) }
         }
 
+        SectionCard("Приложение для записей") {
+            val known = remember { NoteApps.installedKnown(context) }
+            val all = remember { NoteApps.launchable(context) }
+            var pick by remember { mutableStateOf(repo.notesApp()) }
+            var picker by remember { mutableStateOf(false) }
+            fun choose(pkg: String) {
+                pick = pkg
+                repo.setNotesApp(pkg)
+            }
+            FieldLabel(
+                "Где ты пишешь конспекты",
+                "Поверх него работает кнопка наставника, туда уходит чистовик, его открывает кнопка на главном экране. " +
+                    "Подойдёт любое: Touchnotes, Samsung Notes, OneNote, Squid, Nebo, Xodo, Flexcil и другие.",
+            )
+            RadioRow(
+                pick.isEmpty(),
+                "Определять самому",
+                known.firstOrNull()?.let { "Сейчас: ${it.label}" } ?: "Известных приложений для записей не нашлось",
+            ) { choose("") }
+            known.forEach { a -> RadioRow(pick == a.packageName, a.label) { choose(a.packageName) } }
+            all.firstOrNull { it.packageName == pick && known.none { k -> k.packageName == pick } }?.let { a ->
+                RadioRow(true, a.label, "выбрано вручную") {}
+            }
+            SoftButton("Другое приложение…", icon = R.drawable.ic_search) { picker = true }
+            if (picker) AppPickerDialog(all, onDismiss = { picker = false }) { a ->
+                choose(a.packageName)
+                picker = false
+            }
+        }
+
         SectionCard("Куда отправлять чистовик") {
-            val targets = remember { TouchnotesSender.pdfTargets(context) }
-            val touch = remember(targets) { targets.firstOrNull { it.isTouchnotes } }
+            val targets = remember { NoteApps.pdfTargets(context) }
+            val notes = remember(s) { NoteApps.chosen(context) }
             RadioRow(
                 s.sendTarget == SettingsRepo.TARGET_AUTO,
-                "Автоматически в Touchnotes",
-                if (touch != null) "Найдено: ${touch.label}" else "Touchnotes не найден — будет системный выбор",
+                "В приложение для записей",
+                notes?.let { "Сейчас: ${it.label}" } ?: "Приложение для записей не выбрано — будет системный выбор",
             ) { repo.setSendTarget(SettingsRepo.TARGET_AUTO) }
             RadioRow(s.sendTarget == SettingsRepo.TARGET_CHOOSER, "Каждый раз спрашивать") {
                 repo.setSendTarget(SettingsRepo.TARGET_CHOOSER)
@@ -135,4 +178,36 @@ fun SettingsScreen(onBack: () -> Unit) {
             }
         }
     }
+}
+
+/** Выбор любого установленного приложения — с поиском по названию. */
+@Composable
+private fun AppPickerDialog(apps: List<NoteApps.App>, onDismiss: () -> Unit, onPick: (NoteApps.App) -> Unit) {
+    var filter by remember { mutableStateOf("") }
+    val shown = apps.filter { filter.isBlank() || it.label.contains(filter.trim(), ignoreCase = true) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = { LinkText("Закрыть", onClick = onDismiss) },
+        title = { Text("Где ты пишешь конспекты") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                AppTextField(filter, { filter = it }, "Поиск: notes, onenote, squid…")
+                LazyColumn(Modifier.heightIn(max = 420.dp)) {
+                    items(shown, key = { it.packageName }) { a ->
+                        Text(
+                            a.label,
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onPick(a) }
+                                .padding(vertical = 12.dp),
+                        )
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    }
+                }
+            }
+        },
+        containerColor = Color.White,
+        shape = RoundedCornerShape(28.dp),
+    )
 }

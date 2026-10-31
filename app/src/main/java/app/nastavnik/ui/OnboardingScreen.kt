@@ -67,12 +67,12 @@ fun OnboardingScreen(resumeTick: Int, onDone: () -> Unit, onSkip: () -> Unit) {
     val steps = listOf(
         Step(
             "Привет! Я — Наставник",
-            "Я вишу кнопкой поверх Touchnotes, по твоему нажатию смотрю на экран и подсказываю, как решать, — но не решаю за тебя. Дай пару разрешений.",
+            "Пиши где удобно: в своём приложении для записей (я вишу кнопкой поверх него) или прямо у меня в тетради. Подсказываю, как решать, но не решаю за тебя. Дай пару разрешений.",
             done = true, actionLabel = null, action = null,
         ),
         Step(
             "Поверх других окон",
-            "Чтобы кнопка и ответы наставника появлялись поверх Touchnotes.",
+            "Чтобы кнопка и ответы наставника появлялись поверх твоего приложения для записей.",
             done = overlay, actionLabel = "Разрешить",
             action = { context.startActivity(Permissions.overlaySettingsIntent(context)) },
         ),
@@ -102,7 +102,7 @@ fun OnboardingScreen(resumeTick: Int, onDone: () -> Unit, onSkip: () -> Unit) {
         ),
         Step(
             "Всё готово",
-            "Запусти наставника и открой Touchnotes. Нажми кнопку пальцем, когда понадобится подсказка.",
+            "Запусти наставника и открой своё приложение для записей — или напиши решение прямо в тетради «Наставника».",
             done = true, actionLabel = null, action = null,
         ),
     )

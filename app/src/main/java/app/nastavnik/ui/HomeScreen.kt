@@ -1,8 +1,5 @@
 package app.nastavnik.ui
 
-import android.app.Activity
-import android.content.Context
-import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -33,15 +30,26 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import app.nastavnik.R
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.rememberCoroutineScope
+import app.nastavnik.ink.NotebookMeta
+import app.nastavnik.ink.Paper
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import app.nastavnik.app
 import app.nastavnik.study.Streaks
 import app.nastavnik.study.ruPlural
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import app.nastavnik.notes.TouchnotesSender
+import app.nastavnik.notes.NoteApps
 import app.nastavnik.overlay.BubbleService
 
 @Composable
-fun HomeScreen(resumeTick: Int, go: (String) -> Unit) {
+fun HomeScreen(resumeTick: Int, go: (String) -> Unit, openNotebook: (Long) -> Unit) {
     val context = LocalContext.current
     var tick by remember { mutableStateOf(0) }
     val overlay = remember(resumeTick, tick) { Permissions.overlay(context) }
@@ -49,7 +57,7 @@ fun HomeScreen(resumeTick: Int, go: (String) -> Unit) {
     val mic = remember(resumeTick, tick) { Permissions.mic(context) }
     // Наставника включают и выключают и отсюда, и из шторки, ярлыка, уведомления — следим за ним живьём.
     val running by BubbleService.runningFlow.collectAsStateWithLifecycle()
-    val touchnotes = remember(resumeTick) { TouchnotesSender.findTouchnotes(context) }
+    val notesApp = remember(resumeTick) { NoteApps.chosen(context) }
 
     val notReady = remember(resumeTick, tick) { context.app.settings.notReadyReason() }
     val provider = remember(resumeTick, tick) { context.app.settings.provider().shortTitle }
@@ -72,28 +80,46 @@ fun HomeScreen(resumeTick: Int, go: (String) -> Unit) {
         Column(Modifier.padding(top = 10.dp, bottom = 4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Решай сам.\nЯ подскажу, где нужно.", style = MaterialTheme.typography.displaySmall)
             Text(
-                "Пиши в Touchnotes, а когда застрянешь — нажми кнопку. Ответ появится прямо на твоих записях.",
+                "Пиши где удобно — в своём приложении для записей или прямо здесь, в тетради. Застрянешь — наставник подскажет прямо на записях.",
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
 
-        Hero(
-            running = running,
-            canStart = overlay,
-            touchnotesLabel = touchnotes?.label,
-            onStart = { BubbleService.start(context); tick++ },
-            onStop = { BubbleService.stop(context); tick++ },
-            onOpenTouchnotes = { touchnotes?.let { openApp(context, it.packageName) } },
-        ) {
-            StatusPill(provider, notReady == null)
-            StatusPill("Уведомления", notif)
-            StatusPill("Микрофон", mic)
-            StatusPill(if (touchnotes != null) "Touchnotes" else "Touchnotes не найден", touchnotes != null)
+        // Два способа работать: кнопка поверх своего приложения для записей и тетради прямо здесь.
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            val hero = @Composable { m: Modifier ->
+                Hero(
+                    modifier = m,
+                    running = running,
+                    canStart = overlay,
+                    notesLabel = notesApp?.label,
+                    onStart = { BubbleService.start(context); tick++ },
+                    onStop = { BubbleService.stop(context); tick++ },
+                    onOpenNotes = { notesApp?.let { NoteApps.open(context, it) } },
+                ) {
+                    StatusPill(provider, notReady == null)
+                    StatusPill("Уведомления", notif)
+                    StatusPill("Микрофон", mic)
+                    StatusPill(notesApp?.label ?: "Приложение для записей не выбрано", notesApp != null)
+                }
+            }
+            val notebooks = @Composable { m: Modifier -> NotebooksCard(m, resumeTick, go, openNotebook) }
+            if (maxWidth > 700.dp) {
+                Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                    hero(Modifier.weight(1.1f))
+                    notebooks(Modifier.weight(1f))
+                }
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    hero(Modifier.fillMaxWidth())
+                    notebooks(Modifier.fillMaxWidth())
+                }
+            }
         }
 
         if (!overlay) {
-            Attention("Нужно разрешение «Поверх других окон»", "Без него кнопка и подсказки не появятся поверх Touchnotes.", "Разрешить") {
+            Attention("Нужно разрешение «Поверх других окон»", "Без него кнопка и подсказки не появятся поверх приложения для записей. Тетради работают и без него.", "Разрешить") {
                 context.startActivity(Permissions.overlaySettingsIntent(context))
             }
         }
@@ -136,7 +162,7 @@ fun HomeScreen(resumeTick: Int, go: (String) -> Unit) {
                 .padding(horizontal = 20.dp, vertical = 6.dp),
         ) {
             val steps = listOf(
-                "Решай сам" to "Пиши в Touchnotes как обычно. Стилус проходит сквозь кнопку наставника — она не мешает.",
+                "Решай сам" to "Пиши в своём приложении для записей (стилус проходит сквозь кнопку наставника) или прямо в тетради «Наставника».",
                 "Застрял — нажми кнопку пальцем" to "Подсказка, поиск ошибки, теория или свой вопрос. Ответ появится прямо на нужной строке.",
                 "Решил — закрепи" to "«Похожая задача» даст такую же на другие числа, а «Чистовик» превратит записи в аккуратный PDF.",
                 "Повторяй по паре минут" to "Из каждого чистовика получаются карточки. Они возвращаются завтра, через 3 дня, через неделю — к экзамену всё в голове.",
@@ -160,22 +186,23 @@ fun HomeScreen(resumeTick: Int, go: (String) -> Unit) {
     }
 }
 
-/** Стеклянная карточка состояния с главной кнопкой. */
+/** Кнопка поверх своего приложения для записей: состояние и главная кнопка. */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun Hero(
+    modifier: Modifier,
     running: Boolean,
     canStart: Boolean,
-    touchnotesLabel: String?,
+    notesLabel: String?,
     onStart: () -> Unit,
     onStop: () -> Unit,
-    onOpenTouchnotes: () -> Unit,
+    onOpenNotes: () -> Unit,
     pills: @Composable () -> Unit,
 ) {
     Column(
-        Modifier
-            .fillMaxWidth()
+        modifier
             .glass(RoundedCornerShape(28.dp), 14.dp)
-            .padding(26.dp),
+            .padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -186,33 +213,83 @@ private fun Hero(
                     .background(if (running) Brand.Ok else Color(0xFFA3A2AB)),
             )
             Text(
-                if (running) "Работает поверх Touchnotes" else "Сейчас выключен",
+                if (running) "Работает поверх ${notesLabel ?: "приложений"}" else "Сейчас выключен",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(if (running) "Наставник включён" else "Поверх твоего приложения", style = MaterialTheme.typography.headlineMedium)
             Text(
-                if (running) "Наставник включён" else "Включи наставника",
-                style = MaterialTheme.typography.headlineMedium,
-            )
-            Text(
-                if (running) "Кнопка ждёт у края экрана. Нажми её пальцем — выбери подсказку, проверку или вопрос."
-                else "Поверх записей появится небольшая кнопка. Стилусу она не мешает.",
+                if (running) "Кнопка ждёт у края экрана. Нажми её пальцем — подсказка, проверка или вопрос."
+                else "Небольшая кнопка поверх ${notesLabel ?: "любого приложения для записей"}. Стилусу она не мешает.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             if (running) {
-                if (touchnotesLabel != null) InkButton("Открыть $touchnotesLabel", icon = R.drawable.ic_open, onClick = onOpenTouchnotes)
+                if (notesLabel != null) InkButton("Открыть $notesLabel", icon = R.drawable.ic_open, onClick = onOpenNotes)
                 SoftButton("Выключить", icon = R.drawable.ic_power, onClick = onStop)
             } else {
                 InkButton("Запустить наставника", enabled = canStart, icon = R.drawable.ic_power, onClick = onStart)
-                if (touchnotesLabel != null) SoftButton("Открыть $touchnotesLabel", onClick = onOpenTouchnotes)
+                if (notesLabel != null) SoftButton("Открыть $notesLabel", onClick = onOpenNotes)
             }
         }
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) { pills() }
+    }
+}
+
+/** Тетради прямо в приложении: новая, фото, PDF и последние тетради. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun NotebooksCard(modifier: Modifier, resumeTick: Int, go: (String) -> Unit, openNotebook: (Long) -> Unit) {
+    val context = LocalContext.current
+    val nbs = context.app.notebooks
+    val scope = rememberCoroutineScope()
+    var busy by remember { mutableStateOf(false) }
+    val recent by produceState(emptyList<NotebookMeta>(), resumeTick) {
+        value = withContext(Dispatchers.IO) { nbs.store.list().take(3) }
+    }
+    val importers = rememberImporters(
+        onImages = { uris -> scope.launch { busy = true; nbs.importImages(uris)?.let { openNotebook(it.id) }; busy = false } },
+        onPdf = { uri -> scope.launch { busy = true; nbs.importPdf(uri)?.let { openNotebook(it.id) }; busy = false } },
+    )
+    Column(
+        modifier
+            .glass(RoundedCornerShape(28.dp), 14.dp)
+            .padding(24.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            IconBadge(R.drawable.ic_notebook, 36)
+            Text("Тетради", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+            if (busy) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = Brand.Ink, trackColor = Brand.Ink.copy(alpha = 0.1f))
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("Пиши прямо здесь", style = MaterialTheme.typography.headlineMedium)
+            Text(
+                "Стилусом на листе в клетку, поверх фото тетради или PDF. Наставник рядом и видит всю тетрадь.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            InkButton("Новая тетрадь", icon = R.drawable.ic_plus) {
+                scope.launch {
+                    val (m, _) = withContext(Dispatchers.IO) { nbs.store.create(nbs.defaultTitle(), Paper.GRID) }
+                    openNotebook(m.id)
+                }
+            }
+            SoftButton("Фото", icon = R.drawable.ic_camera) { importers.camera() }
+            SoftButton("PDF", icon = R.drawable.ic_pdf) { importers.pdf() }
+        }
+        if (recent.isNotEmpty()) {
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                recent.forEach { m -> ChipButton(m.title) { openNotebook(m.id) } }
+                ChipButton("Все тетради →") { go(MainActivity.SCREEN_NOTEBOOKS) }
+            }
+        }
     }
 }
 
@@ -306,10 +383,4 @@ private fun Step(n: Int, title: String, text: String) {
             Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
-}
-
-private fun openApp(context: Context, pkg: String) {
-    val intent = context.packageManager.getLaunchIntentForPackage(pkg) ?: return
-    if (context !is Activity) intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-    runCatching { context.startActivity(intent) }
 }

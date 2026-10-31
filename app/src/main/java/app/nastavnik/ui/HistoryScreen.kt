@@ -48,7 +48,7 @@ import app.nastavnik.app
 import app.nastavnik.data.CleanNoteEntity
 import app.nastavnik.data.ConversationSummary
 import app.nastavnik.data.Message
-import app.nastavnik.notes.TouchnotesSender
+import app.nastavnik.notes.NoteApps
 import app.nastavnik.notes.WebViews
 import app.nastavnik.overlay.BubbleService
 import kotlinx.coroutines.launch
@@ -111,7 +111,7 @@ private fun ConversationList(onOpen: (Long) -> Unit) {
     val active = remember { context.app.settings.load().activeConversationId }
     val list = items ?: return
     if (list.isEmpty()) {
-        Empty(R.drawable.ic_bulb, "Здесь будут твои задачи", "Нажми кнопку наставника поверх Touchnotes и попроси подсказку — задача появится в истории, и к ней можно будет вернуться.")
+        Empty(R.drawable.ic_bulb, "Здесь будут твои задачи", "Попроси подсказку — кнопкой поверх приложения для записей или в тетради — задача появится в истории, и к ней можно будет вернуться.")
         return
     }
     list.groupBy { dayLabel(it.updatedAt) }.forEach { (day, group) ->
@@ -276,7 +276,7 @@ private fun CleanNoteList() {
     toDelete?.let { n ->
         ConfirmDelete(
             "Удалить чистовик?",
-            "«${n.title}» пропадёт из истории приложения. Его карточки уйдут из повторения. Копия в «Документы/Конспекты» и в Touchnotes останется.",
+            "«${n.title}» пропадёт из истории приложения. Его карточки уйдут из повторения. Копия в «Документы/Конспекты» и в приложении для записей останется.",
             onConfirm = {
                 toDelete = null
                 scope.launch {
@@ -291,7 +291,7 @@ private fun CleanNoteList() {
     message?.let { StatusLine(it, Tone.ERROR) }
     val list = items ?: return
     if (list.isEmpty()) {
-        Empty(R.drawable.ic_note, "Чистовиков пока нет", "Нажми кнопку наставника поверх Touchnotes → «Чистовик»: записи превратятся в аккуратный PDF-конспект.")
+        Empty(R.drawable.ic_note, "Чистовиков пока нет", "Кнопка наставника → «Чистовик» или «Сделать чистовик» в тетради: записи превратятся в аккуратный PDF-конспект.")
         return
     }
     list.forEach { n: CleanNoteEntity ->
@@ -320,13 +320,13 @@ private fun CleanNoteList() {
             }
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (pdf != null) {
-                    ChipButton("Открыть") { report(TouchnotesSender.viewPdf(context, pdf)) { message = it } }
-                    ChipButton("В Touchnotes") {
-                        report(TouchnotesSender.sendPdf(context, pdf, n.title, context.app.settings.load().sendTarget)) { message = it }
+                    ChipButton("Открыть") { report(NoteApps.viewPdf(context, pdf)) { message = it } }
+                    ChipButton("Отправить") {
+                        report(NoteApps.sendPdf(context, pdf, n.title, context.app.settings.load().sendTarget)) { message = it }
                     }
                 }
                 if (pngs.isNotEmpty()) {
-                    ChipButton("Картинками") { report(TouchnotesSender.sendImages(context, pngs, n.title)) { message = it } }
+                    ChipButton("Картинками") { report(NoteApps.sendImages(context, pngs, n.title)) { message = it } }
                 }
                 ChipButton("Удалить") { toDelete = n }
             }
@@ -341,6 +341,6 @@ private fun CleanNoteList() {
     }
 }
 
-private fun report(outcome: TouchnotesSender.Outcome, show: (String?) -> Unit) {
-    show((outcome as? TouchnotesSender.Outcome.Failed)?.message)
+private fun report(outcome: NoteApps.Outcome, show: (String?) -> Unit) {
+    show((outcome as? NoteApps.Outcome.Failed)?.message)
 }

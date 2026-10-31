@@ -154,7 +154,16 @@ data class MentorUi(
  * Разговор по одной задаче. Хранится в Room; новая задача начинается сама, если
  * наставника долго не спрашивали, или из меню кнопки. Картинка уходит только с последним вопросом.
  */
-class MentorSession(private val app: NastavnikApp, private val scope: CoroutineScope) {
+class MentorSession(
+    private val app: NastavnikApp,
+    private val scope: CoroutineScope,
+    /**
+     * Разговор кнопки поверх других приложений — «текущая задача» из настроек; у тетради свой разговор
+     * ([bindToSettings] = false, [onConversation] сохраняет его в тетради), и он не прерывается по времени.
+     */
+    private val bindToSettings: Boolean = true,
+    private val onConversation: ((Long) -> Unit)? = null,
+) {
     private val db = app.db
     private val _state = MutableStateFlow(MentorUi())
     val state: StateFlow<MentorUi> = _state.asStateFlow()
@@ -173,8 +182,15 @@ class MentorSession(private val app: NastavnikApp, private val scope: CoroutineS
 
     fun newTask() {
         cancel()
-        app.settings.setActiveConversation(0L)
+        if (bindToSettings) app.settings.setActiveConversation(0L)
         _state.value = MentorUi()
+        onConversation?.invoke(0L)
+    }
+
+    /** Продолжить разговор тетради (0 — новый). */
+    suspend fun useConversation(id: Long) {
+        val ok = id != 0L && db.conversations().get(id) != null
+        _state.value = MentorUi(conversationId = if (ok) id else 0L)
     }
 
     fun cancel() {
@@ -354,7 +370,7 @@ class MentorSession(private val app: NastavnikApp, private val scope: CoroutineS
     private suspend fun currentConversation(now: Long): Long {
         val current = _state.value.conversationId
         val conv = if (current != 0L) db.conversations().get(current) else null
-        return if (conv != null && now - conv.updatedAt < NEW_TASK_AFTER_MS) current else 0L
+        return if (conv != null && (!bindToSettings || now - conv.updatedAt < NEW_TASK_AFTER_MS)) current else 0L
     }
 
     private suspend fun ensureConversation(firstQuestion: String, now: Long): Long {
@@ -363,7 +379,8 @@ class MentorSession(private val app: NastavnikApp, private val scope: CoroutineS
         val stamp = SimpleDateFormat("d MMMM, HH:mm", Locale("ru")).format(Date(now))
         val title = if (Prompts.isQuickPrompt(firstQuestion)) "$GENERIC_TITLE$stamp" else firstQuestion.take(60)
         val id = db.conversations().insert(Conversation(title = title, subject = "", createdAt = now, updatedAt = now))
-        app.settings.setActiveConversation(id)
+        if (bindToSettings) app.settings.setActiveConversation(id)
+        onConversation?.invoke(id)
         _state.update { it.copy(conversationId = id) }
         return id
     }

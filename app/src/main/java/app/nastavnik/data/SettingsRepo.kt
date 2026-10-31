@@ -44,7 +44,7 @@ data class AppSettings(
     val bubbleSizeDp: Int,
     val bubbleSide: BubbleSide,
     val bubbleYFraction: Float,
-    /** "auto" — Touchnotes, если найден; "chooser" — всегда спрашивать; иначе "pkg/activity|action". */
+    /** "auto" — приложение для записей, если найдено; "chooser" — всегда спрашивать; иначе "pkg/activity|action". */
     val sendTarget: String,
     val onboardingDone: Boolean,
     val projectionExplained: Boolean,
@@ -113,6 +113,18 @@ class SettingsRepo(private val context: Context) {
     fun setNoteFadeAlpha(a: Float) = prefs.edit { putFloat(K_NOTE_FADE, a.coerceIn(0.15f, 0.8f)) }
     fun setReminderHour(h: Int) = prefs.edit { putInt(K_REMINDER, h.coerceIn(-1, 23)) }
     fun setSeeNotebook(on: Boolean) = prefs.edit { putBoolean(K_NOTEBOOK, on) }
+
+    /** Приложение для записей, выбранное студентом (пакет), или пусто — определять самим. */
+    fun notesApp(): String = prefs.getString(K_NOTES_APP, "").orEmpty()
+    fun setNotesApp(pkg: String) = prefs.edit { putString(K_NOTES_APP, pkg) }
+
+    // Тетради: последний цвет ручки, письмо пальцем, автопроверка.
+    fun penColor(): Int = prefs.getInt(K_PEN_COLOR, 0xFF1F4FD1.toInt())
+    fun setPenColor(c: Int) = prefs.edit { putInt(K_PEN_COLOR, c) }
+    fun fingerDraws(): Boolean = prefs.getBoolean(K_FINGER, false)
+    fun setFingerDraws(on: Boolean) = prefs.edit { putBoolean(K_FINGER, on) }
+    fun notebookAutoCheck(): Boolean = prefs.getBoolean(K_NB_AUTO, false)
+    fun setNotebookAutoCheck(on: Boolean) = prefs.edit { putBoolean(K_NB_AUTO, on) }
 
     /** Подставить настройки, вставленные из прокси (Claudex и т.п.). */
     fun apply(c: ProxyConfig) {
@@ -235,6 +247,10 @@ class SettingsRepo(private val context: Context) {
         private const val K_NOTE_FADE = "note_fade_alpha"
         private const val K_REMINDER = "reminder_hour"
         private const val K_NOTEBOOK = "see_notebook"
+        private const val K_PEN_COLOR = "pen_color"
+        private const val K_NOTES_APP = "notes_app"
+        private const val K_FINGER = "finger_draws"
+        private const val K_NB_AUTO = "notebook_auto_check"
         const val DEFAULT_REMINDER_HOUR = 18
         private const val K_MODEL = "model"
         private const val K_CLEAN_MODEL = "clean_model"

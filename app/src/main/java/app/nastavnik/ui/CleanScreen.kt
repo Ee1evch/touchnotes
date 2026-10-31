@@ -34,7 +34,7 @@ import app.nastavnik.notes.NoteStorage
 import app.nastavnik.session.CleanState
 
 /**
- * Предпросмотр и сохранение чистовика. Снимки собираются кнопкой поверх Touchnotes,
+ * Предпросмотр и сохранение чистовика. Снимки собираются кнопкой поверх приложения для записей или из тетради,
  * а сюда приложение переходит само, когда нейросеть оформила конспект.
  */
 @OptIn(ExperimentalLayoutApi::class)
@@ -77,10 +77,10 @@ fun CleanScreen(onClose: () -> Unit, onSettings: () -> Unit, onExample: () -> Un
         }
         val message = when (s) {
             CleanState.Idle -> ""
-            is CleanState.Collecting -> "Снимков: ${s.shots.size} из ${CleanState.MAX_SHOTS}. Добавлять экраны можно кнопкой наставника поверх Touchnotes."
+            is CleanState.Collecting -> "Снимков: ${s.shots.size} из ${CleanState.MAX_SHOTS}. Добавлять экраны можно кнопкой наставника поверх приложения для записей."
             is CleanState.Generating -> "Нейросеть оформляет конспект по снимкам (${s.shots.size}). Обычно это до минуты." +
                 if (s.retry) "\nПервый ответ не разобрался — пробую ещё раз." else ""
-            is CleanState.Preview -> "Проверь, всё ли на месте. «Сохранить» сделает PDF и картинки в «Документы/Конспекты» и отправит конспект в Touchnotes."
+            is CleanState.Preview -> "Проверь, всё ли на месте. «Сохранить» сделает PDF и картинки в «Документы/Конспекты» и отправит конспект в твоё приложение для записей."
             is CleanState.Saving -> "Сохраняю PDF и картинки…"
             is CleanState.Saved -> s.sendMessage
             is CleanState.Failed -> s.message
@@ -175,9 +175,9 @@ private fun IdleClean(onExample: () -> Unit) {
         )
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         val steps = listOf(
-            "Открой конспект в Touchnotes и нажми кнопку наставника → «Чистовик».",
+            "Открой конспект — в своём приложении для записей (кнопка наставника → «Чистовик») или в тетради «Наставника» (кнопка «Сделать чистовик»).",
             "Конспект длиннее экрана? Прокрути и нажми «+ Экран» — до ${CleanState.MAX_SHOTS} снимков.",
-            "Нажми «Собрать», проверь предпросмотр и сохрани: PDF уйдёт в Touchnotes.",
+            "Нажми «Собрать», проверь предпросмотр и сохрани: PDF уйдёт в твоё приложение для записей.",
         )
         steps.forEachIndexed { i, text ->
             Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {

@@ -14,7 +14,7 @@ import app.nastavnik.notes.CleanNoteParseException
 import app.nastavnik.notes.CleanNoteParser
 import app.nastavnik.notes.NoteStorage
 import app.nastavnik.notes.PdfExporter
-import app.nastavnik.notes.TouchnotesSender
+import app.nastavnik.notes.NoteApps
 import app.nastavnik.study.Progress
 import app.nastavnik.study.ruPlural
 import kotlinx.coroutines.CancellationException
@@ -71,7 +71,7 @@ sealed interface CleanState {
     }
 }
 
-/** Чистовик: снимки → JSON от нейросети → предпросмотр → PDF/PNG → Touchnotes. */
+/** Чистовик: снимки → JSON от нейросети → предпросмотр → PDF/PNG → приложение для записей. */
 class CleanSession(private val app: NastavnikApp, private val scope: CoroutineScope) {
     private val _state = MutableStateFlow<CleanState>(CleanState.Idle)
     val state: StateFlow<CleanState> = _state.asStateFlow()
@@ -167,7 +167,7 @@ class CleanSession(private val app: NastavnikApp, private val scope: CoroutineSc
         }
     }
 
-    /** Сохранить PDF+PNG и отправить в Touchnotes. [host] — окно, куда временно встраивается WebView для экспорта. */
+    /** Сохранить PDF+PNG и отправить в приложение для записей. [host] — окно, куда временно встраивается WebView для экспорта. */
     fun save(host: ViewGroup, conversationId: Long?) {
         val s = _state.value as? CleanState.Preview ?: return
         job = scope.launch {
@@ -195,11 +195,11 @@ class CleanSession(private val app: NastavnikApp, private val scope: CoroutineSc
                 // Карточки из конспекта сразу попадают в «Повторение».
                 runCatching { app.study.addCards(noteId, s.note) }
                 app.study.record(Progress.KIND_CLEAN, NoteStorage.plainTitle(s.note.title))
-                val send = TouchnotesSender.sendPdf(app, result.pdf, NoteStorage.plainTitle(s.note.title), settings.sendTarget)
+                val send = NoteApps.sendPdf(app, result.pdf, NoteStorage.plainTitle(s.note.title), settings.sendTarget)
                 val sendMessage = when (send) {
-                    is TouchnotesSender.Outcome.Direct -> "Открываю «${send.label}» — подтверди импорт PDF."
-                    TouchnotesSender.Outcome.Chooser -> "Выбери, куда отправить конспект (Touchnotes не найден автоматически)."
-                    is TouchnotesSender.Outcome.Failed -> send.message
+                    is NoteApps.Outcome.Direct -> "Открываю «${send.label}» — подтверди импорт PDF."
+                    NoteApps.Outcome.Chooser -> "Выбери, куда отправить конспект (приложение для записей не выбрано)."
+                    is NoteApps.Outcome.Failed -> send.message
                 }
                 val where = published.publicPath?.let { "Сохранено: $it" } ?: (published.error ?: "")
                 _state.value = CleanState.Saved(
@@ -222,12 +222,12 @@ class CleanSession(private val app: NastavnikApp, private val scope: CoroutineSc
 
     fun resend() {
         val s = _state.value as? CleanState.Saved ?: return
-        TouchnotesSender.sendPdf(app, s.pdf, NoteStorage.plainTitle(s.note.title), app.settings.load().sendTarget)
+        NoteApps.sendPdf(app, s.pdf, NoteStorage.plainTitle(s.note.title), app.settings.load().sendTarget)
     }
 
     fun sendPngs() {
         val s = _state.value as? CleanState.Saved ?: return
-        TouchnotesSender.sendImages(app, s.pngs, NoteStorage.plainTitle(s.note.title))
+        NoteApps.sendImages(app, s.pngs, NoteStorage.plainTitle(s.note.title))
     }
 
     /** Вернуться к предпросмотру после ошибки сохранения. */

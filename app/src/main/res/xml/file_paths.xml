@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths>
     <files-path name="notes" path="notes/" />
+    <!-- Снимок камеры для тетради: камера пишет сюда, потом фото становится страницей. -->
+    <cache-path name="camera" path="camera/" />
 </paths>

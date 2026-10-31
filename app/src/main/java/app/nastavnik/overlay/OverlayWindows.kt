@@ -15,7 +15,7 @@ import android.view.WindowManager
 /** Общие помощники для окон TYPE_APPLICATION_OVERLAY. */
 object OverlayWindows {
 
-    /** Окно, которое не забирает фокус и пропускает касания вне себя в Touchnotes. */
+    /** Окно, которое не забирает фокус и пропускает касания вне себя в приложение под ним. */
     const val PASS_THROUGH_FLAGS = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
         WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
         WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
@@ -72,7 +72,7 @@ object OverlayWindows {
 
     /**
      * Прямоугольник без строки состояния и панели навигации — в координатах полного экрана.
-     * На Android 11+ учитываются только видимые сейчас панели: если Touchnotes
+     * На Android 11+ учитываются только видимые сейчас панели: если приложение для записей
      * в полноэкранном режиме, обрезать нечего.
      */
     fun contentRect(context: Context): Rect {

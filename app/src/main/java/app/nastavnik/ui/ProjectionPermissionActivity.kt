@@ -129,7 +129,7 @@ private fun Explanation(onAllow: () -> Unit, onCancel: () -> Unit) {
             }
             Text("Разреши снимок экрана", style = MaterialTheme.typography.headlineSmall)
             Text(
-                "Наставник смотрит на экран только когда ты нажимаешь кнопку — чтобы увидеть твои записи в Touchnotes. " +
+                "Наставник смотрит на экран только когда ты нажимаешь кнопку — чтобы увидеть твои записи. " +
                     "Снимок уходит только в выбранную нейросеть и больше никуда.",
                 style = MaterialTheme.typography.bodyLarge,
             )

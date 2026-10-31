@@ -13,6 +13,7 @@ import app.nastavnik.ai.OpenAiClient
 import app.nastavnik.data.AppDatabase
 import app.nastavnik.data.AppSettings
 import app.nastavnik.data.SettingsRepo
+import app.nastavnik.ink.Notebooks
 import app.nastavnik.session.CleanSession
 import app.nastavnik.study.Reminders
 import app.nastavnik.study.StudyRepo
@@ -34,10 +35,13 @@ class NastavnikApp : Application() {
     /** Живёт, пока живёт процесс: чистовик продолжает сохраняться, даже если экран закрыли. */
     val appScope: CoroutineScope = MainScope()
 
+    /** Тетради, в которых пишут прямо в приложении (и фото, и PDF). */
+    val notebooks: Notebooks by lazy { Notebooks(this) }
+
     /** Карточки повторения и учебные события для «Прогресса». */
     val study: StudyRepo by lazy { StudyRepo(this) }
 
-    /** Чистовик общий для кнопки поверх Touchnotes и экрана предпросмотра. */
+    /** Чистовик общий для кнопки, тетрадей и экрана предпросмотра. */
     val clean: CleanSession by lazy { CleanSession(this, appScope) }
 
     /** Клиент выбранного в настройках провайдера. */

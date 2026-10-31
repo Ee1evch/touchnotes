@@ -9,19 +9,59 @@ import android.content.pm.ResolveInfo
 import android.net.Uri
 import android.os.Build
 import androidx.core.content.FileProvider
+import app.nastavnik.app
 import app.nastavnik.data.SettingsRepo
 import java.io.File
 
 /**
- * Отправка чистовика в Touchnotes. API у Touchnotes нет, поэтому отдаём файл через
- * обычный «Поделиться»: ищем среди получателей PDF приложение, в имени которого есть «touchnotes».
+ * Приложение, в котором студент пишет конспекты, — любое: Touchnotes, Samsung Notes, OneNote, Squid, Nebo,
+ * Xodo, Flexcil и другие. Его можно выбрать в настройках, а если не выбрано — находим сами среди известных.
+ * Чистовик отдаём туда через обычный «Поделиться» (API у таких приложений нет).
  */
-object TouchnotesSender {
+object NoteApps {
 
     data class Target(val packageName: String, val activityName: String, val label: String, val action: String) {
         fun encode(): String = "$packageName/$activityName|$action"
-        val isTouchnotes: Boolean
-            get() = packageName.contains("touchnotes", ignoreCase = true) || label.contains("touchnotes", ignoreCase = true)
+    }
+
+    /** Приложение для записей: пакет и подпись. */
+    data class App(val packageName: String, val label: String)
+
+    /** Известные приложения для рукописных конспектов — по части имени пакета, в порядке, в котором их предлагать. */
+    private val KNOWN = listOf(
+        "touchnotes", "com.samsung.android.app.notes", "onenote", "projectpapyrus", "com.myscript.nebo", "xodo",
+        "flexcil", "noteshelf", "goodnotes", "notewise", "kilonotes", "com.google.android.keep",
+    )
+
+    private fun knownRank(pkg: String): Int = KNOWN.indexOfFirst { pkg.contains(it, ignoreCase = true) }
+
+    /** Все установленные приложения, которые можно открыть, — для выбора «другого» приложения. */
+    fun launchable(context: Context): List<App> {
+        val pm = context.packageManager
+        val main = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+        return query(pm, main).mapNotNull { ri ->
+            val ai = ri.activityInfo ?: return@mapNotNull null
+            if (ai.packageName == context.packageName) null else App(ai.packageName, ri.loadLabel(pm).toString())
+        }.distinctBy { it.packageName }.sortedBy { it.label.lowercase() }
+    }
+
+    /** Установленные известные приложения для записей. */
+    fun installedKnown(context: Context): List<App> =
+        launchable(context).filter { knownRank(it.packageName) >= 0 }.sortedBy { knownRank(it.packageName) }
+
+    /** Выбранное в настройках приложение (если оно ещё установлено) или первое найденное известное. */
+    fun chosen(context: Context): App? {
+        val pick = context.app.settings.notesApp()
+        val all = launchable(context)
+        return all.firstOrNull { it.packageName == pick && pick.isNotEmpty() }
+            ?: all.filter { knownRank(it.packageName) >= 0 }.minByOrNull { knownRank(it.packageName) }
+    }
+
+    /** Открыть приложение для записей. */
+    fun open(context: Context, app: App): Boolean {
+        val intent = context.packageManager.getLaunchIntentForPackage(app.packageName) ?: return false
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        return runCatching { context.startActivity(intent) }.isSuccess
     }
 
     sealed interface Outcome {
@@ -50,14 +90,16 @@ object TouchnotesSender {
         val out = LinkedHashMap<String, Target>()
         query(pm, send).forEach { ri -> ri.toTarget(pm, Intent.ACTION_SEND)?.let { out.putIfAbsent(it.packageName + "/" + it.activityName, it) } }
         query(pm, view).forEach { ri -> ri.toTarget(pm, Intent.ACTION_VIEW)?.let { out.putIfAbsent(it.packageName + "/" + it.activityName, it) } }
+        val notes = chosen(context)?.packageName
         return out.values
             .filter { it.packageName != context.packageName }
-            .sortedWith(compareByDescending<Target> { it.isTouchnotes }.thenBy { it.label.lowercase() })
+            .sortedWith(compareByDescending<Target> { it.packageName == notes }.thenBy { it.label.lowercase() })
     }
 
-    fun findTouchnotes(context: Context): Target? {
-        val all = pdfTargets(context).filter { it.isTouchnotes }
-        // «Поделиться» лучше, чем «Открыть»: так файл импортируется в заметки.
+    /** Как отдать PDF приложению для записей: «Поделиться» лучше, чем «Открыть» — так файл импортируется в заметки. */
+    fun notesTarget(context: Context): Target? {
+        val pkg = chosen(context)?.packageName ?: return null
+        val all = pdfTargets(context).filter { it.packageName == pkg }
         return all.firstOrNull { it.action == Intent.ACTION_SEND } ?: all.firstOrNull()
     }
 
@@ -70,8 +112,8 @@ object TouchnotesSender {
         }
         val target = when (preference) {
             SettingsRepo.TARGET_CHOOSER -> null
-            SettingsRepo.TARGET_AUTO -> findTouchnotes(context)
-            else -> decode(preference)?.takeIf { isInstalled(context, it) } ?: findTouchnotes(context)
+            SettingsRepo.TARGET_AUTO -> notesTarget(context)
+            else -> decode(preference)?.takeIf { isInstalled(context, it) } ?: notesTarget(context)
         }
         return try {
             if (target != null) {
@@ -111,9 +153,10 @@ object TouchnotesSender {
             }
         }
         val pm = context.packageManager
+        val notes = chosen(context)?.packageName
         val touch = query(pm, Intent(intent.action).setType(MIME_PNG))
             .mapNotNull { it.toTarget(pm, intent.action!!) }
-            .firstOrNull { it.isTouchnotes }
+            .firstOrNull { it.packageName == notes }
         return try {
             if (touch != null) {
                 intent.component = ComponentName(touch.packageName, touch.activityName)

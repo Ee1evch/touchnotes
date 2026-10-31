@@ -23,7 +23,7 @@ import app.nastavnik.notes.CleanNoteParser
 import app.nastavnik.notes.CleanView
 import app.nastavnik.notes.NoteStorage
 import app.nastavnik.notes.PdfExporter
-import app.nastavnik.notes.TouchnotesSender
+import app.nastavnik.notes.NoteApps
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -31,7 +31,7 @@ import java.io.File
 
 /**
  * Пример чистовика: рисует встроенный конспект (формулы, таблица, график) без обращения к нейросети
- * и позволяет проверить всю цепочку PDF → «Документы» → Touchnotes.
+ * и позволяет проверить всю цепочку PDF → «Документы» → приложение для записей.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -76,11 +76,11 @@ fun CleanTestScreen(onBack: () -> Unit) {
                 }
             }
             if (lastPdf != null) {
-                SoftButton("Открыть PDF", icon = R.drawable.ic_open) { lastPdf?.let { TouchnotesSender.viewPdf(context, it) } }
-                SoftButton("В Touchnotes", icon = R.drawable.ic_share) {
+                SoftButton("Открыть PDF", icon = R.drawable.ic_open) { lastPdf?.let { NoteApps.viewPdf(context, it) } }
+                SoftButton("Отправить", icon = R.drawable.ic_share) {
                     lastPdf?.let {
-                        val r = TouchnotesSender.sendPdf(context, it, "Пример чистовика", context.app.settings.load().sendTarget)
-                        if (r is TouchnotesSender.Outcome.Failed) {
+                        val r = NoteApps.sendPdf(context, it, "Пример чистовика", context.app.settings.load().sendTarget)
+                        if (r is NoteApps.Outcome.Failed) {
                             status = r.message
                             tone = Tone.ERROR
                         }

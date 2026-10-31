@@ -65,7 +65,7 @@ import java.util.Date
 import java.util.Locale
 
 /**
- * Сердце приложения: foreground-сервис, который тихо работает в фоне поверх Touchnotes.
+ * Сердце приложения: foreground-сервис, который тихо работает в фоне поверх любого приложения для записей.
  * Отдельного окна нет: кнопка, короткое меню у кнопки и ответы прямо на записях —
  * рамка там, где ошибка или где писать дальше, и заметка рядом.
  */
@@ -321,7 +321,7 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
         val text = if (hidden) {
             "Кнопка спрятана до " + SimpleDateFormat("HH:mm", Locale("ru")).format(Date(hiddenUntil))
         } else {
-            "Нажми на кнопку поверх Touchnotes — ответ появится прямо на записи"
+            "Нажми кнопку поверх любого приложения — ответ появится прямо на записях"
         }
         val b = NotificationCompat.Builder(this, NastavnikApp.CHANNEL_SERVICE)
             .setSmallIcon(R.drawable.ic_tile)
@@ -421,7 +421,7 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
         bubble.busy = mentor.state.value.busy || clean.state.value is CleanState.Generating || clean.state.value is CleanState.Saving
     }
 
-    /** Стилус над кнопкой: на 1,5 с окно перестаёт принимать касания, и штрих уходит в Touchnotes. */
+    /** Стилус над кнопкой: на 1,5 с окно перестаёт принимать касания, и штрих уходит в приложение под ней. */
     private fun setBubbleTouchable(touchable: Boolean) {
         if (!bubbleAdded) return
         val f = bubbleParams.flags
@@ -667,7 +667,7 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
                     when {
                         s.capturing -> append("\nДелаю снимок экрана…")
                         s.message != null -> append("\n").append(s.message)
-                        else -> append("\nКонспект длиннее экрана? Прокрути Touchnotes и добавь ещё экран.")
+                        else -> append("\nКонспект длиннее экрана? Прокрути конспект и добавь ещё экран.")
                     }
                 }
                 val items = mutableListOf<BarItem>()

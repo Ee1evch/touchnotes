@@ -7,6 +7,8 @@ import android.graphics.Rect
 import android.os.SystemClock
 import android.util.Base64
 import android.util.Log
+import android.view.MotionEvent
+import android.view.InputDevice
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -269,6 +271,109 @@ class MentorFlowTest {
         assertEquals("карточки не добавились", 5, cardCount)
         device.pressBack()
         scenario.close()
+    }
+
+    /** Штрих пером: вниз, несколько точек, вверх — как настоящий стилус. */
+    private fun penStroke(points: List<Pair<Float, Float>>) {
+        val props = arrayOf(MotionEvent.PointerProperties().apply { id = 0; toolType = MotionEvent.TOOL_TYPE_STYLUS })
+        val src = InputDevice.SOURCE_STYLUS or InputDevice.SOURCE_TOUCHSCREEN
+        val down = SystemClock.uptimeMillis()
+        points.forEachIndexed { i, (x, y) ->
+            val action = when (i) {
+                0 -> MotionEvent.ACTION_DOWN
+                points.lastIndex -> MotionEvent.ACTION_UP
+                else -> MotionEvent.ACTION_MOVE
+            }
+            val coords = arrayOf(MotionEvent.PointerCoords().apply { this.x = x; this.y = y; pressure = 0.6f; size = 1f })
+            val ev = MotionEvent.obtain(down, down + i * 12L, action, 1, props, coords, 0, 0, 1f, 1f, 0, 0, src, 0)
+            instr.uiAutomation.injectInputEvent(ev, true)
+            ev.recycle()
+        }
+    }
+
+    /** Тетрадь в приложении: пишем пером, спрашиваем наставника — отметка на листе; потом фото и PDF становятся тетрадями. */
+    @Test
+    fun notebookWriteAskAndImport() {
+        target = null
+        val nbs = ctx.app.notebooks
+        val (meta, _) = nbs.store.create("Тест тетради", app.nastavnik.ink.Paper.GRID)
+        val scenario = ActivityScenario.launch<MainActivity>(
+            Intent(ctx, MainActivity::class.java)
+                .putExtra(MainActivity.EXTRA_SCREEN, MainActivity.SCREEN_NOTEBOOK)
+                .putExtra(MainActivity.EXTRA_NOTEBOOK, meta.id),
+        )
+        val sheet = device.wait(Until.findObject(By.desc("Лист тетради")), 10000)
+        assertNotNull("лист тетради не открылся", sheet)
+        SystemClock.sleep(1500)
+        dismissSystemAnr()
+        val b = sheet!!.visibleBounds
+        // Пишем «пером» три строки: что-то вроде уравнения и решения.
+        for (row in 0 until 3) {
+            val y = b.top + b.height() * (0.18f + row * 0.09f)
+            val x0 = b.left + b.width() * 0.12f
+            penStroke((0..24).map { k -> (x0 + k * b.width() * 0.018f) to (y + (if (k % 2 == 0) -8f else 8f)) })
+            penStroke(listOf(x0 + b.width() * 0.5f to y - 20f, x0 + b.width() * 0.5f to y + 20f))
+        }
+        SystemClock.sleep(2500)
+        val saved = nbs.store.loadPages(nbs.store.meta(meta.id)!!).first()
+        assertTrue("штрихи не сохранились (${saved.strokes.size})", saved.strokes.size >= 6)
+        screenshot("notebook_written")
+
+        // Наставник: отметка на листе и заметка в панели.
+        device.wait(Until.findObject(By.text("Подсказка")), 5000)!!.click()
+        val until = SystemClock.uptimeMillis() + 40000
+        while (app.nastavnik.ink.InkView.shownMarks.isEmpty() && SystemClock.uptimeMillis() < until) SystemClock.sleep(300)
+        SystemClock.sleep(1500)
+        screenshot("notebook_answer")
+        assertEquals("нет отметки на листе", 1, app.nastavnik.ink.InkView.shownMarks.size)
+        val req = bodies.last { it.contains("\"stream\":true") }
+        assertTrue("вопрос ушёл без снимка страницы", req.contains("\"type\":\"image\""))
+        scenario.close()
+
+        // Фото тетради с бумаги → новая тетрадь.
+        val photo = File(ctx.cacheDir, "paper.jpg")
+        val bmp = Bitmap.createBitmap(1200, 1600, Bitmap.Config.ARGB_8888).apply {
+            val c = android.graphics.Canvas(this)
+            c.drawColor(android.graphics.Color.rgb(246, 244, 238))
+            val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.rgb(30, 50, 140); textSize = 64f }
+            c.drawText("x² − 5x + 6 = 0", 120f, 300f, p)
+            c.drawText("D = 25 − 24 = 1", 120f, 420f, p)
+        }
+        photo.outputStream().use { bmp.compress(Bitmap.CompressFormat.JPEG, 90, it) }
+        val fromPhoto = runBlocking { nbs.importImages(listOf(android.net.Uri.fromFile(photo))) }
+        assertNotNull("фото не стало тетрадью", fromPhoto)
+        assertEquals(1, fromPhoto!!.pages.size)
+
+        // PDF из двух страниц → тетрадь из двух страниц.
+        val pdfFile = File(ctx.cacheDir, "lecture.pdf")
+        android.graphics.pdf.PdfDocument().apply {
+            repeat(2) { i ->
+                val pg = startPage(android.graphics.pdf.PdfDocument.PageInfo.Builder(595, 842, i + 1).create())
+                pg.canvas.drawText("Лекция, страница ${i + 1}", 60f, 80f, android.graphics.Paint().apply { textSize = 24f })
+                finishPage(pg)
+            }
+            pdfFile.outputStream().use { writeTo(it) }
+            close()
+        }
+        val fromPdf = runBlocking { nbs.importPdf(android.net.Uri.fromFile(pdfFile)) }
+        assertNotNull("PDF не стал тетрадью", fromPdf)
+        assertEquals(2, fromPdf!!.pages.size)
+
+        val photoScenario = ActivityScenario.launch<MainActivity>(
+            Intent(ctx, MainActivity::class.java)
+                .putExtra(MainActivity.EXTRA_SCREEN, MainActivity.SCREEN_NOTEBOOK)
+                .putExtra(MainActivity.EXTRA_NOTEBOOK, fromPhoto.id),
+        )
+        SystemClock.sleep(3000)
+        screenshot("notebook_photo")
+        photoScenario.close()
+
+        val list = ActivityScenario.launch<MainActivity>(
+            Intent(ctx, MainActivity::class.java).putExtra(MainActivity.EXTRA_SCREEN, MainActivity.SCREEN_NOTEBOOKS),
+        )
+        SystemClock.sleep(2500)
+        screenshot("screen_notebooks")
+        list.close()
     }
 
     /** Наставник видит весь конспект: пролистанные страницы уходят вместе со следующим вопросом. */

@@ -5,7 +5,7 @@ import android.graphics.Typeface
 import androidx.core.content.res.ResourcesCompat
 import app.nastavnik.R
 
-/** Шрифт Onest для окон поверх Touchnotes (там нет Compose-темы). */
+/** Шрифт Onest для окон поверх записей (там нет Compose-темы). */
 object Fonts {
     private var regular: Typeface? = null
     private var medium: Typeface? = null

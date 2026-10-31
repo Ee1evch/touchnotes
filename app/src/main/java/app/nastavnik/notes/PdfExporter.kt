@@ -35,7 +35,7 @@ class PdfExporter(private val context: Context) {
 
     data class Result(val pdf: File, val pngs: List<File>, val pageCount: Int)
 
-    /** @param baseName имя файлов без расширения — под ним PDF увидит Touchnotes. */
+    /** @param baseName имя файлов без расширения — под ним PDF увидит приложение для записей. */
     suspend fun export(host: ViewGroup, noteJson: String, outDir: File, baseName: String = "Конспект"): Result {
         outDir.mkdirs()
         val density = context.resources.displayMetrics.density
