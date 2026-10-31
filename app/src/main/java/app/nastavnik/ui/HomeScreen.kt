@@ -371,7 +371,6 @@ private fun Attention(title: String, text: String, action: String, onAction: () 
     }
 }
 
-@Composable
 private class TileSpec(val icon: Int, val title: String, val caption: String, val onClick: () -> Unit)
 
 /** Экзамен скоро: сколько дней осталось. */
