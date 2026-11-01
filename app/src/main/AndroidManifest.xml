@@ -171,15 +171,44 @@
             android:exported="false" />
 
         <!-- Будильник к первой паре. -->
+        <!-- directBootAware: будильник работает и до первой разблокировки после перезагрузки. -->
         <receiver
             android:name=".study.WakeReceiver"
+            android:directBootAware="true"
             android:exported="false" />
+        <receiver
+            android:name=".study.WakeBootReceiver"
+            android:directBootAware="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+            </intent-filter>
+        </receiver>
         <service
             android:name=".study.WakeService"
+            android:directBootAware="true"
             android:exported="false"
             android:foregroundServiceType="mediaPlayback" />
+        <!-- Защита будильника: пока звонит — нельзя выключить телефон и удалить приложение. -->
+        <service
+            android:name=".study.WakeGuard"
+            android:directBootAware="true"
+            android:exported="true"
+            android:label="@string/wake_guard_label"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/wake_guard" />
+        </service>
         <activity
             android:name=".ui.WakeActivity"
+            android:directBootAware="true"
             android:excludeFromRecents="true"
             android:exported="false"
             android:launchMode="singleTask"

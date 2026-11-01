@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Наставник</string>
+    <string name="wake_guard_label">Наставник: защита будильника</string>
+    <string name="wake_guard_description">Работает только пока звонит будильник к первой паре и до проверки «Ты встал?». В это время закрывает меню выключения телефона, удаление приложения и системные настройки — чтобы будильник нельзя было отключить спросонья. В остальное время ничего не делает и ничего не читает.</string>
     <string name="shortcut_start">Запустить</string>
     <string name="shortcut_review">Повторение</string>
     <string name="shortcut_progress">Прогресс</string>

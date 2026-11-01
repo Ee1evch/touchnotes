@@ -28,23 +28,24 @@ import java.time.format.DateTimeFormatter
  * Будильник к первой паре.
  *
  * Надёжность важнее всего, поэтому:
- *  - ставится через `setAlarmClock` — это «настоящий» будильник: срабатывает в режиме сна телефона, виден в
+ *  - ставится через `setAlarmClock` — «настоящий» будильник: срабатывает в глубоком сне телефона, виден в
  *    строке состояния, система не откладывает его ради батареи;
  *  - звонит сервис на потоке будильника (проходит «Не беспокоить»), громкость сама поднимается до 80 %,
  *    звук нарастает, есть вибрация; экран будильника открывается поверх блокировки;
- *  - выключить можно только решив пример — спящий не решит; отложить — максимум дважды по 5 минут и только
- *    если останется время собраться;
- *  - если не выключил за 10 минут — звонок замолкает и через 3 минуты начинается снова (до начала пары);
- *  - через 3 минуты после «Встаю» — проверка «Ты встал?»; не ответил за 2 минуты — снова звонок;
- *  - после перезагрузки, синхронизации и обновления расписания будильник ставится заново.
+ *  - выключить можно только решив пример; отложить — максимум дважды по 5 минут и только если останется время;
+ *  - не выключил за 10 минут — пауза 3 минуты и снова, пока не начнётся пара;
+ *  - через 3 минуты после «Встаю» — «Ты встал?»; не ответил за 2 минуты — снова звонок;
+ *  - пока звонит — нельзя удалить приложение и выключить телефон ([WakeGuard]);
+ *  - состояние — в хранилище, доступном до разблокировки ([WakePrefs]): телефон перезагрузили (или выключили
+ *    кнопкой на 10 секунд) — после включения будильник ставится заново ещё на экране блокировки,
+ *    а если время прошло, а его не выключали — звонит сразу.
  *
- * Сон — циклами (см. [SleepPlan]): вечером напоминание лечь так, чтобы проснуться в конце цикла; кнопка
- * «Ложусь» сдвигает подъём на конец ближайшего цикла (только раньше, не позже крайнего времени).
+ * Сон — циклами (см. [SleepPlan]): вечером напоминание лечь так, чтобы проснуться в конце цикла; «Ложусь»
+ * сдвигает подъём на конец ближайшего цикла (только раньше, не позже крайнего времени).
  */
 object WakeAlarm {
     const val ACTION_RING = "app.nastavnik.WAKE_RING"
     const val ACTION_SNOOZE = "app.nastavnik.WAKE_SNOOZE"
-    const val ACTION_DISMISS = "app.nastavnik.WAKE_DISMISS"
     const val ACTION_CHECK = "app.nastavnik.WAKE_CHECK"
     const val ACTION_AWAKE = "app.nastavnik.WAKE_AWAKE"
     const val ACTION_BEDTIME = "app.nastavnik.WAKE_BEDTIME"
@@ -83,28 +84,32 @@ object WakeAlarm {
         val bedtime: LocalDateTime,
         val snoozed: Boolean,
     ) {
-        val label: String get() = listOfNotNull(lesson.discipline.takeIf { it.isNotBlank() }, lesson.classroom).joinToString(" · ")
+        val label: String get() = label(lesson)
     }
+
+    fun label(l: Lesson): String = listOfNotNull(l.discipline.takeIf { it.isNotBlank() }, l.classroom).joinToString(" · ")
 
     fun ms(t: LocalDateTime): Long = t.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
     fun time(ms: Long): LocalDateTime = LocalDateTime.ofInstant(Instant.ofEpochMilli(ms), ZoneId.systemDefault())
 
-    /** Ближайший будильник по расписанию (null — выключен или пар на неделе нет). */
+    fun prefs(context: Context) = WakePrefs.of(context)
+
+    /** Ближайший будильник по расписанию (null — выключен или пар на неделе нет). Только после разблокировки. */
     suspend fun plan(context: Context, now: LocalDateTime = LocalDateTime.now()): Plan? {
         val app = context.app
-        val st = app.settings
-        if (!st.wakeOn() || st.scheduleGroup().isBlank()) return null
-        val snoozeUntil = st.wakeSnoozeUntil().takeIf { it > 0 }?.let(::time)
+        val w = prefs(context)
+        if (!w.on || app.settings.scheduleGroup().isBlank()) return null
+        val snoozeUntil = w.snoozeUntil.takeIf { it > 0 }?.let(::time)
         for (d in 0L..7L) {
             val date = now.toLocalDate().plusDays(d)
-            if (date.toString() == st.wakeSkipDay() || date.toString() == st.wakeDoneDay()) continue
+            if (date.toString() == w.skipDay || date.toString() == w.doneDay) continue
             val lessons = app.schedule.day(date).filter { it.startsAt() != null }
             val first = lessons.minByOrNull { it.startsAt()!! } ?: continue
             val start = first.startsAt()!!
-            val travel = if (!first.online.isNullOrBlank()) 0 else st.wakeTravelMin()
-            val latest = SleepPlan.latestWake(start, st.wakeReadyMin(), travel)
             if (!start.isAfter(now)) continue
-            val bedAt = st.wakeBedAt().takeIf { it > 0 }?.let(::time)
+            val travel = if (!first.online.isNullOrBlank()) 0 else w.travelMin
+            val latest = SleepPlan.latestWake(start, w.readyMin, travel)
+            val bedAt = w.bedAt.takeIf { it > 0 }?.let(::time)
                 ?.takeIf { it.isBefore(latest) && it.isAfter(latest.minusHours(14)) }
             val smart = SleepPlan.smartWake(latest, bedAt)
             val wake = when {
@@ -113,7 +118,7 @@ object WakeAlarm {
                 latest.isAfter(now) -> latest
                 // Будильник на этот день уже стоял и должен был прозвенеть, но его не выключали
                 // (телефон был выключен?) — звоним сразу. Иначе (включили будильник поздно) — не будим.
-                st.wakeArmed() in 1..ms(now) && time(st.wakeArmed()).toLocalDate() == date -> now.plusSeconds(30)
+                w.armed in 1..ms(now) && w.armedDate == date.toString() -> now.plusSeconds(30)
                 else -> continue
             }
             return Plan(date, wake, latest, start, first, SleepPlan.bedtime(latest), snoozed = wake == snoozeUntil)
@@ -154,24 +159,47 @@ object WakeAlarm {
     /** Поставить заново: при запуске, после смены расписания, настроек, «Ложусь», перезагрузки. */
     suspend fun reschedule(context: Context) {
         val am = am(context) ?: return
+        val w = prefs(context)
+        // До первой разблокировки расписание недоступно — ставим то, что запомнили.
+        if (!WakePrefs.unlocked(context)) {
+            rescheduleLocked(context)
+            return
+        }
         val ring = broadcast(context, ACTION_RING, REQ_RING)
         val bed = broadcast(context, ACTION_BEDTIME, REQ_BEDTIME)
         am.cancel(ring)
         am.cancel(bed)
-        val st = context.app.settings
-        // Вчерашние отметки больше не нужны.
         val today = LocalDate.now().toString()
-        if (st.wakeDoneDay().isNotEmpty() && st.wakeDoneDay() < today) st.setWakeDoneDay("")
-        if (st.wakeSkipDay().isNotEmpty() && st.wakeSkipDay() < today) st.setWakeSkipDay("")
-        val p = plan(context) ?: run { st.setWakeArmed(0); return }
+        if (w.doneDay.isNotEmpty() && w.doneDay < today) w.doneDay = ""
+        if (w.skipDay.isNotEmpty() && w.skipDay < today) w.skipDay = ""
+        val p = plan(context) ?: run { w.armed = 0; w.armedDate = ""; return }
         setClock(context, ms(p.wake), ring)
-        st.setWakeArmed(ms(p.wake))
+        w.armed = ms(p.wake)
+        w.armedDate = p.date.toString()
+        w.lessonAt = ms(p.lessonAt)
+        w.lessonLabel = p.label
+        w.lessonOnline = !p.lesson.online.isNullOrBlank()
         // Вечером — «пора спать» за 30 минут до времени на 5 циклов, если ещё не нажал «Ложусь».
         val remind = p.bedtime.minusMinutes(30)
         val now = LocalDateTime.now()
-        val bedMarked = st.wakeBedAt() > 0 && time(st.wakeBedAt()).isAfter(p.latest.minusHours(14))
+        val bedMarked = w.bedAt > 0 && time(w.bedAt).isAfter(p.latest.minusHours(14))
         if (!bedMarked && !p.snoozed && remind.isAfter(now) && remind.isAfter(p.latest.minusHours(20))) {
             setExact(context, ms(remind), bed)
+        }
+    }
+
+    /** До разблокировки: «отложено до», запомненный будильник — или звонок сразу, если он уже должен был прозвенеть. */
+    private fun rescheduleLocked(context: Context) {
+        val w = prefs(context)
+        if (!w.on) return
+        val now = System.currentTimeMillis()
+        val ring = broadcast(context, ACTION_RING, REQ_RING)
+        val lessonNotStarted = w.lessonAt > now
+        val notDone = w.armedDate.isNotEmpty() && w.armedDate != w.doneDay && w.armedDate != w.skipDay
+        when {
+            w.snoozeUntil > now -> setClock(context, w.snoozeUntil, ring)
+            notDone && w.armed > now -> setClock(context, w.armed, ring)
+            notDone && w.armed in 1..now && lessonNotStarted -> startRinging(context)
         }
     }
 
@@ -181,48 +209,57 @@ object WakeAlarm {
     }
 
     /** Можно ли ещё отложить: не больше двух раз и только если останется хотя бы 15 минут собраться. */
-    suspend fun canSnooze(context: Context): Boolean {
-        val st = context.app.settings
-        if (st.wakeSnoozes() >= MAX_SNOOZES) return false
-        val p = plan(context) ?: return false
-        val after = LocalDateTime.now().plusMinutes(SNOOZE_MIN)
-        val travel = if (!p.lesson.online.isNullOrBlank()) 0 else st.wakeTravelMin()
-        return !after.isAfter(p.lessonAt.minusMinutes(travel + 15L))
+    fun canSnooze(context: Context): Boolean {
+        val w = prefs(context)
+        if (w.snoozes >= MAX_SNOOZES || w.lessonAt <= 0) return false
+        val after = System.currentTimeMillis() + SNOOZE_MIN * 60_000L
+        val travel = if (w.lessonOnline) 0 else w.travelMin
+        return after <= w.lessonAt - (travel + 15L) * 60_000L
     }
 
     suspend fun snooze(context: Context) {
-        val st = context.app.settings
-        st.setWakeSnoozes(st.wakeSnoozes() + 1)
-        st.setWakeSnoozeUntil(System.currentTimeMillis() + SNOOZE_MIN * 60_000L)
+        val w = prefs(context)
+        w.snoozes = w.snoozes + 1
+        w.snoozeUntil = System.currentTimeMillis() + SNOOZE_MIN * 60_000L
         stopRinging(context)
-        reschedule(context)
+        setClock(context, w.snoozeUntil, broadcast(context, ACTION_RING, REQ_RING))
+        if (WakePrefs.unlocked(context)) reschedule(context)
     }
 
     /** Не выключил за 10 минут — пауза и снова звонок, пока не начнётся пара. */
     suspend fun ringAgainLater(context: Context) {
-        val st = context.app.settings
-        val p = plan(context)
-        if (p != null && LocalDateTime.now().plusMinutes(RING_AGAIN_MIN).isBefore(p.lessonAt)) {
-            st.setWakeSnoozeUntil(System.currentTimeMillis() + RING_AGAIN_MIN * 60_000L)
+        val w = prefs(context)
+        val again = System.currentTimeMillis() + RING_AGAIN_MIN * 60_000L
+        if (again < w.lessonAt) {
+            w.snoozeUntil = again
+            setClock(context, again, broadcast(context, ACTION_RING, REQ_RING))
         } else {
-            st.setWakeSnoozeUntil(0)
-            st.setWakeSnoozes(0)
-            p?.let { st.setWakeDoneDay(it.date.toString()) }
+            w.snoozeUntil = 0
+            w.snoozes = 0
+            w.guardUntil = 0
+            w.doneDay = w.armedDate
         }
-        reschedule(context)
+        if (WakePrefs.unlocked(context)) reschedule(context)
     }
 
     /** «Встаю» (пример решён). */
     suspend fun dismiss(context: Context, test: Boolean) {
         stopRinging(context)
-        if (test) return
-        val st = context.app.settings
-        plan(context)?.let { st.setWakeDoneDay(it.date.toString()) }
-        st.setWakeSnoozes(0)
-        st.setWakeSnoozeUntil(0)
-        st.setWakeBedAt(0)
-        if (st.wakeCheck()) setExact(context, System.currentTimeMillis() + CHECK_AFTER_MIN * 60_000L, broadcast(context, ACTION_CHECK, REQ_CHECK))
-        reschedule(context)
+        val w = prefs(context)
+        if (test) { w.guardUntil = 0; return }
+        w.doneDay = w.armedDate
+        w.snoozes = 0
+        w.snoozeUntil = 0
+        w.bedAt = 0
+        if (w.check) {
+            val at = System.currentTimeMillis() + CHECK_AFTER_MIN * 60_000L
+            setExact(context, at, broadcast(context, ACTION_CHECK, REQ_CHECK))
+            // Защита — до конца проверки «Ты встал?».
+            w.guardUntil = at + (CHECK_GRACE_MIN + 1) * 60_000L
+        } else {
+            w.guardUntil = 0
+        }
+        if (WakePrefs.unlocked(context)) reschedule(context)
     }
 
     private fun stopRinging(context: Context) {
@@ -257,6 +294,7 @@ object WakeAlarm {
     fun onAwake(context: Context) {
         am(context)?.cancel(broadcast(context, ACTION_RING, REQ_BACKUP))
         context.getSystemService(NotificationManager::class.java)?.cancel(NOTIFY_CHECK)
+        prefs(context).guardUntil = 0
     }
 
     /** Вечером: когда лечь, чтобы проснуться в конце цикла. */
@@ -285,8 +323,7 @@ object WakeAlarm {
 
     /** «Ложусь»: подъём — в конце ближайшего цикла. */
     suspend fun onBed(context: Context) {
-        val st = context.app.settings
-        st.setWakeBedAt(System.currentTimeMillis())
+        prefs(context).bedAt = System.currentTimeMillis()
         reschedule(context)
         val p = plan(context) ?: return
         val now = LocalDateTime.now()
@@ -308,7 +345,7 @@ object WakeAlarm {
 
     suspend fun onSkip(context: Context) {
         val p = plan(context) ?: return
-        context.app.settings.setWakeSkipDay(p.date.toString())
+        prefs(context).skipDay = p.date.toString()
         reschedule(context)
         val n = NotificationCompat.Builder(context, NastavnikApp.CHANNEL_SLEEP)
             .setSmallIcon(R.drawable.ic_bell)
@@ -321,7 +358,10 @@ object WakeAlarm {
     }
 }
 
-/** События будильника: звонок, «отложить», проверка подъёма, вечернее «пора спать». */
+/**
+ * События будильника: звонок, «отложить», проверка подъёма, вечернее «пора спать».
+ * Работает и до разблокировки после перезагрузки (directBootAware): ставит будильник заново.
+ */
 class WakeReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         // Звонок — сразу, без корутин: сервис должен стартовать, пока действует разрешение от будильника.
@@ -343,6 +383,21 @@ class WakeReceiver : BroadcastReceiver() {
             } finally {
                 pending.finish()
             }
+        }
+    }
+}
+
+/** Перезагрузка (в том числе до разблокировки) и смена времени — будильник ставится заново. */
+class WakeBootReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+        when (intent.action) {
+            Intent.ACTION_LOCKED_BOOT_COMPLETED, Intent.ACTION_BOOT_COMPLETED,
+            Intent.ACTION_TIME_CHANGED, Intent.ACTION_TIMEZONE_CHANGED -> Unit
+            else -> return
+        }
+        val pending = goAsync()
+        CoroutineScope(Dispatchers.IO).launch {
+            try { runCatching { WakeAlarm.reschedule(context) } } finally { pending.finish() }
         }
     }
 }

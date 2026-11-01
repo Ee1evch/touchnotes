@@ -19,6 +19,7 @@ import app.nastavnik.ink.Notebooks
 import app.nastavnik.session.CleanSession
 import app.nastavnik.study.Reminders
 import app.nastavnik.study.Alarms
+import app.nastavnik.study.WakePrefs
 import app.nastavnik.ui.Palettes
 import app.nastavnik.schedule.ScheduleRepo
 import app.nastavnik.campus.CampusRepo
@@ -98,6 +99,27 @@ class NastavnikApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        // До первой разблокировки после перезагрузки обычные настройки и база недоступны —
+        // запускается только будильник (его состояние в отдельном хранилище). Остальное — после разблокировки.
+        if (!WakePrefs.unlocked(this)) {
+            createChannels()
+            androidx.core.content.ContextCompat.registerReceiver(
+                this,
+                object : android.content.BroadcastReceiver() {
+                    override fun onReceive(c: android.content.Context, i: android.content.Intent) {
+                        runCatching { unregisterReceiver(this) }
+                        startUnlocked()
+                    }
+                },
+                android.content.IntentFilter(android.content.Intent.ACTION_USER_UNLOCKED),
+                androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED,
+            )
+            return
+        }
+        startUnlocked()
+    }
+
+    private fun startUnlocked() {
         // Нужно до создания первого WebView: иначе при экспорте в PDF
         // WebView рисует только видимую часть страницы.
         WebView.enableSlowWholeDocumentDraw()

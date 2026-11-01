@@ -280,33 +280,6 @@ class SettingsRepo(private val context: Context) {
     /** «Тихо на парах» — на этом устройстве (не синхронизируется: на планшете может быть не нужно). */
     fun quietLessons(): Boolean = prefs.getBoolean(K_QUIET, false)
     fun setQuietLessons(on: Boolean) = prefs.edit { putBoolean(K_QUIET, on) }
-    // ---------- будильник к первой паре (своё у каждого устройства) ----------
-    fun wakeOn(): Boolean = prefs.getBoolean("wake_on", false)
-    fun setWakeOn(v: Boolean) = prefs.edit { putBoolean("wake_on", v) }
-    /** Сколько минут собираться. */
-    fun wakeReadyMin(): Int = prefs.getInt("wake_ready", 45)
-    fun setWakeReadyMin(v: Int) = prefs.edit { putInt("wake_ready", v) }
-    /** Сколько минут дорога до кампуса (для онлайн-пар — 0). */
-    fun wakeTravelMin(): Int = prefs.getInt("wake_travel", 15)
-    fun setWakeTravelMin(v: Int) = prefs.edit { putInt("wake_travel", v) }
-    fun wakeMath(): Boolean = prefs.getBoolean("wake_math", true)
-    fun setWakeMath(v: Boolean) = prefs.edit { putBoolean("wake_math", v) }
-    fun wakeCheck(): Boolean = prefs.getBoolean("wake_check", true)
-    fun setWakeCheck(v: Boolean) = prefs.edit { putBoolean("wake_check", v) }
-    /** Когда нажал «Ложусь» (мс). */
-    fun wakeBedAt(): Long = prefs.getLong("wake_bed_at", 0L)
-    fun setWakeBedAt(v: Long) = prefs.edit { putLong("wake_bed_at", v) }
-    fun wakeSkipDay(): String = prefs.getString("wake_skip_day", "").orEmpty()
-    fun setWakeSkipDay(v: String) = prefs.edit { putString("wake_skip_day", v) }
-    fun wakeDoneDay(): String = prefs.getString("wake_done_day", "").orEmpty()
-    fun setWakeDoneDay(v: String) = prefs.edit { putString("wake_done_day", v) }
-    fun wakeSnoozes(): Int = prefs.getInt("wake_snoozes", 0)
-    fun setWakeSnoozes(v: Int) = prefs.edit { putInt("wake_snoozes", v) }
-    fun wakeSnoozeUntil(): Long = prefs.getLong("wake_snooze_until", 0L)
-    fun setWakeSnoozeUntil(v: Long) = prefs.edit { putLong("wake_snooze_until", v) }
-    /** На когда стоит будильник (мс) — чтобы после выключенного телефона позвонить сразу. */
-    fun wakeArmed(): Long = prefs.getLong("wake_armed", 0L)
-    fun setWakeArmed(v: Long) = prefs.edit { putLong("wake_armed", v) }
     fun quietRuleId(): String = prefs.getString(K_QUIET_RULE, "").orEmpty()
     fun setQuietRuleId(id: String) = prefs.edit { putString(K_QUIET_RULE, id) }
 

@@ -48,6 +48,7 @@ import androidx.compose.ui.unit.sp
 import app.nastavnik.app
 import app.nastavnik.study.SleepPlan
 import app.nastavnik.study.WakeAlarm
+import app.nastavnik.study.WakePrefs
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.LocalDateTime
@@ -100,11 +101,12 @@ private fun Clock() {
 @Composable
 private fun RingScreen(test: Boolean, onDone: () -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
-    val app = context.app
+    val w = remember { WakePrefs.of(context) }
     val scope = rememberCoroutineScope()
-    val plan by produceState<WakeAlarm.Plan?>(null) { value = WakeAlarm.plan(context) }
-    val canSnooze by produceState(false) { value = !test && WakeAlarm.canSnooze(context) }
-    val math = app.settings.wakeMath()
+    // Только то, что запомнено вместе с будильником, — работает и до разблокировки после перезагрузки.
+    val lessonAt = remember { w.lessonAt.takeIf { it > 0 }?.let(WakeAlarm::time) }
+    val canSnooze = remember { !test && WakeAlarm.canSnooze(context) }
+    val math = w.math
     val seed = remember { System.currentTimeMillis() / 60_000L }
     val (task, answer) = remember(seed) { SleepPlan.task(seed) }
     var input by remember { mutableStateOf("") }
@@ -127,12 +129,12 @@ private fun RingScreen(test: Boolean, onDone: () -> Unit) {
         Spacer(Modifier.height(24.dp))
         Text(if (test) "Проверка будильника" else "Доброе утро", style = MaterialTheme.typography.titleLarge, color = Brand.InkSoft)
         Clock()
-        plan?.let { p ->
+        lessonAt?.let { at ->
             Text(
-                "Первая пара в ${WakeAlarm.hm(p.lessonAt)}" + (p.label.takeIf { it.isNotBlank() }?.let { "\n$it" } ?: ""),
+                "Первая пара в ${WakeAlarm.hm(at)}" + (w.lessonLabel.takeIf { it.isNotBlank() }?.let { "\n$it" } ?: ""),
                 style = MaterialTheme.typography.titleMedium, color = Brand.Ink, textAlign = TextAlign.Center,
             )
-            val bed = app.settings.wakeBedAt().takeIf { it > 0 }?.let(WakeAlarm::time)
+            val bed = w.bedAt.takeIf { it > 0 }?.let(WakeAlarm::time)
             if (bed != null) {
                 val cycles = SleepPlan.cycles(bed, LocalDateTime.now())
                 Text(
@@ -170,7 +172,7 @@ private fun RingScreen(test: Boolean, onDone: () -> Unit) {
             }
         }
         if (canSnooze) {
-            SoftButton("Ещё ${WakeAlarm.SNOOZE_MIN} минут · осталось ${WakeAlarm.MAX_SNOOZES - app.settings.wakeSnoozes()}", Modifier.fillMaxWidth()) {
+            SoftButton("Ещё ${WakeAlarm.SNOOZE_MIN} минут · осталось ${WakeAlarm.MAX_SNOOZES - w.snoozes}", Modifier.fillMaxWidth()) {
                 scope.launch { WakeAlarm.snooze(context); onDone() }
             }
         } else if (!test) {

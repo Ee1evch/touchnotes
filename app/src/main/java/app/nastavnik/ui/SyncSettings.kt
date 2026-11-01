@@ -37,6 +37,8 @@ import app.nastavnik.study.Alarms
 import app.nastavnik.study.LessonQuiet
 import app.nastavnik.study.SleepPlan
 import app.nastavnik.study.WakeAlarm
+import app.nastavnik.study.WakePrefs
+import app.nastavnik.study.WakeGuard
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import app.nastavnik.sync.WebDavStore
 import app.nastavnik.sync.YandexDiskStore
@@ -257,19 +259,23 @@ fun WakeSection() {
     val context = LocalContext.current
     val app = context.app
     val st = app.settings
+    val w = remember { WakePrefs.of(context) }
     val scope = rememberCoroutineScope()
     val askNotifications = rememberAskNotifications()
-    var on by remember { mutableStateOf(st.wakeOn()) }
-    var ready by remember { mutableStateOf(st.wakeReadyMin()) }
-    var travel by remember { mutableStateOf(st.wakeTravelMin()) }
-    var math by remember { mutableStateOf(st.wakeMath()) }
-    var check by remember { mutableStateOf(st.wakeCheck()) }
-    var skip by remember { mutableStateOf(st.wakeSkipDay()) }
+    var on by remember { mutableStateOf(w.on) }
+    var ready by remember { mutableStateOf(w.readyMin) }
+    var travel by remember { mutableStateOf(w.travelMin) }
+    var math by remember { mutableStateOf(w.math) }
+    var check by remember { mutableStateOf(w.check) }
+    var skip by remember { mutableStateOf(w.skipDay) }
     var tick by remember { mutableStateOf(0) }
     var fullScreen by remember { mutableStateOf(true) }
     var battery by remember { mutableStateOf(true) }
     var notifications by remember { mutableStateOf(true) }
+    var guardOn by remember { mutableStateOf(w.guardOn) }
+    var guardService by remember { mutableStateOf(WakeGuard.enabled(context)) }
     LifecycleResumeEffect(Unit) {
+        guardService = WakeGuard.enabled(context)
         val nm = context.getSystemService(android.app.NotificationManager::class.java)
         fullScreen = android.os.Build.VERSION.SDK_INT < 34 || runCatching { nm.canUseFullScreenIntent() }.getOrDefault(true)
         battery = context.getSystemService(android.os.PowerManager::class.java)?.isIgnoringBatteryOptimizations(context.packageName) ?: true
@@ -293,7 +299,7 @@ fun WakeSection() {
             }
             AppSwitch(on) {
                 on = it
-                st.setWakeOn(it)
+                w.on = it
                 if (it) askNotifications()
                 changed()
             }
@@ -333,26 +339,51 @@ fun WakeSection() {
                 if (skip.isNotEmpty()) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("${java.time.LocalDate.parse(skip).format(java.time.format.DateTimeFormatter.ofPattern("d.MM"))} не разбужу", style = MaterialTheme.typography.bodySmall, color = Brand.InkSoft, modifier = Modifier.weight(1f))
-                        LinkText("вернуть") { st.setWakeSkipDay(""); skip = ""; changed() }
+                        LinkText("вернуть") { w.skipDay = ""; skip = ""; changed() }
                     }
                 } else if (p != null) {
-                    LinkText("Не будить ${dayName?.lowercase()}") { st.setWakeSkipDay(p.date.toString()); skip = p.date.toString(); changed() }
+                    LinkText("Не будить ${dayName?.lowercase()}") { w.skipDay = p.date.toString(); skip = p.date.toString(); changed() }
                 }
 
                 HorizontalDivider(Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant)
                 FieldLabel("Собираться", "Душ, завтрак, одеться.")
-                Segmented(listOf(20 to "20 мин", 30 to "30", 45 to "45", 60 to "60"), ready) { ready = it; st.setWakeReadyMin(it); changed() }
+                Segmented(listOf(20 to "20 мин", 30 to "30", 45 to "45", 60 to "60"), ready) { ready = it; w.readyMin = it; changed() }
                 FieldLabel("Дорога до пары", "Для онлайн-пар не учитывается.")
-                Segmented(listOf(5 to "5 мин", 15 to "15", 25 to "25", 40 to "40"), travel) { travel = it; st.setWakeTravelMin(it); changed() }
+                Segmented(listOf(5 to "5 мин", 15 to "15", 25 to "25", 40 to "40"), travel) { travel = it; w.travelMin = it; changed() }
 
                 HorizontalDivider(Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) { FieldLabel("Выключать примером", "Спящий нажмёт «стоп», а сложить числа — уже нет.") }
-                    AppSwitch(math) { math = it; st.setWakeMath(it) }
+                    AppSwitch(math) { math = it; w.math = it }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) { FieldLabel("Проверить, что встал", "Через 3 минуты: «Ты встал?» Не ответил — звонит снова.") }
-                    AppSwitch(check) { check = it; st.setWakeCheck(it) }
+                    AppSwitch(check) { check = it; w.check = it }
+                }
+
+                // Защита: пока звонит — нельзя выключить телефон и удалить приложение.
+                HorizontalDivider(Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        FieldLabel(
+                            "Не дать отключить",
+                            "Пока звонит: закрываю меню выключения телефона, удаление приложения и настройки. " +
+                                "Если телефон всё-таки перезагрузить кнопкой — после включения зазвоню снова.",
+                        )
+                    }
+                    AppSwitch(guardOn) { guardOn = it; w.guardOn = it }
+                }
+                if (guardOn && !guardService) Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Включи службу «Наставник: защита будильника» в спец. возможностях", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.weight(1f))
+                        LinkText("Открыть") {
+                            runCatching { context.startActivity(Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                        }
+                    }
+                    Text(
+                        "Если пункт серый: Настройки → Приложения → Наставник → ⋮ (сверху справа) → «Разрешить ограниченные настройки», потом снова сюда.",
+                        style = MaterialTheme.typography.bodySmall, color = Brand.InkSoft,
+                    )
                 }
 
                 // Что может помешать будильнику — с кнопками исправить.

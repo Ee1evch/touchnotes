@@ -117,7 +117,16 @@ fun HomeScreen(resumeTick: Int, go: (String) -> Unit, openNotebook: (Long) -> Un
                     .padding(horizontal = if (wide) 32.dp else 18.dp, vertical = 18.dp),
                 verticalArrangement = Arrangement.spacedBy(18.dp),
             ) {
-                Header(now, go)
+                val app = context.app
+                val version by app.schedule.version.collectAsStateWithLifecycle()
+                val clock by produceState(java.time.LocalDateTime.now(), resumeTick) { while (true) { value = java.time.LocalDateTime.now(); kotlinx.coroutines.delay(30_000) } }
+                val lessons by produceState<List<Lesson>?>(null, version, resumeTick, clock.toLocalDate()) { value = app.schedule.day(java.time.LocalDate.now()) }
+                val tomorrow by produceState<List<Lesson>>(emptyList(), version, resumeTick) { value = app.schedule.day(java.time.LocalDate.now().plusDays(1)) }
+                val hasGroup = app.settings.scheduleGroup().isNotBlank()
+                HomeHeader(clock, dayStatus(lessons, clock, hasGroup)) {
+                    RoundIconButton(R.drawable.ic_search, "Поиск") { go(MainActivity.SCREEN_SEARCH) }
+                    RoundIconButton(R.drawable.ic_tune, "Настройки") { go(MainActivity.SCREEN_SETTINGS) }
+                }
 
                 if (!overlay) {
                     Banner("Разреши «Поверх других окон», чтобы кнопка наставника появлялась над записями.", "Разрешить") {
@@ -126,67 +135,37 @@ fun HomeScreen(resumeTick: Int, go: (String) -> Unit, openNotebook: (Long) -> Un
                 }
                 if (notReady != null) Banner("$notReady — без этого наставник не ответит.", "Настроить") { go(MainActivity.SCREEN_SETTINGS) }
 
-                val lessonsPanel = @Composable { LessonsPanel(resumeTick, go, onRoom) }
-                val todayPanel = @Composable { TodayPanel(due, streak, week, exam, go) }
-                val sections = @Composable { SectionsList(go) }
+                val dayCard = @Composable { DayCard(lessons, tomorrow, clock, hasGroup, onRoom = onRoom, onSchedule = { go(MainActivity.SCREEN_SCHEDULE) }) }
+                val tiles = @Composable { DayTiles(due, streak, week, exam, resumeTick, promoteAlarm = false, go = go) }
                 val notebooks = @Composable { NotebooksSection(resumeTick, go, openNotebook) }
                 val mentor = @Composable { MentorStrip(resumeTick, tick, overlay) { tick++ } }
+                val reminders = @Composable { RemindersCard(go) }
 
                 if (wide) {
+                    // Слева — день и работа (тетради, наставник), справа — учёба и разделы.
                     Row(horizontalArrangement = Arrangement.spacedBy(22.dp)) {
-                        Column(Modifier.weight(1.65f), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+                        Column(Modifier.weight(1.55f), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+                            dayCard()
                             notebooks()
                             mentor()
                         }
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(18.dp)) {
-                            lessonsPanel()
-                            todayPanel()
-                            sections()
+                            tiles()
+                            reminders()
+                            SectionsGrid(go, columns = 3, items = TABLET_SECTIONS)
                         }
                     }
                 } else {
-                    lessonsPanel()
-                    todayPanel()
+                    dayCard()
+                    tiles()
                     notebooks()
                     mentor()
-                    sections()
+                    reminders()
+                    SectionsGrid(go, columns = 3, items = TABLET_SECTIONS)
                 }
-
             }
         }
     }
-    }
-}
-
-/** Шапка: приветствие по времени суток, дата, поиск и настройки. */
-@Composable
-private fun Header(now: Long, go: (String) -> Unit) {
-    val hour = remember(now) { Calendar.getInstance().apply { timeInMillis = now }.get(Calendar.HOUR_OF_DAY) }
-    val greeting = when (hour) {
-        in 5..11 -> "Доброе утро"
-        in 12..17 -> "Добрый день"
-        in 18..22 -> "Добрый вечер"
-        else -> "Доброй ночи"
-    }
-    val date = remember(now) {
-        SimpleDateFormat("EEEE, d MMMM", Locale.forLanguageTag("ru")).format(Date(now)).replaceFirstChar { it.uppercase() }
-    }
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(
-            Modifier
-                .size(46.dp)
-                .glass(RoundedCornerShape(15.dp), 6.dp, strong = true),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(painterResource(R.drawable.ic_sparkle), contentDescription = null, tint = Brand.Ink, modifier = Modifier.size(22.dp))
-        }
-        Column(Modifier.padding(start = 14.dp).weight(1f)) {
-            Text(greeting, style = MaterialTheme.typography.headlineSmall)
-            Text(date, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        RoundIconButton(R.drawable.ic_search, "Поиск") { go(MainActivity.SCREEN_SEARCH) }
-        Spacer(Modifier.width(10.dp))
-        RoundIconButton(R.drawable.ic_tune, "Настройки") { go(MainActivity.SCREEN_SETTINGS) }
     }
 }
 
@@ -440,157 +419,5 @@ private fun MentorStrip(resumeTick: Int, tick: Int, canStart: Boolean, changed: 
                 if (notesApp != null) ChipButton("Открыть ${notesApp.label}") { NoteApps.open(context, notesApp) }
             }
         }
-    }
-}
-
-/** Пары сегодня: что сейчас и что дальше (на планшете — над «Сегодня»). */
-@Composable
-private fun LessonsPanel(resumeTick: Int, go: (String) -> Unit, onRoom: (String) -> Unit) {
-    val context = LocalContext.current
-    val app = context.app
-    val version by app.schedule.version.collectAsStateWithLifecycle()
-    val now = remember(resumeTick) { java.time.LocalDateTime.now() }
-    val lessons by produceState<List<Lesson>?>(null, version, resumeTick) { value = app.schedule.day(java.time.LocalDate.now()) }
-    val tomorrow by produceState<List<Lesson>>(emptyList(), version, resumeTick) { value = app.schedule.day(java.time.LocalDate.now().plusDays(1)) }
-    NowCard(lessons, tomorrow, now, hasGroup = app.settings.scheduleGroup().isNotBlank(), onRoom = onRoom, onSchedule = { go(MainActivity.SCREEN_SCHEDULE) })
-}
-
-/** «Сегодня»: карточки на повторение, серия за неделю и ближайший экзамен. */
-@Composable
-private fun TodayPanel(due: Int, streak: Int, week: List<Int>, exam: Exam?, go: (String) -> Unit) {
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .enter().glass(RoundedCornerShape(26.dp), 12.dp)
-            .padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        Text("Сегодня", style = MaterialTheme.typography.titleLarge)
-
-        // Карточки: большое число и одна кнопка.
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(14.dp))
-                .clickable { go(MainActivity.SCREEN_REVIEW) },
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
-            Column(Modifier.weight(1f)) {
-                if (due > 0) {
-                    Text(due.toString(), style = MaterialTheme.typography.displaySmall)
-                    Text(
-                        ruPlural(due, "карточка ждёт повторения", "карточки ждут повторения", "карточек ждут повторения"),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                } else {
-                    Text("Всё повторено", style = MaterialTheme.typography.titleMedium)
-                    Text("Новые карточки появятся из чистовиков", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-            if (due > 0) InkButton("Повторить", icon = R.drawable.ic_cards) { go(MainActivity.SCREEN_REVIEW) }
-        }
-
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-
-        // Серия: семь кружков — дни недели, когда занимался.
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(14.dp))
-                .clickable { go(MainActivity.SCREEN_PROGRESS) },
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Icon(painterResource(R.drawable.ic_flame), contentDescription = null, tint = if (streak > 0) Brand.Theory else Brand.InkSoft, modifier = Modifier.size(22.dp))
-            Text(
-                if (streak > 0) "$streak ${ruPlural(streak, "день", "дня", "дней")} подряд" else "Начни серию сегодня",
-                style = MaterialTheme.typography.titleSmall,
-                modifier = Modifier.weight(1f),
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                week.forEachIndexed { i, n ->
-                    val isToday = i == week.lastIndex
-                    Box(
-                        Modifier
-                            .size(12.dp)
-                            .clip(CircleShape)
-                            .background(if (n > 0) Brand.Accent else Brand.Line)
-                            .then(if (isToday && n == 0) Modifier.border(1.2.dp, Brand.InkSoft, CircleShape) else Modifier),
-                    )
-                }
-            }
-        }
-
-        // Экзамен — или приглашение добавить.
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(14.dp))
-                .clickable { go(MainActivity.SCREEN_EXAMS) },
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Icon(painterResource(R.drawable.ic_calendar), contentDescription = null, tint = Brand.InkSoft, modifier = Modifier.size(22.dp))
-            if (exam != null) {
-                val days = ExamPlan.daysLeft(exam.at, System.currentTimeMillis())
-                Text(
-                    if (days == 0) "Сегодня экзамен: ${exam.subject}" else "${exam.subject}: экзамен через $days ${ruPlural(days, "день", "дня", "дней")}",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = if (days <= 3) Brand.Error else MaterialTheme.colorScheme.onSurface,
-                    maxLines = 2,
-                    modifier = Modifier.weight(1f),
-                )
-            } else {
-                Text("Добавь экзамен — повторение подстроится", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
-            }
-            Icon(painterResource(R.drawable.ic_chevron), contentDescription = null, tint = Brand.InkSoft, modifier = Modifier.size(18.dp))
-        }
-    }
-}
-
-/** Остальные разделы — компактным списком, а не россыпью плиток. */
-@Composable
-private fun SectionsList(go: (String) -> Unit) {
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .enter().glass(RoundedCornerShape(26.dp), 8.dp)
-            .padding(vertical = 6.dp),
-    ) {
-        val rows = listOf(
-            Triple(R.drawable.ic_calendar, "Расписание", "Пары группы, окна, аудитории") to MainActivity.SCREEN_SCHEDULE,
-            Triple(R.drawable.ic_map, "Карта кампуса", "Найти аудиторию и дойти") to MainActivity.SCREEN_MAP,
-            Triple(R.drawable.ic_bell, "Напоминания", "Дедлайны — и на телефоне тоже") to MainActivity.SCREEN_REMINDERS,
-            Triple(R.drawable.ic_chart, "Успеваемость", "Оценки из личного кабинета") to MainActivity.SCREEN_GRADES,
-            Triple(R.drawable.ic_target, "Тренировка", "Вариант контрольной, мини-тест") to MainActivity.SCREEN_TRAINING,
-            Triple(R.drawable.ic_chart, "Прогресс", "Серия и темы с ошибками") to MainActivity.SCREEN_PROGRESS,
-            Triple(R.drawable.ic_history, "История", "Задачи с наставником и чистовики") to MainActivity.SCREEN_HISTORY,
-            Triple(R.drawable.ic_note, "Чистовик", "Записи → аккуратный PDF") to MainActivity.SCREEN_CLEAN,
-        )
-        rows.forEachIndexed { i, (spec, screen) ->
-            SectionRow(spec.first, spec.second, spec.third) { go(screen) }
-            if (i < rows.lastIndex) HorizontalDivider(Modifier.padding(start = 70.dp, end = 18.dp), color = MaterialTheme.colorScheme.outlineVariant)
-        }
-    }
-}
-
-@Composable
-private fun ColumnScope.SectionRow(icon: Int, title: String, caption: String, onClick: () -> Unit) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-        IconBadge(icon, 40)
-        Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.titleSmall)
-            Text(caption, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-        Icon(painterResource(R.drawable.ic_chevron), contentDescription = null, tint = Brand.InkSoft, modifier = Modifier.size(18.dp))
     }
 }

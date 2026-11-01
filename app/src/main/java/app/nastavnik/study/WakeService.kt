@@ -37,10 +37,15 @@ class WakeService : Service() {
     private var vibrator: Vibrator? = null
     private var wake: PowerManager.WakeLock? = null
     private var savedVolume = -1
-    private var ringing = false
     private var startedAt = 0L
     private var test = false
     private val main = Handler(Looper.getMainLooper())
+
+    companion object {
+        /** Звонит ли сейчас (для защиты — какой экран вернуть). */
+        @Volatile var ringing = false
+            private set
+    }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -58,8 +63,12 @@ class WakeService : Service() {
         if (!ringing) {
             ringing = true
             startedAt = System.currentTimeMillis()
+            val w = WakePrefs.of(this)
             // Будильник сработал — старая отметка «отложено до» больше не нужна.
-            if (!test) app.settings.setWakeSnoozeUntil(0)
+            if (!test) w.snoozeUntil = 0
+            // Пока звонит — нельзя удалить приложение и выключить телефон (до начала пары, но не дольше 3 часов).
+            val now = System.currentTimeMillis()
+            w.guardUntil = if (test) now + 60_000L else maxOf(now + 20 * 60_000L, minOf(w.lessonAt, now + 3 * 3_600_000L))
             wake = getSystemService(PowerManager::class.java)
                 ?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "nastavnik:wake")
                 ?.apply { setReferenceCounted(false); acquire(WakeAlarm.RING_LIMIT_MS + 60_000L) }
@@ -94,7 +103,7 @@ class WakeService : Service() {
             .setFullScreenIntent(full, true)
             .setOngoing(true)
             .setSilent(true)
-            .apply { if (!test) addAction(0, "Ещё ${WakeAlarm.SNOOZE_MIN} минут", snooze) }
+            .apply { if (!test && WakeAlarm.canSnooze(this@WakeService)) addAction(0, "Ещё ${WakeAlarm.SNOOZE_MIN} минут", snooze) }
             .build()
     }
 
@@ -170,7 +179,7 @@ class WakeService : Service() {
     /** Не выключил за 10 минут — замолкаем и через 3 минуты звоним снова. */
     private fun timeout() {
         if (!ringing) return
-        if (test) { stopSelf(); return }
+        if (test) { WakePrefs.of(this).guardUntil = 0; stopSelf(); return }
         app.appScope.launch { runCatching { WakeAlarm.ringAgainLater(this@WakeService) } }
         stopSelf()
     }
