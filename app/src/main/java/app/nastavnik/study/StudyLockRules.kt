@@ -132,6 +132,17 @@ object StudyLockRules {
         return appLabel.lowercase() in t && dangerWords.any { it in t }
     }
 
+    /**
+     * Похоже ли окно на меню питания: есть и «выключить», и «перезагрузить» — в любых формулировках
+     * производителей («Выключение», «Отключить питание», «Перезапуск», «Power off», «Restart»…).
+     */
+    fun powerMenu(windowText: String): Boolean {
+        val t = windowText.lowercase()
+        val off = listOf("выключ", "отключить питание", "отключение питания", "power off", "shut down", "shutdown", "turn off").any { it in t }
+        val restart = listOf("перезагру", "перезапус", "restart", "reboot").any { it in t }
+        return off && restart
+    }
+
     /** Разрешено ли приложение во время замка. */
     fun allowed(pkg: String, chosen: Set<String>, always: Set<String>): Boolean = pkg in chosen || pkg in always
 

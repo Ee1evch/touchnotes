@@ -38,12 +38,14 @@ class WakeService : Service() {
     private var wake: PowerManager.WakeLock? = null
     private var savedVolume = -1
     private var startedAt = 0L
-    private var test = false
     private val main = Handler(Looper.getMainLooper())
 
     companion object {
         /** Звонит ли сейчас (для защиты — какой экран вернуть). */
         @Volatile var ringing = false
+            private set
+        /** Пробный звонок из настроек — экран будильника выключается без примера. */
+        @Volatile var test = false
             private set
     }
 

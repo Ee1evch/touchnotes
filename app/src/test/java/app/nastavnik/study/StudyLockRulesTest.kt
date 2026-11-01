@@ -136,4 +136,14 @@ class StudyLockRulesTest {
         // Чужое приложение с «Удалить» — не наше дело.
         assertFalse(StudyLockRules.dangerousSettings("Сведения о приложении Telegram Удалить Остановить", app, guard))
     }
+
+    @Test
+    fun recognizesPowerMenusOfDifferentPhones() {
+        assertTrue(StudyLockRules.powerMenu("Выключить Перезапустить Экстренный вызов")) // Pixel
+        assertTrue(StudyLockRules.powerMenu("Выключение Перезагрузка Экстренный режим")) // Samsung
+        assertTrue(StudyLockRules.powerMenu("Отключить питание Перезагрузить")) // старые Android
+        assertTrue(StudyLockRules.powerMenu("Power off Restart Emergency")) // английский
+        assertFalse(StudyLockRules.powerMenu("Выключить звук")) // не меню питания
+        assertFalse(StudyLockRules.powerMenu("Перезагрузить страницу"))
+    }
 }

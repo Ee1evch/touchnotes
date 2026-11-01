@@ -69,7 +69,8 @@ class WakeGuard : AccessibilityService() {
                 val pkg = root?.packageName?.toString()
                 if (pkg != null) evaluate(pkg, "", "", root)
             }
-            main.postDelayed(this, 2_000)
+            // Пока звонит будильник — чаще: меню выключения закрываем, не дав нажать.
+            main.postDelayed(this, if (WakePrefs.of(this@WakeGuard).guarding) 500L else 2_000L)
         }
     }
 
@@ -176,11 +177,7 @@ class WakeGuard : AccessibilityService() {
         return hasPowerWords(words.toString().lowercase())
     }
 
-    private fun hasPowerWords(t: String): Boolean {
-        val off = listOf("выключить", "отключить питание", "power off", "shut down").any { it in t }
-        val restart = listOf("перезапустить", "перезагрузить", "перезагрузка", "restart", "reboot").any { it in t }
-        return off && restart
-    }
+    private fun hasPowerWords(t: String): Boolean = StudyLockRules.powerMenu(t)
 
     private fun collect(n: AccessibilityNodeInfo?, out: StringBuilder, depth: Int, max: Int) {
         if (n == null || depth > max || out.length > 6000) return
@@ -195,6 +192,7 @@ class WakeGuard : AccessibilityService() {
             startActivity(
                 Intent(this, WakeActivity::class.java)
                     .putExtra(WakeActivity.EXTRA_CHECK, !ringing)
+                    .putExtra(WakeAlarm.EXTRA_TEST, WakeService.test)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT),
             )
         }

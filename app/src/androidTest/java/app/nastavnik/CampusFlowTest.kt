@@ -342,6 +342,31 @@ class CampusFlowTest {
         }
     }
 
+    /** Пока звонит будильник, меню выключения закрывается само — настоящая служба защиты, как на телефоне. */
+    @Test
+    fun alarmClosesPowerMenu() {
+        Configurator.getInstance().uiAutomationFlags = UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES
+        val ua = instr.getUiAutomation(UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES)
+        device.executeShellCommand("settings put secure enabled_accessibility_services ${ctx.packageName}/${WakeGuard::class.java.name}")
+        device.executeShellCommand("settings put secure accessibility_enabled 1")
+        try {
+            SystemClock.sleep(3000)
+            WakeAlarm.startRinging(ctx, test = true)
+            SystemClock.sleep(2500)
+            assertTrue("защита будильника не включилась", WakePrefs.of(ctx).guarding)
+            // Как долгое нажатие кнопки питания: системное меню «Выключить / Перезапустить».
+            ua.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_POWER_DIALOG)
+            SystemClock.sleep(3000)
+            screenshot("alarm_power_menu")
+            assertNull("меню выключения не закрылось", device.findObject(By.text("Power off")) ?: device.findObject(By.text("Выключить")))
+        } finally {
+            runBlocking { WakeAlarm.dismiss(ctx, true) }
+            device.findObject(By.text("Выключить проверку"))?.click()
+            device.executeShellCommand("settings delete secure enabled_accessibility_services")
+            Configurator.getInstance().uiAutomationFlags = 0
+        }
+    }
+
     @Test
     fun syncSourceRoundTrip() = runBlocking {
         val app = ctx.app
