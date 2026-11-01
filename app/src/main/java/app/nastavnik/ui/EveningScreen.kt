@@ -88,7 +88,7 @@ fun EveningScreen(resumeTick: Int, onBack: () -> Unit, go: (String) -> Unit) {
                 when {
                     s.allDone -> "Готово — свободен до завтрашнего вечера"
                     s.locked -> "Приложения закрыты, пока не сделаешь"
-                    s.configured -> "С ${hhmm(s.startMinutes)} приложения закроются — сделай заранее"
+                    s.configured -> "В ${s.startAt.format(DateTimeFormatter.ofPattern("H:mm"))} (через 40 минут после пар) приложения закроются — сделай заранее"
                     else -> "Повтори день и подготовься к завтра"
                 },
                 style = MaterialTheme.typography.titleLarge,
@@ -129,8 +129,6 @@ fun EveningScreen(resumeTick: Int, onBack: () -> Unit, go: (String) -> Unit) {
         }
     }
 }
-
-private fun hhmm(min: Int) = "%d:%02d".format(min / 60, min % 60)
 
 @Composable
 private fun Step(n: Int, title: String, done: Boolean, content: @Composable () -> Unit) {

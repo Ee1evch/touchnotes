@@ -86,39 +86,57 @@ class WakeGuard : AccessibilityService() {
         val lock = LockPrefs.of(this)
         val system = isSettings(pkg) || pkg.contains("packageinstaller") || pkg == "com.android.vending"
 
-        // 1. Будильник.
+        // Рабочий стол открыт всегда: иначе «Домой» → закрыть → «Домой» по кругу.
+        if (isLauncher(pkg)) return
+
+        // 1. Будильник: меню питания — «Назад»; настройки и установщик — экран будильника поверх.
         if (wake.guardOn && wake.guarding) {
-            if (isPowerMenu(pkg, cls, text, root) || system) {
-                block(home = system) { bringAlarmBack() }
-                return
-            }
+            if (isPowerMenu(pkg, cls, text, root)) { pressBack { bringAlarmBack() }; return }
+            if (system) { cover { bringAlarmBack() }; return }
         }
         if (!lock.configured) return
 
-        // 2. Учебный замок.
+        // 2. Учебный замок: чужое приложение — вечерняя учёба поверх него (без «Назад»/«Домой» — без мигания).
         val lockedNow = StudyLock.locked && !lock.emergencyActive
-        if (lockedNow) {
-            if (system) { block(home = true) { openEvening() }; return }
-            if (!StudyLockRules.allowed(pkg, lock.allowed, alwaysAllowed())) { block(home = true) { openEvening() }; return }
+        if (lockedNow && (system || !StudyLockRules.allowed(pkg, lock.allowed, alwaysAllowed()))) {
+            cover { openEvening() }
+            return
         }
 
-        // 3. Самозащита: окна про «Наставник» в настройках и установщике.
-        if (system && mentionsMe(text, root)) block(home = true) { }
+        // 3. Самозащита: окна про «Наставник» в настройках и установщике — закрыть.
+        if (system && mentionsMe(text, root)) pressBack { performGlobalAction(GLOBAL_ACTION_HOME) }
+    }
+
+    private fun isLauncher(pkg: String) = pkg.contains("launcher") || pkg in homes()
+
+    private var homeSet: Set<String> = emptySet()
+    private fun homes(): Set<String> {
+        if (homeSet.isEmpty()) homeSet = StudyLock.homePackages(this)
+        return homeSet
+    }
+
+    /** Открыть наш экран поверх — не чаще раза в 1,5 секунды. */
+    private fun cover(action: () -> Unit) {
+        val now = System.currentTimeMillis()
+        if (now - lastBlock < 1500) return
+        lastBlock = now
+        action()
+    }
+
+    /** Закрыть системное окно (меню питания, диалог удаления) кнопкой «Назад», потом [then]. */
+    private fun pressBack(then: () -> Unit) {
+        val now = System.currentTimeMillis()
+        if (now - lastBlock < 700) return
+        lastBlock = now
+        performGlobalAction(GLOBAL_ACTION_BACK)
+        main.postDelayed({ performGlobalAction(GLOBAL_ACTION_BACK) }, 180)
+        main.postDelayed(then, 380)
     }
 
     private fun alwaysAllowed(): Set<String> {
         val now = System.currentTimeMillis()
         if (now - alwaysAt > 60_000L) { always = StudyLock.alwaysAllowed(this); alwaysAt = now }
         return always
-    }
-
-    private fun block(home: Boolean, then: () -> Unit) {
-        val now = System.currentTimeMillis()
-        if (now - lastBlock < 700) return
-        lastBlock = now
-        performGlobalAction(GLOBAL_ACTION_BACK)
-        if (home) main.postDelayed({ performGlobalAction(GLOBAL_ACTION_HOME) }, 150)
-        main.postDelayed(then, 380)
     }
 
     private fun mentionsMe(text: String, root: AccessibilityNodeInfo?): Boolean {

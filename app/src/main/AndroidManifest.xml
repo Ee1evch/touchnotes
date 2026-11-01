@@ -56,6 +56,11 @@
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />
         </intent>
+        <!-- Рабочий стол: во время учебного замка он открыт всегда -->
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.HOME" />
+        </intent>
         <!-- Распознавание речи -->
         <intent>
             <action android:name="android.speech.RecognitionService" />

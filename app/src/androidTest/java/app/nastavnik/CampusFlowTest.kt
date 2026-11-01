@@ -260,7 +260,10 @@ class CampusFlowTest {
                 assertTrue(st.prep.any { it.first == "Иностранный язык" })
                 StudyLock.markPrepared(ctx, st.date, "Иностранный язык")
                 assertTrue(StudyLock.status(ctx).prepDone)
-                assertTrue(ctx.app.db.cards().all().any { it.subject == "Физика" && it.front.contains("Физика") })
+                val physics = ctx.app.db.cards().all().filter { it.subject == "Физика" }
+                assertTrue(physics.any { it.front.contains("Вспомни главное") })
+                // Из конспекта — ещё и карточки «заполни пропуск».
+                assertTrue("мало карточек из конспекта: ${physics.size}", physics.count { it.front.startsWith("Заполни пропуск") } >= 2)
             }
         } finally {
             sc.close()

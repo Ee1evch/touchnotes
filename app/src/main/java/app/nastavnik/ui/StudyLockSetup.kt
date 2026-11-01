@@ -84,7 +84,7 @@ fun StudyLockSetupScreen(onBack: () -> Unit, onDone: () -> Unit) {
     ScreenScaffold(title = "Учебный замок", onBack = onBack) {
         SectionCard(null) {
             Text(
-                "Каждый вечер с выбранного времени все приложения закрываются, пока не сделаешь вечернюю учёбу: " +
+                "Каждый день через 40 минут после последней пары все приложения закрываются, пока не сделаешь вечернюю учёбу: " +
                     "карточки на сегодня, пара предложений по каждой сегодняшней паре и подготовка к завтрашним. " +
                     "Не сделал вечером — замок остаётся и утром, пока не доделаешь.",
                 style = MaterialTheme.typography.bodyMedium,
@@ -112,7 +112,8 @@ fun StudyLockSetupScreen(onBack: () -> Unit, onDone: () -> Unit) {
             }
         }
 
-        SectionCard("2. Во сколько закрывать") {
+        SectionCard("2. Если пар нет — во сколько закрывать") {
+            Text("В дни с парами замок включится сам через 40 минут после последней пары.", style = MaterialTheme.typography.bodySmall, color = Brand.InkSoft)
             Segmented(listOf(18 * 60 to "18:00", 19 * 60 to "19:00", 20 * 60 to "20:00", 21 * 60 to "21:00", 22 * 60 to "22:00"), start) { start = it }
         }
 
@@ -154,7 +155,7 @@ fun StudyLockSetupScreen(onBack: () -> Unit, onDone: () -> Unit) {
             onDismissRequest = { confirm = false },
             title = { Text("Включить навсегда?") },
             text = {
-                Text("Каждый день с ${"%d:%02d".format(start / 60, start % 60)} закрыто всё, кроме: $names.\n\nИзменить это или выключить замок потом будет нельзя.")
+                Text("Каждый день через 40 минут после последней пары (без пар — с ${"%d:%02d".format(start / 60, start % 60)}) закрыто всё, кроме: $names.\n\nИзменить это или выключить замок потом будет нельзя.")
             },
             confirmButton = {
                 LinkText(if (wait > 0) "Включить ($wait)" else "Включить") {
@@ -188,7 +189,7 @@ fun StudyLockSection(go: (String) -> Unit) {
             InkButton("Настроить") { go(MainActivity.SCREEN_LOCK_SETUP) }
         } else {
             FieldLabel(
-                "Каждый день с ${"%d:%02d".format(lp.startMinutes / 60, lp.startMinutes % 60)}",
+                "Через 40 минут после последней пары (без пар — с ${"%d:%02d".format(lp.startMinutes / 60, lp.startMinutes % 60)})",
                 "Открыты: ${names.joinToString().ifBlank { "только телефон и SMS" }}. Изменить нельзя.",
             )
             if (!service) StatusLine("Служба защиты выключена — замок не работает. Включи её в спец. возможностях.", Tone.ERROR)

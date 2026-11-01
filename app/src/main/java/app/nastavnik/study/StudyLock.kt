@@ -116,7 +116,8 @@ object StudyLock {
         /** Предметы следующего дня и готов ли к ним. */
         val prep: List<Pair<String, Boolean>>,
         val nextDate: LocalDate,
-        val startMinutes: Int,
+        /** Когда в этот день закрывается: через 40 минут после последней пары. */
+        val startAt: LocalDateTime,
         val emergency: Boolean,
     ) {
         val cardsDone get() = due == 0
@@ -150,7 +151,13 @@ object StudyLock {
     suspend fun status(context: Context, now: LocalDateTime = LocalDateTime.now()): Status = withContext(Dispatchers.IO) {
         val app = context.app
         val lp = LockPrefs.of(context)
-        val pending = if (lp.configured) StudyLockRules.pending(now, lp.startMinutes, lp.since, lp.done) else emptyList()
+        val today0 = StudyLockRules.sessionDate(now)
+        val starts = mapOf(
+            today0 to startOf(context, today0, lp.startMinutes),
+            today0.minusDays(1) to startOf(context, today0.minusDays(1), lp.startMinutes),
+        )
+        val startFn = { d: LocalDate -> starts[d] ?: StudyLockRules.lockStart(d, lp.startMinutes) }
+        val pending = if (lp.configured) StudyLockRules.pending(now, startFn, lp.since, lp.done) else emptyList()
         val date = pending.firstOrNull() ?: StudyLockRules.sessionDate(now)
         val e = evening(context, date)
         val today = StudyLockRules.disciplines(app.schedule.day(date))
@@ -166,7 +173,7 @@ object StudyLock {
             summaries = today.map { it to ((e.summaries[it]?.trim()?.length ?: 0) >= StudyLockRules.SUMMARY_MIN_CHARS) },
             prep = prepSubjects.map { it to (it in e.prepared) },
             nextDate = next,
-            startMinutes = lp.startMinutes,
+            startAt = startFn(date),
             emergency = lp.emergencyActive,
         )
         // Заранее можно — но не раньше полудня: конспекты пар пишут после пар.
@@ -174,7 +181,7 @@ object StudyLock {
             // Сделал — день закрыт (если сделал заранее, днём, — вечером замка не будет).
             lp.markDone(date)
         }
-        val stillPending = if (lp.configured) StudyLockRules.pending(now, lp.startMinutes, lp.since, lp.done) else emptyList()
+        val stillPending = if (lp.configured) StudyLockRules.pending(now, startFn, lp.since, lp.done) else emptyList()
         s = s.copy(locked = stillPending.isNotEmpty() && !lp.emergencyActive)
         locked = s.locked
         lp.lockedCache = s.locked
@@ -182,25 +189,53 @@ object StudyLock {
         s
     }
 
-    /** «Что было сегодня»: сохранить конспект пары и сделать из него карточку на завтра. */
+    /** Начало замка в день [date]: через 40 минут после последней пары, без пар — в выбранное время. */
+    suspend fun startOf(context: Context, date: LocalDate, fallbackMinutes: Int): LocalDateTime =
+        StudyLockRules.lockStart(date, runCatching { context.app.schedule.day(date) }.getOrDefault(emptyList()), fallbackMinutes)
+
+    /**
+     * «Что было сегодня»: сохранить конспект пары и сделать из него карточки на завтра —
+     * «вспомни главное», «заполни пропуск» по каждой фразе и (если настроена нейросеть) вопросы по конспекту.
+     */
     suspend fun saveSummary(context: Context, date: LocalDate, subject: String, text: String) = withContext(Dispatchers.IO) {
         val e = evening(context, date)
         val first = e.summaries[subject].isNullOrBlank()
         save(context, date, e.copy(summaries = e.summaries + (subject to text.trim())))
         if (first) {
+            val app = context.app
             val now = System.currentTimeMillis()
+            val due = now + 20 * 3_600_000L
             val day = date.format(DateTimeFormatter.ofPattern("d MMMM", ru))
-            context.app.db.cards().insertAll(
-                listOf(
-                    CardEntity(
-                        noteId = null, subject = subject, topic = "Пара $day",
-                        front = "Что разбирали на паре «$subject» $day? Вспомни главное своими словами.",
-                        back = text.trim(), dueAt = now + 20 * 3_600_000L, createdAt = now,
-                    ),
+            val topic = "Пара $day"
+            val cards = mutableListOf(
+                CardEntity(
+                    noteId = null, subject = subject, topic = topic,
+                    front = "Что разбирали на паре «$subject» $day? Вспомни главное своими словами.",
+                    back = text.trim(), dueAt = due, createdAt = now,
                 ),
             )
-            context.app.study.record(Progress.KIND_CARD, subject)
-            context.app.sync.soon(8000)
+            StudyLockRules.cloze(text).forEach { (front, back) ->
+                cards += CardEntity(noteId = null, subject = subject, topic = topic, front = "Заполни пропуск ($subject):\n$front", back = back, dueAt = due, createdAt = now)
+            }
+            app.db.cards().insertAll(cards)
+            app.study.record(Progress.KIND_CARD, subject)
+            // Вопросы по конспекту от нейросети — в фоне, если она настроена (не настроена — просто пропускаем).
+            app.appScope.launch(Dispatchers.IO) {
+                val r = runCatching { app.trainer.quiz(Material(subject, text.trim(), subject = subject), count = 6) }.getOrNull()
+                if (r is TrainResult.Ok) {
+                    val t = System.currentTimeMillis()
+                    app.db.cards().insertAll(
+                        r.value.map { q ->
+                            val answer = q.options.getOrNull(q.correct).orEmpty()
+                            CardEntity(
+                                noteId = null, subject = subject, topic = topic, front = q.q,
+                                back = if (q.why.isBlank()) answer else "$answer\n\n${q.why}", dueAt = due, createdAt = t,
+                            )
+                        },
+                    )
+                }
+                app.sync.soon(8000)
+            }
         }
     }
 
@@ -246,11 +281,24 @@ object StudyLock {
         runCatching {
             context.getSystemService(InputMethodManager::class.java)?.enabledInputMethodList?.forEach { out += it.packageName }
         }
+        out += homePackages(context)
+        return out
+    }
+
+    /** Рабочие столы (лаунчеры): все установленные и тот, что по умолчанию. */
+    fun homePackages(context: Context): Set<String> {
+        val out = mutableSetOf<String>()
+        val pm = context.packageManager
+        val home = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
         runCatching {
-            val home = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
-            val list = if (Build.VERSION.SDK_INT >= 33) context.packageManager.queryIntentActivities(home, PackageManager.ResolveInfoFlags.of(0L))
-            else @Suppress("DEPRECATION") context.packageManager.queryIntentActivities(home, 0)
+            val list = if (Build.VERSION.SDK_INT >= 33) pm.queryIntentActivities(home, PackageManager.ResolveInfoFlags.of(0L))
+            else @Suppress("DEPRECATION") pm.queryIntentActivities(home, 0)
             list.forEach { out += it.activityInfo.packageName }
+        }
+        runCatching {
+            val def = if (Build.VERSION.SDK_INT >= 33) pm.resolveActivity(home, PackageManager.ResolveInfoFlags.of(PackageManager.MATCH_DEFAULT_ONLY.toLong()))
+            else @Suppress("DEPRECATION") pm.resolveActivity(home, PackageManager.MATCH_DEFAULT_ONLY)
+            def?.activityInfo?.packageName?.takeIf { it != "android" }?.let(out::add)
         }
         return out
     }
@@ -261,7 +309,7 @@ object StudyLock {
     )
 
     /** Будильники: за 30 минут предупредить, в начало — закрыть и показать уведомление. */
-    fun schedule(context: Context) {
+    suspend fun schedule(context: Context) {
         val lp = LockPrefs.of(context)
         val am = context.getSystemService(AlarmManager::class.java) ?: return
         val warn = broadcast(context, ACTION_WARN, REQ_WARN)
@@ -269,8 +317,8 @@ object StudyLock {
         am.cancel(warn); am.cancel(start)
         if (!lp.configured) return
         val now = LocalDateTime.now()
-        var startAt = StudyLockRules.lockStart(now.toLocalDate(), lp.startMinutes)
-        if (!startAt.isAfter(now)) startAt = startAt.plusDays(1)
+        var startAt = startOf(context, now.toLocalDate(), lp.startMinutes)
+        if (!startAt.isAfter(now)) startAt = startOf(context, now.toLocalDate().plusDays(1), lp.startMinutes)
         val warnAt = startAt.minusMinutes(30)
         fun ms(t: LocalDateTime) = t.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
         val exact = Build.VERSION.SDK_INT < Build.VERSION_CODES.S || am.canScheduleExactAlarms()

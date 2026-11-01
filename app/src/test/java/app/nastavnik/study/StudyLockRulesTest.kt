@@ -85,4 +85,36 @@ class StudyLockRulesTest {
         assertTrue(StudyLockRules.allowed("com.android.dialer", emptySet(), setOf("com.android.dialer")))
         assertFalse(StudyLockRules.allowed("com.zhiliaoapp.musically", setOf("org.telegram.messenger"), setOf("com.android.dialer")))
     }
+
+    @Test
+    fun lockStartsFortyMinutesAfterLastLesson() {
+        val day = listOf(
+            Lesson("1", mon.toString(), "09:00", "10:30", discipline = "Физика", type = "Лекция"),
+            Lesson("2", mon.toString(), "13:00", "14:30", discipline = "Математический анализ", type = "Практика"),
+            Lesson("3", mon.toString(), "18:00", "19:30", discipline = "Кураторский час", type = "Внеучебное"),
+        )
+        assertEquals(at(mon, 15, 10), StudyLockRules.lockStart(mon, day, start20))
+        // Без пар — выбранное время.
+        assertEquals(at(mon, 20, 0), StudyLockRules.lockStart(mon, emptyList(), start20))
+        val start = { d: LocalDate -> if (d == mon) at(mon, 15, 10) else StudyLockRules.lockStart(d, start20) }
+        assertEquals(emptyList<LocalDate>(), StudyLockRules.pending(at(mon, 15, 9), start, mon, emptySet()))
+        assertEquals(listOf(mon), StudyLockRules.pending(at(mon, 15, 10), start, mon, emptySet()))
+    }
+
+    @Test
+    fun clozeCardsFromSummary() {
+        val text = "Законы Ньютона: второй закон связывает силу и ускорение. Разбирали задачи на наклонную плоскость с трением! " +
+            "Сила трения скольжения пропорциональна силе нормальной реакции опоры."
+        val cards = StudyLockRules.cloze(text)
+        assertEquals(3, cards.size)
+        cards.forEach { (front, back) ->
+            assertTrue(front, "_____" in front)
+            assertFalse(back in front)
+            assertTrue(back.length >= 5)
+        }
+        // Слова не повторяются, мусор («разбирали», «задачи») не прячем.
+        assertEquals(cards.map { it.second.lowercase() }.distinct().size, cards.size)
+        assertTrue(cards.none { it.second.lowercase() in setOf("разбирали", "задачи") })
+        assertTrue(StudyLockRules.cloze("Коротко.").isEmpty())
+    }
 }
