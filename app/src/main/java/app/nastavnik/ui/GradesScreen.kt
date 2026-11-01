@@ -108,12 +108,20 @@ fun GradesScreen(onBack: (() -> Unit)?, onSettings: () -> Unit, onLks: () -> Uni
         if (!repo.configured) {
             Column(Modifier.fillMaxWidth().enter().glass(RoundedCornerShape(28.dp), 10.dp).padding(22.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("Подключи личный кабинет", style = MaterialTheme.typography.titleMedium)
-                Text("Введи логин и пароль от ЛКС в настройках — оценки появятся здесь, а о новых придёт уведомление.", style = MaterialTheme.typography.bodyMedium, color = Brand.InkSoft)
-                InkButton("Открыть настройки", onClick = onSettings)
+                Text("Войди в ЛКС один раз (почта, пароль и капча) — оценки появятся здесь и будут обновляться сами, о новых придёт уведомление.", style = MaterialTheme.typography.bodyMedium, color = Brand.InkSoft)
+                InkButton("Войти в ЛКС", onClick = onLks)
             }
             return@ScreenScaffold
         }
         error?.let { StatusLine(it, Tone.ERROR) }
+        val needLogin by repo.needLogin.collectAsStateWithLifecycle()
+        if (repo.viaLks && needLogin) {
+            Column(Modifier.fillMaxWidth().enter().glass(RoundedCornerShape(28.dp), 10.dp).padding(22.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("Войди в ЛКС снова", style = MaterialTheme.typography.titleMedium)
+                Text("ЛКС закончил сессию. Войди ещё раз (с капчей) — и оценки продолжат обновляться сами.", style = MaterialTheme.typography.bodyMedium, color = Brand.InkSoft)
+                InkButton("Войти в ЛКС", onClick = onLks)
+            }
+        }
         if (repo.viaLks) {
             val j = journal
             if (j == null) {
@@ -121,7 +129,6 @@ fun GradesScreen(onBack: (() -> Unit)?, onSettings: () -> Unit, onLks: () -> Uni
                 return@ScreenScaffold
             }
             LksJournalView(j)
-            LinkText("Открыть сайт ЛКС", onClick = onLks)
             return@ScreenScaffold
         }
         val s = snap ?: run {
@@ -256,34 +263,15 @@ fun GradesSettingsSection(onLks: () -> Unit = {}) {
     var error by remember { mutableStateOf<String?>(null) }
     SectionCard("Успеваемость (ЛКС)") {
         if (lks) {
-            Text("ЛКС: ${app.settings.lksLogin()}", style = MaterialTheme.typography.titleSmall)
+            Text("ЛКС подключён", style = MaterialTheme.typography.titleSmall)
             Text("Оценки обновляются сами при открытии", style = MaterialTheme.typography.bodySmall, color = Brand.InkSoft)
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                LinkText("Открыть сайт ЛКС", onClick = onLks)
+                LinkText("Войти заново", onClick = onLks)
                 LinkText("Отключить") { app.grades.disconnectLks(); lks = false }
             }
         } else {
-            FieldLabel("Вход в ЛКС", "Почта и пароль от lks.siriusuniversity.ru. Хранятся зашифрованными только на этом устройстве и уходят только на сайт ЛКС.")
-            AppTextField(login, { login = it }, label = "Почта", keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email))
-            AppTextField(
-                password, { password = it }, label = "Пароль",
-                visualTransformation = PasswordVisualTransformation(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-            )
-            AnimatedVisibility(error != null && !showMoodle, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) { StatusLine(error.orEmpty(), Tone.ERROR) }
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                InkButton("Подключить", enabled = !busy && login.isNotBlank() && password.isNotBlank()) {
-                    busy = true; error = null
-                    scope.launch {
-                        // Вход прямо запросом к ЛКС — без окна сайта; пароль сохраняется, только если ЛКС его принял.
-                        runCatching { app.grades.connectLks(login, password) }
-                            .onSuccess { lks = true; password = "" }
-                            .onFailure { error = it.message ?: "Не удалось войти в ЛКС" }
-                        busy = false
-                    }
-                }
-                if (busy) CircularProgressIndicator(Modifier.size(22.dp), color = Brand.Accent, strokeWidth = 2.dp)
-            }
+            FieldLabel("Вход в ЛКС", "Откроется сайт ЛКС: войди как обычно — почта, пароль и «я не робот». Это нужно один раз: дальше оценки приложение забирает само. Пароль приложение не хранит.")
+            InkButton("Войти в ЛКС", onClick = onLks)
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         if (moodle) {

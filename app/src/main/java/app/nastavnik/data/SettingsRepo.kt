@@ -312,7 +312,10 @@ class SettingsRepo(private val context: Context) {
         prefs.edit { remove(K_LKS_LOGIN); remove(K_LKS_PAGE) }
         secure?.edit { remove(K_LKS_PASSWORD); remove(K_LKS_COOKIES) }
     }
-    val lksConfigured: Boolean get() = lksLogin().isNotEmpty() && lksPassword().isNotEmpty()
+    /** ЛКС подключён, если есть сессия (вход делает человек в окне сайта — там капча). */
+    val lksConfigured: Boolean get() = lksCookies().isNotEmpty()
+    /** Пароль ЛКС больше не храним: стереть, если остался от старой версии. */
+    fun forgetLksPassword() { if (secure?.contains(K_LKS_PASSWORD) == true) secure?.edit { remove(K_LKS_PASSWORD) } }
 
     // ---------- устройство ----------
     /** "auto", "phone" или "tablet": как вести себя — с тетрадями для стилуса или без. */

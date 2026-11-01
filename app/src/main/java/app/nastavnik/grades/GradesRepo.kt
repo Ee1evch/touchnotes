@@ -47,24 +47,30 @@ class GradesRepo(private val context: Context, private val settings: SettingsRep
         return LksClient(cookies = jar) to jar
     }
 
-    /** Подключить ЛКС: войти и сразу забрать журнал. Пароль сохраняется, только если вход удался. */
-    suspend fun connectLks(email: String, password: String) {
-        val (client, jar) = lksClient()
-        jar.clear()
-        client.login(email, password)
-        settings.setLks(email, password)
+    /** Нужно войти в ЛКС заново (сессия закончилась) — экран покажет кнопку «Войти». */
+    private val _needLogin = MutableStateFlow(false)
+    val needLogin: StateFlow<Boolean> = _needLogin
+
+    /**
+     * Вход сделал человек во встроенном окне (на входе ЛКС капча — её проходит он сам).
+     * [cookieHeader] — куки сайта из WebView («имя=значение; …»); дальше журнал берётся запросами с ними.
+     */
+    suspend fun connectLksSession(cookieHeader: String) {
+        val url = okhttp3.HttpUrl.Builder().scheme("https").host("lks.siriusuniversity.ru").build()
+        val jar = SessionCookies()
+        val far = System.currentTimeMillis() + 400L * 24 * 3600 * 1000
+        jar.saveFromResponse(url, cookieHeader.split(';').mapNotNull { part ->
+            val kv = part.trim().split('=', limit = 2)
+            if (kv.size != 2 || kv[0].isBlank()) null
+            else okhttp3.Cookie.Builder().name(kv[0].trim()).value(kv[1].trim()).domain("lks.siriusuniversity.ru").path("/").secure().expiresAt(far).build()
+        })
         settings.setLksCookies(jar.serialize())
-        refreshLksNow(client, jar)
+        _needLogin.value = false
+        refreshLks(force = true)
     }
 
     private suspend fun refreshLksNow(client: LksClient, jar: SessionCookies) {
-        val j = try {
-            client.journal()
-        } catch (e: LksClient.LoginException) {
-            // Сессия закончилась — тихо входим заново тем же паролем.
-            client.login(settings.lksLogin(), settings.lksPassword())
-            client.journal()
-        }
+        val j = client.journal()
         settings.setLksCookies(jar.serialize())
         withContext(Dispatchers.IO) {
             journalFile.parentFile?.mkdirs()
@@ -89,6 +95,11 @@ class GradesRepo(private val context: Context, private val settings: SettingsRep
         try {
             val (client, jar) = lksClient()
             refreshLksNow(client, jar)
+            _error.value = null
+            _needLogin.value = false
+        } catch (e: LksClient.LoginException) {
+            // Сессия закончилась: войти заново может только человек (капча).
+            _needLogin.value = true
             _error.value = null
         } catch (e: Exception) {
             _error.value = e.message ?: "Не удалось обновить оценки"

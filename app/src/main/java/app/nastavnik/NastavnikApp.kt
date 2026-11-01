@@ -102,6 +102,7 @@ class NastavnikApp : Application() {
         // WebView рисует только видимую часть страницы.
         WebView.enableSlowWholeDocumentDraw()
         createChannels()
+        settings.forgetLksPassword()
         Palettes.installWallpaper(this)
         Reminders.schedule(this)
         Alarms.rescheduleAll(this)

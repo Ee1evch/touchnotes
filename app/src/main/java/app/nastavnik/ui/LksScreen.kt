@@ -53,7 +53,7 @@ const val LKS_URL = "https://lks.siriusuniversity.ru"
  * Встроенное окно ЛКС. Сайт пускает только с российских адресов, поэтому работает именно с телефона:
  * сам входит по логину и паролю из настроек, запоминает куки, по просьбе снимает таблицы со страницы.
  */
-class LksWeb(private val context: android.content.Context, private val onCapture: (String, String) -> Unit) {
+class LksWeb(private val context: android.content.Context, private val autoLogin: Boolean = false, private val onCapture: (String, String) -> Unit) {
     var onPage: ((String) -> Unit)? = null
     private var loginTries = 0
 
@@ -80,7 +80,7 @@ class LksWeb(private val context: android.content.Context, private val onCapture
             override fun onPageFinished(view: WebView, url: String) {
                 CookieManager.getInstance().flush()
                 val app = context.app
-                if (url.contains("/login") && app.settings.lksConfigured && loginTries < 2) {
+                if (autoLogin && url.contains("/login") && app.settings.lksPassword().isNotEmpty() && loginTries < 2) {
                     loginTries++
                     view.postDelayed({ view.evaluateJavascript(LksExtract.loginJs(app.settings.lksLogin(), app.settings.lksPassword()), null) }, 700)
                     return
@@ -100,17 +100,37 @@ class LksWeb(private val context: android.content.Context, private val onCapture
     }
 }
 
-/** Сайт ЛКС внутри приложения — уже со входом: куки сессии берутся у приложения, форму заполнять не нужно. */
+/**
+ * Вход в ЛКС внутри приложения: на сайте капча, поэтому входит сам человек (почта, пароль, «я не робот»).
+ * Галочку «Запомнить меня» ставим за него. Как только сайт пустил дальше страницы входа — берём куки
+ * сессии, и дальше оценки приложение забирает само, без этого окна.
+ */
 @Composable
 fun LksScreen(onBack: () -> Unit, onDone: () -> Unit) {
     val context = LocalContext.current
     val app = context.app
-    val web = remember { LksWeb(context) { _, _ -> } }
+    val scope = rememberCoroutineScope()
+    var status by remember { mutableStateOf("Войди как обычно: почта, пароль и «я не робот». Это нужно один раз.") }
+    var done by remember { mutableStateOf(false) }
+    val web = remember { LksWeb(context, autoLogin = false) { _, _ -> } }
     DisposableEffect(Unit) {
-        val cm = CookieManager.getInstance()
-        app.settings.lksCookies().lines().filter { it.isNotBlank() }.forEach { cm.setCookie(LKS_URL, it) }
-        cm.flush()
-        web.load("$LKS_URL/journal")
+        web.onPage = { url ->
+            val path = runCatching { java.net.URI(url).path.orEmpty() }.getOrDefault("")
+            if (path.startsWith("/login") || path.isEmpty()) {
+                // «Запомнить меня» — чтобы сессия жила долго и входить приходилось редко.
+                web.view.evaluateJavascript("(function(){var r=document.querySelector(\"input[name='remember']\");if(r&&!r.checked){r.click();}})()", null)
+            } else if (!done && url.startsWith(LKS_URL)) {
+                done = true
+                CookieManager.getInstance().flush()
+                val cookies = CookieManager.getInstance().getCookie(LKS_URL).orEmpty()
+                status = "Вошёл. Забираю оценки…"
+                scope.launch {
+                    app.grades.connectLksSession(cookies)
+                    onDone()
+                }
+            }
+        }
+        web.load("$LKS_URL/login")
         onDispose { web.view.destroy() }
     }
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
@@ -120,7 +140,10 @@ fun LksScreen(onBack: () -> Unit, onDone: () -> Unit) {
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             RoundIconButton(R.drawable.ic_arrow_back, "Назад") { if (web.view.canGoBack()) web.view.goBack() else onBack() }
-            Text("ЛКС", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+            Column(Modifier.weight(1f)) {
+                Text("Вход в ЛКС", style = MaterialTheme.typography.titleLarge)
+                Text(status, style = MaterialTheme.typography.bodySmall, color = Brand.InkSoft)
+            }
         }
         Box(Modifier.weight(1f).navigationBarsPadding()) {
             AndroidView(factory = { web.view }, modifier = Modifier.fillMaxSize())
