@@ -563,6 +563,7 @@ private fun SectionsList(go: (String) -> Unit) {
             Triple(R.drawable.ic_calendar, "Расписание", "Пары группы, окна, аудитории") to MainActivity.SCREEN_SCHEDULE,
             Triple(R.drawable.ic_map, "Карта кампуса", "Найти аудиторию и дойти") to MainActivity.SCREEN_MAP,
             Triple(R.drawable.ic_bell, "Напоминания", "Дедлайны — и на телефоне тоже") to MainActivity.SCREEN_REMINDERS,
+            Triple(R.drawable.ic_play, "Лента", "TikTok по твоим темам, сообщения, награда") to MainActivity.SCREEN_FEED,
             Triple(R.drawable.ic_chart, "Успеваемость", "Оценки из личного кабинета") to MainActivity.SCREEN_GRADES,
             Triple(R.drawable.ic_target, "Тренировка", "Вариант контрольной, мини-тест") to MainActivity.SCREEN_TRAINING,
             Triple(R.drawable.ic_chart, "Прогресс", "Серия и темы с ошибками") to MainActivity.SCREEN_PROGRESS,

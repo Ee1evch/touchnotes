@@ -334,11 +334,12 @@ class CampusMapView(context: Context) : View(context) {
                 }
             }
             routePaint.pathEffect = null
+            // Маршрут — ярко-синий, как в навигаторах, с белой обводкой: виден в любой теме.
             routePaint.color = Color.WHITE
-            routePaint.strokeWidth = 9f * density * px
+            routePaint.strokeWidth = 11f * density * px
             canvas.drawPath(routePath, routePaint)
-            routePaint.color = accent
-            routePaint.strokeWidth = 5.5f * density * px
+            routePaint.color = ROUTE
+            routePaint.strokeWidth = 7f * density * px
             canvas.drawPath(routePath, routePaint)
             // Бегущие точки по маршруту — куда идти.
             routePaint.color = 0xCCFFFFFF.toInt()
@@ -393,7 +394,7 @@ class CampusMapView(context: Context) : View(context) {
                 val (sx, sy) = toScreen(leg.points.first().first, leg.points.first().second)
                 val (ex, ey) = toScreen(leg.points.last().first, leg.points.last().second)
                 dot(canvas, sx, sy, if (i == 0) 0xFF1FA463.toInt() else 0xFF7C8DB5.toInt(), 7f)
-                if (i == r.legs.lastIndex) pin(canvas, ex, ey, accent) else dot(canvas, ex, ey, 0xFF7C8DB5.toInt(), 7f)
+                if (i == r.legs.lastIndex) pin(canvas, ex, ey, 0xFFE5484D.toInt()) else dot(canvas, ex, ey, ROUTE, 7f)
             }
         }
         selected?.takeIf { it.floor == floor && route == null }?.let { r ->
@@ -537,5 +538,6 @@ class CampusMapView(context: Context) : View(context) {
 
     companion object {
         private const val WALL = 0xFF3A3F4B.toInt()
+        private const val ROUTE = 0xFF2563EB.toInt()
     }
 }

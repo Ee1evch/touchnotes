@@ -317,6 +317,19 @@ class SettingsRepo(private val context: Context) {
     /** Пароль ЛКС больше не храним: стереть, если остался от старой версии. */
     fun forgetLksPassword() { if (secure?.contains(K_LKS_PASSWORD) == true) secure?.edit { remove(K_LKS_PASSWORD) } }
 
+    // ---------- лента (TikTok) ----------
+    /** Сколько миллисекунд обычной ленты использовано сегодня. */
+    fun feedUsedToday(): Long {
+        val today = java.time.LocalDate.now().toString()
+        return if (prefs.getString(K_FEED_DAY, "") == today) prefs.getLong(K_FEED_USED, 0L) else 0L
+    }
+    fun addFeedUsed(ms: Long): Long {
+        val today = java.time.LocalDate.now().toString()
+        val v = feedUsedToday() + ms
+        prefs.edit { putString(K_FEED_DAY, today); putLong(K_FEED_USED, v) }
+        return v
+    }
+
     // ---------- устройство ----------
     /** "auto", "phone" или "tablet": как вести себя — с тетрадями для стилуса или без. */
     fun deviceRole(): String = prefs.getString(K_ROLE, "auto").orEmpty()
@@ -381,6 +394,8 @@ class SettingsRepo(private val context: Context) {
         private const val SECURE_PREFS = "secure_settings"
         private const val K_EXAMS = "exams"
         private const val K_GROUP = "schedule_group"
+        private const val K_FEED_DAY = "feed_day"
+        private const val K_FEED_USED = "feed_used_ms"
         private const val K_GRADES_URL = "grades_url"
         private const val K_LKS_LOGIN = "lks_login"
         private const val K_LKS_PASSWORD = "lks_password"
