@@ -22,7 +22,7 @@ class DbMigrationTest {
     fun migratesFromVersion1KeepingHistory() = runBlocking<Unit> {
         val name = "migration-test.db"
         ctx.deleteDatabase(name)
-        fun open() = Room.databaseBuilder(ctx, AppDatabase::class.java, name).addMigrations(AppDatabase.MIGRATION_1_2).build()
+        fun open() = Room.databaseBuilder(ctx, AppDatabase::class.java, name).addMigrations(AppDatabase.MIGRATION_1_2, AppDatabase.MIGRATION_2_3).build()
 
         // Свежая база, затем «откатываем» её к версии 1: таблиц карточек и событий ещё нет.
         val fresh = open()
@@ -31,6 +31,8 @@ class DbMigrationTest {
         SQLiteDatabase.openDatabase(ctx.getDatabasePath(name).path, null, SQLiteDatabase.OPEN_READWRITE).use { db ->
             db.execSQL("DROP TABLE cards")
             db.execSQL("DROP TABLE activity")
+            db.execSQL("DROP TABLE reminders")
+            db.execSQL("ALTER TABLE clean_notes DROP COLUMN uid")
             db.version = 1
         }
 
@@ -38,7 +40,12 @@ class DbMigrationTest {
         val migrated = open()
         assertNotNull("история пропала", migrated.conversations().get(id))
         migrated.cards().insertAll(listOf(CardEntity(noteId = null, subject = "", topic = "Т", front = "В", back = "О", dueAt = 0, createdAt = 0)))
-        assertEquals(1, migrated.cards().due(System.currentTimeMillis(), 10).size)
+        val due = migrated.cards().due(System.currentTimeMillis(), 10)
+        assertEquals(1, due.size)
+        // У карточки — общий для устройств идентификатор, напоминания есть.
+        assertEquals(32, due.single().uid.length)
+        migrated.reminders().put(app.nastavnik.data.ReminderEntity(title = "Лаба", at = 1))
+        assertEquals("Лаба", migrated.reminders().all().single().title)
         migrated.close()
         ctx.deleteDatabase(name)
     }

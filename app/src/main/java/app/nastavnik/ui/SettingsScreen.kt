@@ -227,6 +227,7 @@ fun SettingsScreen(onBack: () -> Unit, onAppearance: () -> Unit = {}, onOnboardi
 
             BackupSection()
             UpdateSection()
+            LicensesSection()
             if (tablet) SectionCard("Обучение") {
                 LinkText("Пройти первую настройку заново") { onOnboarding() }
             }
@@ -288,4 +289,23 @@ private fun AppPickerDialog(apps: List<NoteApps.App>, onDismiss: () -> Unit, onP
         containerColor = MaterialTheme.colorScheme.surface,
         shape = RoundedCornerShape(28.dp),
     )
+}
+
+/** Лицензии: расписание основано на Lecturial 2 (Apache 2.0) — показываем её текст. */
+@Composable
+private fun LicensesSection() {
+    val context = LocalContext.current
+    var open by remember { mutableStateOf(false) }
+    SectionCard("О приложении") {
+        Text(
+            "Расписание загружается кодом на основе Lecturial 2 (Apache License 2.0). Карта — из данных навигатора ГМЦ. " +
+                "Приложение неофициальное и не связано с Университетом «Сириус».",
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        LinkText(if (open) "Скрыть лицензию" else "Лицензия Lecturial 2") { open = !open }
+        if (open) {
+            val text = remember { runCatching { context.assets.open("licenses/lecturial-2.txt").bufferedReader().use { it.readText() } }.getOrDefault("") }
+            Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
 }

@@ -49,16 +49,17 @@ class ScheduleRepo(private val context: Context, private val settings: SettingsR
     suspend fun refresh(first: LocalDate, count: Int = 2, group: String = this.group) {
         if (group.isBlank()) return
         lock.withLock {
-            client.weeks(group, ScheduleText.monday(first), count) { w ->
-                withContext(Dispatchers.IO) {
-                    val d = dir(group).apply { mkdirs() }
-                    val tmp = File(d, "${w.start}.json.tmp")
-                    tmp.writeText(json.encodeToString(Week.serializer(), w))
-                    tmp.renameTo(File(d, "${w.start}.json"))
-                }
-                _version.value++
-            }
+            client.weeks(group, ScheduleText.monday(first), count) { w -> store(w) }
         }
+    }
+
+    /** Положить неделю в кеш (так же делает загрузка с сайта). */
+    suspend fun store(w: Week) = withContext(Dispatchers.IO) {
+        val d = dir(w.group).apply { mkdirs() }
+        val tmp = File(d, "${w.start}.json.tmp")
+        tmp.writeText(json.encodeToString(Week.serializer(), w))
+        tmp.renameTo(File(d, "${w.start}.json"))
+        _version.value++
     }
 
     /** Когда неделя загружена (мс), 0 — нет в кеше. */
