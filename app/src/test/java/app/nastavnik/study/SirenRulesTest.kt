@@ -10,27 +10,27 @@ class SirenRulesTest {
     private val mon = LocalDate.of(2026, 11, 2)
 
     @Test
-    fun ringsFromTenPmOnLessonDaysUntilSolved() {
-        // До 22:00 — тихо.
-        assertFalse(SirenRules.shouldRing(mon.atTime(21, 59), hasLessons = true, solved = 0, quietUntil = null))
-        // С 22:00 — звонит, и ночью тоже (это ещё понедельник).
-        assertTrue(SirenRules.shouldRing(mon.atTime(22, 0), true, 0, null))
+    fun ringsFromEightPmOnLessonDaysUntilSolved() {
+        // До 20:00 — тихо.
+        assertFalse(SirenRules.shouldRing(mon.atTime(19, 59), hasLessons = true, solved = 0, quietUntil = null))
+        // С 20:00 — звонит, и ночью тоже (это ещё понедельник).
+        assertTrue(SirenRules.shouldRing(mon.atTime(20, 0), true, 0, null))
         assertTrue(SirenRules.shouldRing(mon.plusDays(1).atTime(2, 30), true, 0, null))
-        // С 5 утра — новый день, до его 22:00 тихо.
+        // С 5 утра — новый день, до его 20:00 тихо.
         assertFalse(SirenRules.shouldRing(mon.plusDays(1).atTime(5, 0), true, 0, null))
         // Решил основную — тихо.
-        assertFalse(SirenRules.shouldRing(mon.atTime(23, 0), true, 1, null))
+        assertFalse(SirenRules.shouldRing(mon.atTime(21, 0), true, 1, null))
         // День без пар — тихо.
-        assertFalse(SirenRules.shouldRing(mon.atTime(23, 0), false, 0, null))
+        assertFalse(SirenRules.shouldRing(mon.atTime(21, 0), false, 0, null))
     }
 
     @Test
     fun miniTaskGivesFiveQuietMinutes() {
-        val solvedMini = mon.atTime(22, 10)
+        val solvedMini = mon.atTime(20, 10)
         val quiet = solvedMini.plusMinutes(SirenRules.QUIET_MINUTES)
-        assertFalse(SirenRules.shouldRing(mon.atTime(22, 14), true, 0, quiet))
+        assertFalse(SirenRules.shouldRing(mon.atTime(20, 14), true, 0, quiet))
         // Не решил основную за 5 минут — снова звонит.
-        assertTrue(SirenRules.shouldRing(mon.atTime(22, 15), true, 0, quiet))
+        assertTrue(SirenRules.shouldRing(mon.atTime(20, 15), true, 0, quiet))
     }
 
     @Test

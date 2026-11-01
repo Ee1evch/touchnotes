@@ -57,6 +57,7 @@ class SirenService : Service() {
             play(R.raw.siren_wake_up, loop = false) { play(R.raw.siren_alarm, loop = true) {} }
             main.post(holdVolume)
             openScreen()
+            WakeGuard.instance?.poke()
         }
         return START_STICKY
     }

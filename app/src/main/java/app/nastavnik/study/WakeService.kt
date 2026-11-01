@@ -77,6 +77,7 @@ class WakeService : Service() {
             startSound()
             startVibration()
             openScreen()
+            WakeGuard.instance?.poke()
             main.postDelayed(::timeout, if (test) 60_000L else WakeAlarm.RING_LIMIT_MS)
         }
         return START_NOT_STICKY

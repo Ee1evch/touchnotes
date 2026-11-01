@@ -23,6 +23,7 @@ import app.nastavnik.sync.AppSyncSource
 import app.nastavnik.sync.LocalItem
 import app.nastavnik.sync.SyncRecord
 import app.nastavnik.sync.SyncEngine
+import app.nastavnik.study.AlarmShield
 import app.nastavnik.study.Learning
 import app.nastavnik.study.LockPrefs
 import app.nastavnik.study.Siren
@@ -34,6 +35,7 @@ import app.nastavnik.study.StudyLockRules
 import app.nastavnik.study.WakeGuard
 import app.nastavnik.study.WakeAlarm
 import app.nastavnik.study.WakePrefs
+import app.nastavnik.study.WakeService
 import app.nastavnik.ui.Brand
 import app.nastavnik.ui.MainActivity
 import app.nastavnik.ui.SirenActivity
@@ -378,11 +380,25 @@ class CampusFlowTest {
             WakeAlarm.startRinging(ctx, test = true)
             SystemClock.sleep(2500)
             assertTrue("защита будильника не включилась", WakePrefs.of(ctx).guarding)
-            // Как долгое нажатие кнопки питания: системное меню «Выключить / Перезапустить».
+            // Щит поверх всего экрана: только пример и своя клавиатура.
+            assertNotNull("нет щита будильника", device.wait(Until.findObject(By.text("Проверка будильника")), 8000))
+            assertNotNull(AlarmShield.answer)
+            screenshot("alarm_shield")
+            // Как долгое нажатие кнопки питания: системное меню «Выключить / Перезапустить» — закрывается, а щит на месте.
             ua.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_POWER_DIALOG)
             SystemClock.sleep(3000)
             screenshot("alarm_power_menu")
             assertNull("меню выключения не закрылось", device.findObject(By.text("Power off")) ?: device.findObject(By.text("Выключить")))
+            assertNotNull("щит пропал", device.findObject(By.text("Проверка будильника")))
+            // Кнопки громкости не работают, пока звонит.
+            val audio = ctx.getSystemService(android.media.AudioManager::class.java)
+            val vol = audio.getStreamVolume(android.media.AudioManager.STREAM_ALARM)
+            repeat(3) { device.pressKeyCode(android.view.KeyEvent.KEYCODE_VOLUME_DOWN); SystemClock.sleep(200) }
+            assertTrue("громкость убавилась кнопкой", audio.getStreamVolume(android.media.AudioManager.STREAM_ALARM) >= vol)
+            // Выключить можно только решив пример на щите.
+            AlarmShield.answer!!.toString().forEach { ch -> device.findObject(By.text(ch.toString())).click(); SystemClock.sleep(150) }
+            SystemClock.sleep(1500)
+            assertTrue("будильник не выключился решением примера", !WakeService.ringing)
         } finally {
             runBlocking { WakeAlarm.dismiss(ctx, true) }
             device.findObject(By.text("Выключить проверку"))?.click()

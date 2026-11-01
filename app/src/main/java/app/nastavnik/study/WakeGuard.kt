@@ -41,10 +41,12 @@ class WakeGuard : AccessibilityService() {
     private var alwaysAt = 0L
     private var refresher: Job? = null
     private val label by lazy { getString(R.string.app_name).lowercase() }
+    private val shield by lazy { AlarmShield(this) }
     private val guardLabel by lazy { getString(R.string.wake_guard_label) }
 
     override fun onServiceConnected() {
         super.onServiceConnected()
+        instance = this
         // Замок пересчитываем каждые 20 секунд (и сразу — его обновляют экраны учёбы).
         refresher = app.appScope.launch {
             while (isActive) {
@@ -58,6 +60,8 @@ class WakeGuard : AccessibilityService() {
     }
 
     override fun onDestroy() {
+        instance = null
+        shield.hide()
         refresher?.cancel()
         main.removeCallbacksAndMessages(null)
         super.onDestroy()
@@ -66,13 +70,15 @@ class WakeGuard : AccessibilityService() {
     /** Раз в 2 секунды — что на экране (приложение могло быть открыто до начала замка). */
     private val tick = object : Runnable {
         override fun run() {
+            shield.update()
             if (LockPrefs.of(this@WakeGuard).configured || WakePrefs.of(this@WakeGuard).guarding || SirenPrefs.of(this@WakeGuard).guarding()) {
                 val root = runCatching { rootInActiveWindow }.getOrNull()
                 val pkg = root?.packageName?.toString()
                 if (pkg != null) evaluate(pkg, "", "", root)
             }
             // Пока звонит будильник — чаще: меню выключения закрываем, не дав нажать.
-            main.postDelayed(this, if (WakePrefs.of(this@WakeGuard).guarding || SirenService.ringing) 500L else 2_000L)
+            val ringing = WakeService.ringing || SirenService.ringing
+            main.postDelayed(this, if (WakePrefs.of(this@WakeGuard).guarding || ringing) 500L else 2_000L)
         }
     }
 
@@ -98,7 +104,7 @@ class WakeGuard : AccessibilityService() {
             if (isPowerMenu(pkg, cls, text, root)) { pressBack { bringAlarmBack() }; return }
             if (system) { cover(home = true) { bringAlarmBack() }; return }
         }
-        // 1а. Учебная сирена (с 22:00, пока не решена задача дня) — так же, но вернуть экран сирены.
+        // 1а. Учебная сирена (с 20:00, пока не решена задача дня) — так же, но вернуть экран сирены.
         if (SirenPrefs.of(this).guarding()) {
             if (isPowerMenu(pkg, cls, text, root)) { pressBack { openSiren() }; return }
             if (system) { cover(home = true) { openSiren() }; return }
@@ -216,7 +222,11 @@ class WakeGuard : AccessibilityService() {
 
     /** Пока звучит сирена — кнопки громкости не работают (громкость и так держится на максимуме). */
     override fun onKeyEvent(event: KeyEvent): Boolean =
-        SirenService.ringing && event.keyCode in setOf(KeyEvent.KEYCODE_VOLUME_DOWN, KeyEvent.KEYCODE_VOLUME_UP, KeyEvent.KEYCODE_VOLUME_MUTE)
+        (SirenService.ringing || WakeService.ringing) &&
+            event.keyCode in setOf(KeyEvent.KEYCODE_VOLUME_DOWN, KeyEvent.KEYCODE_VOLUME_UP, KeyEvent.KEYCODE_VOLUME_MUTE)
+
+    /** Звонок начался — щит сразу, не дожидаясь проверки по таймеру. */
+    fun poke() = main.post { shield.update() }
 
     private fun openSiren() {
         runCatching {
@@ -227,6 +237,10 @@ class WakeGuard : AccessibilityService() {
     override fun onInterrupt() {}
 
     companion object {
+        /** Работающая служба — чтобы звонок сразу показал щит. */
+        @Volatile var instance: WakeGuard? = null
+            private set
+
         /** Включена ли служба в настройках специальных возможностей. */
         fun enabled(context: Context): Boolean {
             val me = ComponentName(context, WakeGuard::class.java).flattenToString()

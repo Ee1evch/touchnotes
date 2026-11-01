@@ -418,7 +418,7 @@ fun PlanCard(resumeTick: Int) {
     }
 }
 
-/** «Задача дня» на главной: в день с парами, пока не решена, — можно решить заранее, до сирены в 22:00. */
+/** «Задача дня» на главной: в день с парами, пока не решена, — можно решить заранее, до сирены в 20:00. */
 @Composable
 fun SirenCard(resumeTick: Int) {
     val context = LocalContext.current
@@ -438,7 +438,7 @@ fun SirenCard(resumeTick: Int) {
         Icon(painterResource(R.drawable.ic_target), contentDescription = null, tint = Brand.Error, modifier = Modifier.size(22.dp))
         Column(Modifier.weight(1f)) {
             Text("Задача дня", style = MaterialTheme.typography.titleMedium)
-            Text("Реши до 22:00 — иначе сирена", style = MaterialTheme.typography.bodySmall, color = Brand.InkSoft)
+            Text("Реши до 20:00 — иначе сирена", style = MaterialTheme.typography.bodySmall, color = Brand.InkSoft)
         }
         InkButton("Решить") { context.startActivity(android.content.Intent(context, SirenActivity::class.java)) }
     }

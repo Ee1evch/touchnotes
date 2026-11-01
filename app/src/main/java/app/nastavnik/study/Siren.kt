@@ -60,7 +60,7 @@ class SirenPrefs private constructor(private val p: SharedPreferences) {
     fun solved(date: LocalDate): Int = if (solvedDay == date.toString()) solvedCount else 0
 
     /**
-     * Сирена «держит» телефон: с 22:00 учебного дня, пока не решена основная задача, — служба защиты закрывает
+     * Сирена «держит» телефон: с 20:00 учебного дня, пока не решена основная задача, — служба защиты закрывает
      * меню выключения, настройки и удаление (в том числе в 5 минут тишины).
      */
     fun guarding(now: LocalDateTime = LocalDateTime.now()): Boolean {
@@ -71,7 +71,7 @@ class SirenPrefs private constructor(private val p: SharedPreferences) {
 }
 
 /**
- * Учебная сирена: в день с парами к 22:00 нужно решить основную задачу по слабым темам, иначе с 22:00 звук
+ * Учебная сирена: в день с парами к 20:00 нужно решить основную задачу по слабым темам, иначе с 20:00 звук
  * (сначала «wake up», потом сигнал по кругу, громкость не убавить). Мини-задача — 5 минут тишины на основную.
  */
 object Siren {
@@ -104,7 +104,7 @@ object Siren {
         return StudyLockRules.disciplines(context.app.schedule.day(date)).isNotEmpty()
     }
 
-    /** Пересчитать: звонить сейчас или поставить будильник на 22:00 ближайшего учебного дня / конец тишины. */
+    /** Пересчитать: звонить сейчас или поставить будильник на 20:00 ближайшего учебного дня / конец тишины. */
     suspend fun check(context: Context) {
         val s = SirenPrefs.of(context)
         val am = context.getSystemService(AlarmManager::class.java)
@@ -124,7 +124,7 @@ object Siren {
             setClock(context, ms(quiet))
             return
         }
-        // Ближайший учебный день: сегодня (если ещё нет 22:00 и не решено) или следующие.
+        // Ближайший учебный день: сегодня (если ещё нет 20:00 и не решено) или следующие.
         for (d in 0L..7L) {
             val day = date.plusDays(d)
             if (d == 0L && (!today || s.solved(day) > 0 || !now.isBefore(SirenRules.start(day)))) continue
@@ -162,7 +162,7 @@ object Siren {
     }
 }
 
-/** Будильник сирены: 22:00 и конец 5 минут тишины. Работает и до разблокировки. */
+/** Будильник сирены: 20:00 и конец 5 минут тишины. Работает и до разблокировки. */
 class SirenReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val pending = goAsync()
