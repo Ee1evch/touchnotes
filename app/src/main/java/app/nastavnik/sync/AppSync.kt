@@ -196,7 +196,8 @@ class SyncManager(private val app: NastavnikApp) {
         val st = app.settings
         val result = runCatching {
             withContext(Dispatchers.IO) {
-                val store = WebDavStore(st.syncUrl(), st.syncLogin(), st.syncPassword())
+                val store: SyncStore = if (st.syncUrl() == YandexDiskStore.MARKER) YandexDiskStore(st.syncPassword())
+                else WebDavStore(st.syncUrl(), st.syncLogin(), st.syncPassword())
                 val engine = SyncEngine(
                     store, AppSyncSource(app), st.deviceId(), Build.MODEL ?: "Устройство",
                     if (app.isTablet()) "tablet" else "phone",

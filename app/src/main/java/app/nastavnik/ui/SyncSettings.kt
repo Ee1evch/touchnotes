@@ -33,6 +33,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.nastavnik.app
 import app.nastavnik.study.Alarms
 import app.nastavnik.sync.WebDavStore
+import app.nastavnik.sync.YandexDiskStore
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -49,8 +50,8 @@ fun SyncSection() {
     val scope = rememberCoroutineScope()
     val status by app.sync.status.collectAsStateWithLifecycle()
     var configured by remember { mutableStateOf(app.sync.configured) }
-    var yandex by remember { mutableStateOf(app.settings.syncUrl().ifEmpty { WebDavStore.YANDEX } == WebDavStore.YANDEX) }
-    var url by remember { mutableStateOf(app.settings.syncUrl().takeIf { it != WebDavStore.YANDEX }.orEmpty()) }
+    var yandex by remember { mutableStateOf(app.settings.syncUrl().let { it.isEmpty() || it == YandexDiskStore.MARKER || it == WebDavStore.YANDEX }) }
+    var url by remember { mutableStateOf(app.settings.syncUrl().takeIf { it != WebDavStore.YANDEX && it != YandexDiskStore.MARKER }.orEmpty()) }
     var login by remember { mutableStateOf(app.settings.syncLogin()) }
     var password by remember { mutableStateOf("") }
     var checking by remember { mutableStateOf(false) }
@@ -60,7 +61,14 @@ fun SyncSection() {
         if (configured) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Column(Modifier.weight(1f)) {
-                    Text(if (app.settings.syncUrl() == WebDavStore.YANDEX) "Яндекс Диск · ${app.settings.syncLogin()}" else app.settings.syncLogin(), style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        when (app.settings.syncUrl()) {
+                            YandexDiskStore.MARKER -> "Яндекс Диск"
+                            WebDavStore.YANDEX -> "Яндекс Диск по WebDAV · ${app.settings.syncLogin()}"
+                            else -> app.settings.syncLogin()
+                        },
+                        style = MaterialTheme.typography.titleSmall,
+                    )
                     val time = if (status.lastAt > 0) SimpleDateFormat("d MMM, HH:mm", Locale.forLanguageTag("ru")).format(Date(status.lastAt)) else "ещё не было"
                     Text("${status.message.ifEmpty { "Подключено" }} · $time", style = MaterialTheme.typography.bodySmall, color = if (status.ok) Brand.InkSoft else Brand.Error)
                 }
@@ -88,38 +96,51 @@ fun SyncSection() {
 
         FieldLabel(
             "Тетради на планшете, карточки и напоминания на телефоне — одно и то же",
-            "Подключи одно облако на обоих устройствах. Своего сервера нет: данные лежат в папке «Nastavnik» твоего диска.",
+            "Подключи одно облако на обоих устройствах (тот же аккаунт). Своего сервера нет: данные лежат в папке «Nastavnik» твоего диска.",
         )
         Segmented(listOf(true to "Яндекс Диск", false to "Другой WebDAV"), yandex) { yandex = it }
         AnimatedVisibility(!yandex, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
             AppTextField(url, { url = it }, label = "Адрес WebDAV", placeholder = "https://cloud.example.ru/remote.php/dav/files/имя/")
         }
-        AppTextField(login, { login = it }, label = if (yandex) "Логин Яндекса" else "Логин")
-        AppTextField(
-            password, { password = it }, label = if (yandex) "Пароль приложения" else "Пароль",
-            visualTransformation = PasswordVisualTransformation(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-        )
         if (yandex) {
+            // WebDAV у Яндекса теперь только для платного Яндекс 360 — бесплатно работает REST API по токену.
             Text(
-                "Пароль приложения создаётся на id.yandex.ru → «Безопасность» → «Пароли приложений» → «Файлы (WebDAV)». Обычный пароль Яндекс не примет.",
+                "1. Открой Полигон Яндекс Диска (кнопка ниже) и войди в свой аккаунт.\n" +
+                    "2. Нажми «Получить OAuth-токен» и разреши доступ.\n" +
+                    "3. Скопируй токен (длинная строка, обычно начинается с «y0_») и вставь сюда.",
                 style = MaterialTheme.typography.bodySmall, color = Brand.InkSoft,
             )
-            LinkText("Открыть id.yandex.ru") {
-                runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://id.yandex.ru/security/app-passwords")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+            LinkText("Открыть Полигон Яндекса") {
+                runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(YandexDiskStore.POLIGON)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
             }
+            AppTextField(
+                password, { password = it.trim() }, label = "Токен Яндекс Диска",
+                visualTransformation = PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            )
+            Text(
+                "Токен действует около года и даёт доступ к Диску — храню его зашифрованным. Отозвать: id.yandex.ru → «Безопасность» → «Доступы».",
+                style = MaterialTheme.typography.bodySmall, color = Brand.InkSoft,
+            )
+        } else {
+            AppTextField(login, { login = it }, label = "Логин")
+            AppTextField(
+                password, { password = it }, label = "Пароль",
+                visualTransformation = PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            )
         }
         error?.let { StatusLine(it, Tone.ERROR) }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            InkButton("Подключить", enabled = !checking && login.isNotBlank() && password.isNotBlank() && (yandex || url.startsWith("http"))) {
-                val address = if (yandex) WebDavStore.YANDEX else url.trim()
+            InkButton("Подключить", enabled = !checking && password.isNotBlank() && (yandex || (login.isNotBlank() && url.startsWith("http")))) {
+                val address = if (yandex) YandexDiskStore.MARKER else url.trim()
                 checking = true
                 error = null
                 scope.launch {
-                    val ok = runCatching { WebDavStore(address, login.trim(), password).check() }
+                    val ok = runCatching { if (yandex) YandexDiskStore(password).check() else WebDavStore(address, login.trim(), password).check() }
                     checking = false
                     ok.onSuccess {
-                        app.settings.setSync(address, login, password)
+                        app.settings.setSync(address, if (yandex) "Яндекс Диск" else login, password)
                         password = ""
                         configured = true
                         app.sync.now()
