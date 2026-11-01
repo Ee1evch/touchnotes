@@ -72,7 +72,8 @@ class MainActivity : ComponentActivity() {
         mapRoom = savedInstanceState?.getString(KEY_ROOM)
         screen = savedInstanceState?.getString(KEY_SCREEN)
             ?: screenFrom(intent)
-            ?: if (app.settings.load().onboardingDone) SCREEN_HOME else SCREEN_ONBOARDING
+            // Первая настройка — про кнопку поверх записей; телефону она не нужна.
+            ?: if (app.settings.load().onboardingDone || !app.isTablet()) SCREEN_HOME else SCREEN_ONBOARDING
         if (savedInstanceState == null) receiveShared(intent)
 
         setContent {

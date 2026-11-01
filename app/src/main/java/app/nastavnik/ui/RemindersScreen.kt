@@ -95,6 +95,7 @@ fun RemindersScreen(onBack: (() -> Unit)?) {
     var creating by remember { mutableStateOf(false) }
     var showDone by remember { mutableStateOf(false) }
 
+    val askNotifications = rememberAskNotifications()
     fun save(r: ReminderEntity) = scope.launch { db.reminders().put(r); remindersChanged(context) }
     fun remove(r: ReminderEntity) = scope.launch { db.reminders().delete(r.uid); remindersChanged(context) }
 
@@ -138,7 +139,7 @@ fun RemindersScreen(onBack: (() -> Unit)?) {
         ReminderDialog(
             initial = editing,
             onDismiss = { creating = false; editing = null },
-            onSave = { save(it); creating = false; editing = null },
+            onSave = { save(it); creating = false; editing = null; askNotifications() },
             onDelete = editing?.let { e -> { remove(e); editing = null } },
         )
     }

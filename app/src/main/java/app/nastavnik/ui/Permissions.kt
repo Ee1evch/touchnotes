@@ -24,3 +24,17 @@ object Permissions {
 
     const val CONSOLE_KEYS_URL = "https://console.anthropic.com/settings/keys"
 }
+
+/** Попросить разрешение на уведомления (Android 13+), если его ещё нет: напоминания и «скоро пара» без него молчат. */
+@androidx.compose.runtime.Composable
+fun rememberAskNotifications(): () -> Unit {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val launcher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
+    ) { }
+    return {
+        if (Build.VERSION.SDK_INT >= 33 && !Permissions.notifications(context)) {
+            runCatching { launcher.launch(Manifest.permission.POST_NOTIFICATIONS) }
+        }
+    }
+}

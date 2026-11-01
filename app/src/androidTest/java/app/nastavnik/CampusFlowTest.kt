@@ -49,6 +49,8 @@ class CampusFlowTest {
     @Before
     fun setUp() {
         device.executeShellCommand("settings put global hide_error_dialogs 1")
+        // Иначе поверх экрана выскочит системный вопрос про уведомления.
+        device.executeShellCommand("pm grant ${ctx.packageName} android.permission.POST_NOTIFICATIONS")
         ctx.app.settings.setOnboardingDone(true)
     }
 

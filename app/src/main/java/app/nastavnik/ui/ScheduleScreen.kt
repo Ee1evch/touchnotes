@@ -119,6 +119,7 @@ fun ScheduleScreen(onBack: (() -> Unit)?, onRoom: (String) -> Unit) {
     }
     LaunchedEffect(group, monday) { refresh(force = false) }
 
+    val askNotifications = rememberAskNotifications()
     if (picking) {
         GroupPicker(
             current = group,
@@ -126,6 +127,7 @@ fun ScheduleScreen(onBack: (() -> Unit)?, onRoom: (String) -> Unit) {
             onPick = { g ->
                 app.settings.setScheduleGroup(g)
                 group = g
+                askNotifications()
                 picking = false
                 app.sync.soon()
                 refresh(force = true)
