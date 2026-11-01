@@ -159,7 +159,8 @@ class CampusFlowTest {
 
             // Напоминание через «Учёба» → «Напоминания».
             device.findObject(By.desc("Учёба")).click()
-            device.wait(Until.findObject(By.text("Напоминания")), 8000)!!.click()
+            // «Напоминания» есть и на «Сегодня» — жмём строку вкладки «Учёба» по её подписи.
+            device.wait(Until.findObject(By.text("Дедлайны и дела на всех устройствах")), 8000)!!.click()
             device.wait(Until.findObject(By.text("Новое")), 8000)!!.click()
             val field = device.wait(Until.findObject(By.clazz("android.widget.EditText")), 8000)
             field.text = "Сдать лабу по физике"
