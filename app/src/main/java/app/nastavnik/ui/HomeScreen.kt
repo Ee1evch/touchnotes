@@ -59,6 +59,7 @@ import app.nastavnik.ink.Paper
 import app.nastavnik.notes.NoteApps
 import app.nastavnik.overlay.BubbleService
 import app.nastavnik.study.Exam
+import app.nastavnik.schedule.Lesson
 import app.nastavnik.study.ExamPlan
 import app.nastavnik.study.Streaks
 import app.nastavnik.study.ruPlural
@@ -77,7 +78,7 @@ import java.util.Locale
  * На планшете — две колонки, на телефоне — одна.
  */
 @Composable
-fun HomeScreen(resumeTick: Int, go: (String) -> Unit, openNotebook: (Long) -> Unit) {
+fun HomeScreen(resumeTick: Int, go: (String) -> Unit, openNotebook: (Long) -> Unit, onRoom: (String) -> Unit = {}) {
     val context = LocalContext.current
     var tick by remember { mutableIntStateOf(0) }
     val overlay = remember(resumeTick, tick) { Permissions.overlay(context) }
@@ -123,6 +124,7 @@ fun HomeScreen(resumeTick: Int, go: (String) -> Unit, openNotebook: (Long) -> Un
                 }
                 if (notReady != null) Banner("$notReady — без этого наставник не ответит.", "Настроить") { go(MainActivity.SCREEN_SETTINGS) }
 
+                val lessonsPanel = @Composable { LessonsPanel(resumeTick, go, onRoom) }
                 val todayPanel = @Composable { TodayPanel(due, streak, week, exam, go) }
                 val sections = @Composable { SectionsList(go) }
                 val notebooks = @Composable { NotebooksSection(resumeTick, go, openNotebook) }
@@ -135,11 +137,13 @@ fun HomeScreen(resumeTick: Int, go: (String) -> Unit, openNotebook: (Long) -> Un
                             mentor()
                         }
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+                            lessonsPanel()
                             todayPanel()
                             sections()
                         }
                     }
                 } else {
+                    lessonsPanel()
                     todayPanel()
                     notebooks()
                     mentor()
@@ -436,6 +440,18 @@ private fun MentorStrip(resumeTick: Int, tick: Int, canStart: Boolean, changed: 
     }
 }
 
+/** Пары сегодня: что сейчас и что дальше (на планшете — над «Сегодня»). */
+@Composable
+private fun LessonsPanel(resumeTick: Int, go: (String) -> Unit, onRoom: (String) -> Unit) {
+    val context = LocalContext.current
+    val app = context.app
+    val version by app.schedule.version.collectAsStateWithLifecycle()
+    val now = remember(resumeTick) { java.time.LocalDateTime.now() }
+    val lessons by produceState<List<Lesson>?>(null, version, resumeTick) { value = app.schedule.day(java.time.LocalDate.now()) }
+    val tomorrow by produceState<List<Lesson>>(emptyList(), version, resumeTick) { value = app.schedule.day(java.time.LocalDate.now().plusDays(1)) }
+    NowCard(lessons, tomorrow, now, hasGroup = app.settings.scheduleGroup().isNotBlank(), onRoom = onRoom, onSchedule = { go(MainActivity.SCREEN_SCHEDULE) })
+}
+
 /** «Сегодня»: карточки на повторение, серия за неделю и ближайший экзамен. */
 @Composable
 private fun TodayPanel(due: Int, streak: Int, week: List<Int>, exam: Exam?, go: (String) -> Unit) {
@@ -541,6 +557,9 @@ private fun SectionsList(go: (String) -> Unit) {
             .padding(vertical = 6.dp),
     ) {
         val rows = listOf(
+            Triple(R.drawable.ic_calendar, "Расписание", "Пары группы, окна, аудитории") to MainActivity.SCREEN_SCHEDULE,
+            Triple(R.drawable.ic_map, "Карта кампуса", "Найти аудиторию и дойти") to MainActivity.SCREEN_MAP,
+            Triple(R.drawable.ic_bell, "Напоминания", "Дедлайны — и на телефоне тоже") to MainActivity.SCREEN_REMINDERS,
             Triple(R.drawable.ic_target, "Тренировка", "Вариант контрольной, мини-тест") to MainActivity.SCREEN_TRAINING,
             Triple(R.drawable.ic_chart, "Прогресс", "Серия и темы с ошибками") to MainActivity.SCREEN_PROGRESS,
             Triple(R.drawable.ic_history, "История", "Задачи с наставником и чистовики") to MainActivity.SCREEN_HISTORY,

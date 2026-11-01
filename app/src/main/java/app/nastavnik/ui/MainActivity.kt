@@ -55,6 +55,10 @@ class MainActivity : ComponentActivity() {
     /** Пока из «Поделиться» готовятся страницы — показываем, что идёт работа. */
     private var importing by mutableStateOf(false)
 
+    /** Телефон: открытая вкладка и аудитория, которую показать на карте. */
+    private var phoneTab by mutableStateOf(PhoneTab.TODAY)
+    private var mapRoom by mutableStateOf<String?>(null)
+
     /** Растёт при каждом onResume — экраны перечитывают состояние разрешений. */
     private var resumeTick by mutableIntStateOf(0)
 
@@ -64,6 +68,8 @@ class MainActivity : ComponentActivity() {
         val bars = SystemBarStyle.light(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT)
         enableEdgeToEdge(statusBarStyle = bars, navigationBarStyle = bars)
         notebookId = savedInstanceState?.getLong(KEY_NOTEBOOK) ?: 0L
+        savedInstanceState?.getString(KEY_TAB)?.let { t -> PhoneTab.entries.firstOrNull { it.name == t }?.let { phoneTab = it } }
+        mapRoom = savedInstanceState?.getString(KEY_ROOM)
         screen = savedInstanceState?.getString(KEY_SCREEN)
             ?: screenFrom(intent)
             ?: if (app.settings.load().onboardingDone) SCREEN_HOME else SCREEN_ONBOARDING
@@ -87,10 +93,20 @@ class MainActivity : ComponentActivity() {
                 val style = if (dark) SystemBarStyle.dark(t) else SystemBarStyle.light(t, t)
                 enableEdgeToEdge(statusBarStyle = style, navigationBarStyle = style)
             }
+            val tablet = remember(st.deviceRole) { app.isTablet() }
             NastavnikTheme(appearance) {
-                val go: (String) -> Unit = {
+                val go: (String) -> Unit = { target ->
                     fromOverlay = false
-                    screen = it
+                    // На телефоне расписание и карта — вкладки главного экрана.
+                    when {
+                        !tablet && target == SCREEN_SCHEDULE -> { phoneTab = PhoneTab.SCHEDULE; screen = SCREEN_HOME }
+                        !tablet && target == SCREEN_MAP -> { phoneTab = PhoneTab.MAP; screen = SCREEN_HOME }
+                        else -> screen = target
+                    }
+                }
+                val showRoom: (String) -> Unit = { room ->
+                    mapRoom = room
+                    go(SCREEN_MAP)
                 }
                 val home = {
                     screen = SCREEN_HOME
@@ -99,12 +115,15 @@ class MainActivity : ComponentActivity() {
                 }
                 val openNotebook: (Long) -> Unit = { id ->
                     notebookId = id
-                    go(SCREEN_NOTEBOOK)
+                    // Телефон — только просмотр: пишут стилусом на планшете.
+                    go(if (tablet) SCREEN_NOTEBOOK else SCREEN_VIEWER)
                 }
-                BackHandler(enabled = screen != SCREEN_HOME) {
+                BackHandler(enabled = screen != SCREEN_HOME || (!tablet && phoneTab != PhoneTab.TODAY)) {
                     when (screen) {
+                        SCREEN_HOME -> phoneTab = PhoneTab.TODAY
                         SCREEN_CLEAN_TEST -> go(SCREEN_CLEAN)
                         SCREEN_APPEARANCE -> go(SCREEN_SETTINGS)
+                        SCREEN_VIEWER -> go(SCREEN_NOTEBOOKS)
                         else -> home()
                     }
                 }
@@ -123,7 +142,11 @@ class MainActivity : ComponentActivity() {
                     label = "screen",
                 ) { target ->
                     when (target) {
-                        SCREEN_NOTEBOOKS -> NotebooksScreen(resumeTick, onBack = home, onOpen = openNotebook)
+                        SCREEN_NOTEBOOKS -> NotebooksScreen(resumeTick, onBack = home, onOpen = openNotebook, readOnly = !tablet)
+                        SCREEN_VIEWER -> NotebookViewer(notebookId, onBack = { go(SCREEN_NOTEBOOKS) })
+                        SCREEN_SCHEDULE -> ScheduleScreen(onBack = home, onRoom = showRoom)
+                        SCREEN_MAP -> MapScreen(initialRoom = mapRoom, onBack = home)
+                        SCREEN_REMINDERS -> RemindersScreen(onBack = home)
                         SCREEN_NOTEBOOK -> if (notebookId != 0L) {
                             NotebookScreen(
                                 notebookId,
@@ -159,7 +182,8 @@ class MainActivity : ComponentActivity() {
                             onSettings = { go(SCREEN_SETTINGS) },
                             onExample = { go(SCREEN_CLEAN_TEST) },
                         )
-                        else -> HomeScreen(resumeTick, go, openNotebook)
+                        else -> if (tablet) HomeScreen(resumeTick, go, openNotebook, onRoom = showRoom)
+                        else PhoneShell(phoneTab, onTab = { phoneTab = it; if (it != PhoneTab.MAP) mapRoom = null }, mapRoom = mapRoom, onMapRoom = showRoom, resumeTick = resumeTick, go = go)
                     }
                 }
             }
@@ -188,7 +212,7 @@ class MainActivity : ComponentActivity() {
             if (meta != null) {
                 fromOverlay = false
                 notebookId = meta.id
-                screen = SCREEN_NOTEBOOK
+                screen = if (app.isTablet()) SCREEN_NOTEBOOK else SCREEN_VIEWER
             }
         }
     }
@@ -207,6 +231,12 @@ class MainActivity : ComponentActivity() {
     private fun screenFrom(intent: Intent): String? {
         val s = intent.getStringExtra(EXTRA_SCREEN) ?: return null
         fromOverlay = intent.getBooleanExtra(EXTRA_FROM_OVERLAY, false)
+        intent.getStringExtra(EXTRA_ROOM)?.let { mapRoom = it }
+        // Телефон: расписание и карта — вкладки.
+        if (!app.isTablet()) when (s) {
+            SCREEN_MAP -> { phoneTab = PhoneTab.MAP; return SCREEN_HOME }
+            SCREEN_SCHEDULE -> { phoneTab = PhoneTab.SCHEDULE; return SCREEN_HOME }
+        }
         intent.getLongExtra(EXTRA_NOTEBOOK, 0L).takeIf { it != 0L }?.let { notebookId = it }
         if (s == ACTION_START_MENTOR) {
             if (Permissions.overlay(this)) {
@@ -222,12 +252,21 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         resumeTick++
         StudyWidget.refresh(this)
+        app.sync.onForeground()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        // Ушли из приложения — отправляем сделанное на другие устройства.
+        app.sync.soon(300)
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
         outState.putString(KEY_SCREEN, screen)
         outState.putLong(KEY_NOTEBOOK, notebookId)
+        outState.putString(KEY_TAB, phoneTab.name)
+        mapRoom?.let { outState.putString(KEY_ROOM, it) }
     }
 
     companion object {
@@ -246,6 +285,11 @@ class MainActivity : ComponentActivity() {
         const val SCREEN_APPEARANCE = "appearance"
         const val SCREEN_EXAMS = "exams"
         const val SCREEN_NOTEBOOK = "notebook"
+        const val SCREEN_SCHEDULE = "schedule"
+        const val SCREEN_MAP = "map"
+        const val SCREEN_REMINDERS = "reminders"
+        const val SCREEN_VIEWER = "viewer"
+        const val EXTRA_ROOM = "room"
         const val EXTRA_NOTEBOOK = "notebook_id"
         const val EXTRA_FROM_OVERLAY = "from_overlay"
 
@@ -253,6 +297,8 @@ class MainActivity : ComponentActivity() {
         const val ACTION_START_MENTOR = "start"
         private const val KEY_SCREEN = "screen"
         private const val KEY_NOTEBOOK = "notebook"
+        private const val KEY_TAB = "phone_tab"
+        private const val KEY_ROOM = "map_room"
     }
 }
 

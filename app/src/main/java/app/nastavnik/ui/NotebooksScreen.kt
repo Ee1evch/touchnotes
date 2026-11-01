@@ -63,7 +63,7 @@ import java.util.Locale
 /** Все тетради: новая (с выбором бумаги), из фото, из PDF, и сетка тетрадей с превью первой страницы. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun NotebooksScreen(resumeTick: Int, onBack: () -> Unit, onOpen: (Long) -> Unit) {
+fun NotebooksScreen(resumeTick: Int, onBack: () -> Unit, onOpen: (Long) -> Unit, readOnly: Boolean = false) {
     val context = LocalContext.current
     val nbs = context.app.notebooks
     val scope = rememberCoroutineScope()
@@ -92,7 +92,23 @@ fun NotebooksScreen(resumeTick: Int, onBack: () -> Unit, onOpen: (Long) -> Unit)
         },
     )
 
-    ScreenScaffold(title = "Тетради", onBack = onBack) {
+    ScreenScaffold(title = if (readOnly) "Конспекты" else "Тетради", onBack = onBack) {
+        if (readOnly) {
+            // Телефон: тетради приходят с планшета — смотреть можно, писать стилусом — там.
+            Text(
+                "Тетради с планшета — для просмотра в дороге. Пишут в них на планшете, сюда они приходят через синхронизацию.",
+                style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            val items = list ?: return@ScreenScaffold
+            if (items.isEmpty()) {
+                Text("Пока пусто. Подключи облако в настройках на обоих устройствах.", style = MaterialTheme.typography.titleSmall)
+                return@ScreenScaffold
+            }
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                items.forEach { m -> NotebookCard(m, onOpen = { onOpen(m.id) }, onChanged = { reload++ }, readOnly = true) }
+            }
+            return@ScreenScaffold
+        }
         Column(
             Modifier
                 .fillMaxWidth()
@@ -194,7 +210,7 @@ internal fun PaperPreview(p: Paper) {
 private val dateFmt = SimpleDateFormat("d MMMM, HH:mm", Locale("ru"))
 
 @Composable
-private fun NotebookCard(m: NotebookMeta, onOpen: () -> Unit, onChanged: () -> Unit) {
+private fun NotebookCard(m: NotebookMeta, onOpen: () -> Unit, onChanged: () -> Unit, readOnly: Boolean = false) {
     val context = LocalContext.current
     val nbs = context.app.notebooks
     val scope = rememberCoroutineScope()
@@ -203,12 +219,15 @@ private fun NotebookCard(m: NotebookMeta, onOpen: () -> Unit, onChanged: () -> U
     var renaming by remember { mutableStateOf(false) }
     val thumb by produceState<ImageBitmap?>(null, m.id, m.updatedAt) {
         value = withContext(Dispatchers.IO) {
-            nbs.store.thumb(m.id).takeIf { it.exists() }?.let { BitmapFactory.decodeFile(it.path)?.asImageBitmap() }
+            val f = nbs.store.thumb(m.id)
+            // Тетрадь пришла с другого устройства без превью — рисуем его здесь.
+            if (!f.exists()) runCatching { nbs.store.loadPages(m).firstOrNull()?.let { nbs.saveThumb(m, it) } }
+            f.takeIf { it.exists() }?.let { BitmapFactory.decodeFile(it.path)?.asImageBitmap() }
         }
     }
     Column(
         Modifier
-            .width(210.dp)
+            .width(if (readOnly) 158.dp else 210.dp)
             .glass(RoundedCornerShape(22.dp), 8.dp)
             .clickable(onClick = onOpen)
             .padding(12.dp),
@@ -240,7 +259,7 @@ private fun NotebookCard(m: NotebookMeta, onOpen: () -> Unit, onChanged: () -> U
                     maxLines = 1,
                 )
             }
-            Box {
+            if (!readOnly) Box {
                 Box(Modifier.size(36.dp).clip(CircleShape).clickable { menu = true }, contentAlignment = Alignment.Center) {
                     Icon(painterResource(R.drawable.ic_more), contentDescription = "Действия с тетрадью", tint = Brand.Ink, modifier = Modifier.size(20.dp))
                 }

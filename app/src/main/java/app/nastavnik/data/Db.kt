@@ -65,6 +65,8 @@ data class CleanNoteEntity(
     /** Куда файл сохранён в общих «Документах» (для показа пользователю). */
     @ColumnInfo(name = "public_path") val publicPath: String?,
     @ColumnInfo(name = "created_at") val createdAt: Long,
+    /** Общий для всех устройств идентификатор (синхронизация). */
+    @ColumnInfo(defaultValue = "") val uid: String = newUid(),
 )
 
 /** Карточка интервального повторения (из чистовика или встроенного примера). */
@@ -83,6 +85,7 @@ data class CardEntity(
     @ColumnInfo(name = "created_at") val createdAt: Long,
     val reviews: Int = 0,
     val lapses: Int = 0,
+    @ColumnInfo(defaultValue = "") val uid: String = newUid(),
 )
 
 /** Учебное событие для «Прогресса»: ответ наставника, тихая проверка, чистовик, повторённая карточка. */
@@ -94,7 +97,24 @@ data class ActivityEntity(
     /** Сколько ошибок нашлось (для карточки — 1, если её забыли). */
     val errors: Int,
     val at: Long,
+    @ColumnInfo(defaultValue = "") val uid: String = newUid(),
 )
+
+/** Напоминание: «сдать лабу», «купить тетрадь». Повтор — каждый день, по будням или раз в неделю. */
+@Entity(tableName = "reminders")
+data class ReminderEntity(
+    @PrimaryKey val uid: String = newUid(),
+    val title: String,
+    val note: String = "",
+    /** Когда напомнить (мс); для повторяющихся — ближайший раз. */
+    val at: Long,
+    /** none, daily, weekdays, weekly. */
+    val repeat: String = "none",
+    val done: Boolean = false,
+    @ColumnInfo(name = "created_at") val createdAt: Long = System.currentTimeMillis(),
+)
+
+fun newUid(): String = java.util.UUID.randomUUID().toString().replace("-", "")
 
 data class ConversationSummary(
     val id: Long,
@@ -164,6 +184,15 @@ interface CleanNoteDao {
 
     @Query("DELETE FROM clean_notes WHERE id = :id")
     suspend fun delete(id: Long)
+
+    @Query("SELECT * FROM clean_notes")
+    suspend fun all(): List<CleanNoteEntity>
+
+    @Query("SELECT * FROM clean_notes WHERE uid = :uid")
+    suspend fun byUid(uid: String): CleanNoteEntity?
+
+    @Update
+    suspend fun update(n: CleanNoteEntity)
 }
 
 @Dao
@@ -200,6 +229,12 @@ interface CardDao {
 
     @Query("DELETE FROM cards WHERE note_id IS NULL AND topic = :topic")
     suspend fun deleteLoose(topic: String)
+
+    @Query("SELECT * FROM cards WHERE uid = :uid")
+    suspend fun byUid(uid: String): CardEntity?
+
+    @Query("DELETE FROM cards WHERE uid = :uid")
+    suspend fun deleteUid(uid: String)
 }
 
 @Dao
@@ -209,11 +244,38 @@ interface ActivityDao {
 
     @Query("SELECT * FROM activity ORDER BY at")
     fun observeAll(): Flow<List<ActivityEntity>>
+
+    @Query("SELECT * FROM activity")
+    suspend fun all(): List<ActivityEntity>
+
+    @Query("SELECT COUNT(*) FROM activity WHERE uid = :uid")
+    suspend fun countUid(uid: String): Int
+
+    @Query("DELETE FROM activity WHERE uid = :uid")
+    suspend fun deleteUid(uid: String)
+}
+
+@Dao
+interface ReminderDao {
+    @Query("SELECT * FROM reminders ORDER BY done, at")
+    fun observeAll(): Flow<List<ReminderEntity>>
+
+    @Query("SELECT * FROM reminders")
+    suspend fun all(): List<ReminderEntity>
+
+    @Query("SELECT * FROM reminders WHERE uid = :uid")
+    suspend fun get(uid: String): ReminderEntity?
+
+    @Insert(onConflict = androidx.room.OnConflictStrategy.REPLACE)
+    suspend fun put(r: ReminderEntity)
+
+    @Query("DELETE FROM reminders WHERE uid = :uid")
+    suspend fun delete(uid: String)
 }
 
 @Database(
-    entities = [Conversation::class, Message::class, CleanNoteEntity::class, CardEntity::class, ActivityEntity::class],
-    version = 2,
+    entities = [Conversation::class, Message::class, CleanNoteEntity::class, CardEntity::class, ActivityEntity::class, ReminderEntity::class],
+    version = 3,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -222,6 +284,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun cleanNotes(): CleanNoteDao
     abstract fun cards(): CardDao
     abstract fun activity(): ActivityDao
+    abstract fun reminders(): ReminderDao
 
     companion object {
         /** Карточки и учебные события. История задач и чистовики при обновлении сохраняются. */
@@ -240,9 +303,23 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** Общие идентификаторы для синхронизации и напоминания. Старые записи получают случайный uid. */
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                for (t in listOf("clean_notes", "cards", "activity")) {
+                    db.execSQL("ALTER TABLE `$t` ADD COLUMN `uid` TEXT NOT NULL DEFAULT ''")
+                    db.execSQL("UPDATE `$t` SET `uid` = lower(hex(randomblob(16))) WHERE `uid` = ''")
+                }
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `reminders` (`uid` TEXT NOT NULL, `title` TEXT NOT NULL, `note` TEXT NOT NULL, " +
+                        "`at` INTEGER NOT NULL, `repeat` TEXT NOT NULL, `done` INTEGER NOT NULL, `created_at` INTEGER NOT NULL, PRIMARY KEY(`uid`))",
+                )
+            }
+        }
+
         fun create(context: Context): AppDatabase =
             Room.databaseBuilder(context, AppDatabase::class.java, DB_NAME)
-                .addMigrations(MIGRATION_1_2)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                 .fallbackToDestructiveMigration(dropAllTables = true)
                 .build()
 

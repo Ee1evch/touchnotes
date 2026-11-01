@@ -86,6 +86,8 @@ class ReminderReceiver : BroadcastReceiver() {
             try {
                 if (intent.action == Reminders.ACTION_REMIND) runCatching { Reminders.remindIfNeeded(context) }
                 Reminders.schedule(context)
+                // После перезагрузки будильники пропадают — ставим и свои напоминания, и пары.
+                if (intent.action == Intent.ACTION_BOOT_COMPLETED) Alarms.rescheduleAll(context)
             } finally {
                 pending.finish()
             }

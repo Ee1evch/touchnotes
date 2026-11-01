@@ -18,6 +18,10 @@ import app.nastavnik.data.SettingsRepo
 import app.nastavnik.ink.Notebooks
 import app.nastavnik.session.CleanSession
 import app.nastavnik.study.Reminders
+import app.nastavnik.study.Alarms
+import app.nastavnik.schedule.ScheduleRepo
+import app.nastavnik.campus.CampusRepo
+import app.nastavnik.sync.SyncManager
 import app.nastavnik.study.Speaker
 import app.nastavnik.study.StudyRepo
 import app.nastavnik.study.Trainer
@@ -54,6 +58,25 @@ class NastavnikApp : Application() {
     /** Чистовик общий для кнопки, тетрадей и экрана предпросмотра. */
     val clean: CleanSession by lazy { CleanSession(this, appScope) }
 
+    /** Расписание своей группы с сайта Сириуса (с кешем). */
+    val schedule: ScheduleRepo by lazy { ScheduleRepo(this, settings) }
+
+    /** Карта кампуса: этажи, поиск аудиторий, маршруты. */
+    val campus: CampusRepo by lazy { CampusRepo(this) }
+
+    /** Синхронизация с другими устройствами через облако. */
+    val sync: SyncManager by lazy { SyncManager(this) }
+
+    /**
+     * Планшет — тетради для стилуса и наставник поверх записей; телефон — расписание, карта, карточки, напоминания.
+     * По умолчанию по ширине экрана, но можно выбрать в настройках.
+     */
+    fun isTablet(): Boolean = when (settings.deviceRole()) {
+        "phone" -> false
+        "tablet" -> true
+        else -> resources.configuration.smallestScreenWidthDp >= 600
+    }
+
     /** Клиент выбранного в настройках провайдера. */
     fun ai(s: AppSettings = settings.load()): AiBackend = MeteredBackend(
         when (s.provider) {
@@ -75,6 +98,7 @@ class NastavnikApp : Application() {
         WebView.enableSlowWholeDocumentDraw()
         createChannels()
         Reminders.schedule(this)
+        Alarms.rescheduleAll(this)
     }
 
     private fun createChannels() {
@@ -93,11 +117,23 @@ class NastavnikApp : Application() {
                 description = "Раз в день вечером, если есть карточки к повторению и ты ещё не занимался"
             },
         )
+        nm.createNotificationChannel(
+            NotificationChannel(CHANNEL_PERSONAL, "Мои напоминания", NotificationManager.IMPORTANCE_HIGH).apply {
+                description = "Напоминания, которые ты создал сам — на любом из своих устройств"
+            },
+        )
+        nm.createNotificationChannel(
+            NotificationChannel(CHANNEL_LESSONS, "Скоро пара", NotificationManager.IMPORTANCE_HIGH).apply {
+                description = "За несколько минут до пары: что и в какой аудитории, с маршрутом по карте"
+            },
+        )
     }
 
     companion object {
         const val CHANNEL_SERVICE = "service"
         const val CHANNEL_REMINDERS = "reminders"
+        const val CHANNEL_PERSONAL = "personal"
+        const val CHANNEL_LESSONS = "lessons"
     }
 }
 

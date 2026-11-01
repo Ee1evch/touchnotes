@@ -57,11 +57,14 @@ fun SettingsScreen(onBack: () -> Unit, onAppearance: () -> Unit = {}, onOnboardi
     ScreenScaffold(title = "Настройки", onBack = onBack) {
         // Оформление — первым: темы, акцент, фон, размер текста.
         AppearanceEntry(onAppearance)
-        SectionCard("Нейросеть") {
+        val tablet = remember(s) { context.app.isTablet() }
+        SyncSection()
+        DeviceSection(tablet)
+        if (tablet) SectionCard("Нейросеть") {
             ProviderEditor(onChanged = {})
         }
 
-        SectionCard("Модели · ${s.provider.shortTitle}") {
+        if (tablet) SectionCard("Модели · ${s.provider.shortTitle}") {
             FieldLabel("Модель наставника", "Отвечает на вопросы и отмечает места на записях.")
             ModelPicker(s.provider, ModelPresets.mentor(s.provider), s.model) { repo.setModel(it, s.provider) }
             HorizontalDivider(Modifier.padding(vertical = 6.dp), color = MaterialTheme.colorScheme.outlineVariant)
@@ -69,9 +72,9 @@ fun SettingsScreen(onBack: () -> Unit, onAppearance: () -> Unit = {}, onOnboardi
             ModelPicker(s.provider, ModelPresets.mentor(s.provider), s.cleanModel) { repo.setCleanModel(it, s.provider) }
         }
 
-        UsageSection(s.model)
+        if (tablet) UsageSection(s.model)
 
-        SectionCard("Наставник") {
+        if (tablet) SectionCard("Наставник") {
             FieldLabel(
                 "Скорость ответа",
                 if (s.fastAnswers) "Быстро: модель почти не «размышляет», а в запрос уходит меньше соседних страниц. Подсказка приходит за секунды."
@@ -106,7 +109,7 @@ fun SettingsScreen(onBack: () -> Unit, onAppearance: () -> Unit = {}, onOnboardi
             }
         }
 
-        SectionCard("Приложение для записей") {
+        if (tablet) SectionCard("Приложение для записей") {
             val known = remember { NoteApps.installedKnown(context) }
             val all = remember { NoteApps.launchable(context) }
             var pick by remember { mutableStateOf(repo.notesApp()) }
@@ -138,7 +141,7 @@ fun SettingsScreen(onBack: () -> Unit, onAppearance: () -> Unit = {}, onOnboardi
 
         // Редко нужное — свёрнуто, чтобы не мешало.
         MoreSettings {
-            SectionCard("Весь конспект") {
+            if (tablet) SectionCard("Весь конспект") {
                 FieldLabel(
                     "Что видит наставник",
                     "«Весь конспект» — страница, где ты спрашиваешь, и всё, что ты спокойно пролистал в этой тетради, " +
@@ -148,7 +151,7 @@ fun SettingsScreen(onBack: () -> Unit, onAppearance: () -> Unit = {}, onOnboardi
                 Segmented(listOf(true to "Весь конспект", false to "Только экран"), s.seeNotebook) { repo.setSeeNotebook(it) }
             }
 
-            SectionCard("Голос") {
+            if (tablet) SectionCard("Голос") {
                 var speak by remember { mutableStateOf(repo.speakHints()) }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
@@ -165,7 +168,7 @@ fun SettingsScreen(onBack: () -> Unit, onAppearance: () -> Unit = {}, onOnboardi
                 }
             }
 
-            SectionCard("Заметки на экране") {
+            if (tablet) SectionCard("Заметки на экране") {
                 var fa by remember(s.noteFadeAlpha) { mutableFloatStateOf(s.noteFadeAlpha) }
                 FieldLabel(
                     "Прозрачность у стилуса: ${(fa * 100).roundToInt()}%",
@@ -179,7 +182,7 @@ fun SettingsScreen(onBack: () -> Unit, onAppearance: () -> Unit = {}, onOnboardi
                 )
             }
 
-            SectionCard("Плавающая кнопка") {
+            if (tablet) SectionCard("Плавающая кнопка") {
                 var alpha by remember(s.bubbleAlpha) { mutableFloatStateOf(s.bubbleAlpha) }
                 FieldLabel(
                     "Непрозрачность: ${(alpha * 100).roundToInt()}%",
@@ -204,7 +207,7 @@ fun SettingsScreen(onBack: () -> Unit, onAppearance: () -> Unit = {}, onOnboardi
                 Segmented(listOf(BubbleSide.LEFT to "Слева", BubbleSide.RIGHT to "Справа"), s.bubbleSide) { repo.setBubbleSide(it) }
             }
 
-            SectionCard("Куда отправлять чистовик") {
+            if (tablet) SectionCard("Куда отправлять чистовик") {
                 val targets = remember { NoteApps.pdfTargets(context) }
                 val notes = remember(s) { NoteApps.chosen(context) }
                 RadioRow(
@@ -224,7 +227,7 @@ fun SettingsScreen(onBack: () -> Unit, onAppearance: () -> Unit = {}, onOnboardi
 
             BackupSection()
             UpdateSection()
-            SectionCard("Обучение") {
+            if (tablet) SectionCard("Обучение") {
                 LinkText("Пройти первую настройку заново") { onOnboarding() }
             }
         }

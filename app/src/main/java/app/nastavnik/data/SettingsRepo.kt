@@ -59,6 +59,8 @@ data class AppSettings(
     val accent: Int = 0,
     val backdrop: String = "BLOBS",
     val textScale: Float = 1f,
+    /** Режим устройства (auto / phone / tablet) — здесь, чтобы смена сразу перестраивала экраны. */
+    val deviceRole: String = "auto",
 )
 
 /**
@@ -110,6 +112,7 @@ class SettingsRepo(private val context: Context) {
         accent = prefs.getInt(K_ACCENT, 0),
         backdrop = prefs.getString(K_BACKDROP, "BLOBS").orEmpty(),
         textScale = prefs.getFloat(K_TEXT_SCALE, 1f),
+        deviceRole = prefs.getString(K_ROLE, "auto").orEmpty(),
     )
 
     fun setLightTheme(id: String) = prefs.edit { putString(K_LIGHT, id) }
@@ -240,6 +243,7 @@ class SettingsRepo(private val context: Context) {
 
     /** Ключи на случай, если зашифрованное хранилище не открылось. */
     private val memoryKeys = java.util.concurrent.ConcurrentHashMap<AiProvider, String>()
+    @Volatile private var memorySyncPassword: String? = null
 
     private fun keyName(p: AiProvider) = "${K_API_KEY}_${p.name}"
 
@@ -262,6 +266,47 @@ class SettingsRepo(private val context: Context) {
     }
 
     fun hasApiKey(p: AiProvider = provider()): Boolean = apiKey(p).isNotEmpty()
+
+    // ---------- расписание ----------
+    /** Группа в расписании Сириуса (пусто — не выбрана). */
+    fun scheduleGroup(): String = prefs.getString(K_GROUP, "").orEmpty()
+    fun setScheduleGroup(g: String) = prefs.edit { putString(K_GROUP, g.trim()); putLong(K_STUDY_STAMP, System.currentTimeMillis()) }
+    /** Преподаватель иностранного языка: показывать пары только с ним. */
+    fun languageTeacher(): String = prefs.getString(K_LANG_TEACHER, "").orEmpty()
+    fun setLanguageTeacher(t: String) = prefs.edit { putString(K_LANG_TEACHER, t.trim()); putLong(K_STUDY_STAMP, System.currentTimeMillis()) }
+    /** За сколько минут до пары напомнить (0 — не напоминать). */
+    fun lessonAlertMin(): Int = prefs.getInt(K_LESSON_ALERT, 10)
+    fun setLessonAlertMin(m: Int) = prefs.edit { putInt(K_LESSON_ALERT, m.coerceIn(0, 60)) }
+
+    // ---------- устройство ----------
+    /** "auto", "phone" или "tablet": как вести себя — с тетрадями для стилуса или без. */
+    fun deviceRole(): String = prefs.getString(K_ROLE, "auto").orEmpty()
+    fun setDeviceRole(r: String) = prefs.edit { putString(K_ROLE, r) }
+    /** Постоянный идентификатор этого устройства для синхронизации. */
+    fun deviceId(): String = prefs.getString(K_DEVICE_ID, null) ?: newUid().take(12).also { id -> prefs.edit { putString(K_DEVICE_ID, id) } }
+
+    // ---------- синхронизация ----------
+    fun syncUrl(): String = prefs.getString(K_SYNC_URL, "").orEmpty()
+    fun syncLogin(): String = prefs.getString(K_SYNC_LOGIN, "").orEmpty()
+    /** Пароль облака — только в зашифрованных настройках, как и ключ API. */
+    fun syncPassword(): String = (secure?.getString(K_SYNC_PASSWORD, null) ?: memorySyncPassword).orEmpty()
+    fun setSync(url: String, login: String, password: String) {
+        prefs.edit { putString(K_SYNC_URL, url.trim()); putString(K_SYNC_LOGIN, login.trim()) }
+        val s = secure
+        if (s != null) s.edit { putString(K_SYNC_PASSWORD, password) } else memorySyncPassword = password
+    }
+    fun clearSync() {
+        prefs.edit { remove(K_SYNC_URL); remove(K_SYNC_LOGIN); remove(K_SYNC_STATUS) }
+        secure?.edit { remove(K_SYNC_PASSWORD) }
+        memorySyncPassword = null
+    }
+    val syncConfigured: Boolean get() = syncUrl().isNotEmpty() && syncLogin().isNotEmpty() && syncPassword().isNotEmpty()
+    /** Последний итог синхронизации для показа: «время|ok|текст». */
+    fun syncStatus(): String = prefs.getString(K_SYNC_STATUS, "").orEmpty()
+    fun setSyncStatus(v: String) = prefs.edit { putString(K_SYNC_STATUS, v) }
+    /** Когда менялись учебные настройки (группа, экзамены) — чтобы синхронизация видела правку. */
+    fun studyStamp(): Long = prefs.getLong(K_STUDY_STAMP, 0L)
+    fun touchStudy() = prefs.edit { putLong(K_STUDY_STAMP, System.currentTimeMillis()) }
 
     private fun openSecure(): SharedPreferences? {
         fun create(): SharedPreferences {
@@ -296,6 +341,16 @@ class SettingsRepo(private val context: Context) {
         private const val PREFS = "settings"
         private const val SECURE_PREFS = "secure_settings"
         private const val K_EXAMS = "exams"
+        private const val K_GROUP = "schedule_group"
+        private const val K_LANG_TEACHER = "language_teacher"
+        private const val K_LESSON_ALERT = "lesson_alert_min"
+        private const val K_ROLE = "device_role"
+        private const val K_DEVICE_ID = "device_id"
+        private const val K_SYNC_URL = "sync_url"
+        private const val K_SYNC_LOGIN = "sync_login"
+        private const val K_SYNC_PASSWORD = "sync_password"
+        private const val K_SYNC_STATUS = "sync_status"
+        private const val K_STUDY_STAMP = "study_stamp"
         private const val K_USAGE = "usage_log"
         private const val K_THEME = "theme_mode"
         private const val K_FAST = "fast_answers"

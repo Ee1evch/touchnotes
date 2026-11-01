@@ -29,6 +29,11 @@ class Notebooks(private val context: Context) {
         override fun sizeOf(key: String, value: Bitmap) = value.byteCount
     }
 
+    /** Тетрадь пришла с другого устройства — подложки в памяти могли устареть. */
+    fun forget(notebookId: Long) {
+        bgCache.snapshot().keys.filter { it.startsWith("$notebookId/") }.forEach { bgCache.remove(it) }
+    }
+
     fun defaultTitle(now: Long = System.currentTimeMillis()): String =
         "Тетрадь · " + SimpleDateFormat("d MMMM", Locale("ru")).format(Date(now))
 

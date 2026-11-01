@@ -50,6 +50,8 @@ class StudyRepo(private val app: NastavnikApp) {
         cards.update(updated)
         record(Progress.KIND_CARD, updated.topic, if (remembered) 0 else 1)
         StudyWidget.refresh(app)
+        // Повторил на телефоне — на планшете карточки тоже сдвинутся.
+        app.sync.soon(8000)
     }
 
     suspend fun record(kind: String, topic: String, errors: Int = 0) {
@@ -60,7 +62,9 @@ class StudyRepo(private val app: NastavnikApp) {
 
     fun saveExams(list: List<Exam>) {
         app.settings.setExamsJson(ExamPlan.encode(list.sortedBy { it.at }))
+        app.settings.touchStudy()
         StudyWidget.refresh(app)
+        app.sync.soon()
     }
 
     /** Ближайший экзамен, который ещё не прошёл (в течение дня экзамена — тоже он). */
