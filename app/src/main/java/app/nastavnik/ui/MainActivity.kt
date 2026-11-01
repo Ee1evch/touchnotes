@@ -148,6 +148,7 @@ class MainActivity : ComponentActivity() {
                         SCREEN_SCHEDULE -> ScheduleScreen(onBack = home, onRoom = showRoom)
                         SCREEN_MAP -> MapScreen(initialRoom = mapRoom, onBack = home)
                         SCREEN_REMINDERS -> RemindersScreen(onBack = home)
+                        SCREEN_GRADES -> GradesScreen(onBack = home, onSettings = { go(SCREEN_SETTINGS) })
                         SCREEN_NOTEBOOK -> if (notebookId != 0L) {
                             NotebookScreen(
                                 notebookId,
@@ -254,6 +255,8 @@ class MainActivity : ComponentActivity() {
         resumeTick++
         StudyWidget.refresh(this)
         app.sync.onForeground()
+        // Оценки — не чаще раза в час; новые придут уведомлением.
+        app.appScope.launch { app.grades.refresh() }
     }
 
     override fun onStop() {
@@ -290,6 +293,7 @@ class MainActivity : ComponentActivity() {
         const val SCREEN_MAP = "map"
         const val SCREEN_REMINDERS = "reminders"
         const val SCREEN_VIEWER = "viewer"
+        const val SCREEN_GRADES = "grades"
         const val EXTRA_ROOM = "room"
         const val EXTRA_NOTEBOOK = "notebook_id"
         const val EXTRA_FROM_OVERLAY = "from_overlay"

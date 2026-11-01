@@ -23,6 +23,7 @@ import app.nastavnik.ui.Palettes
 import app.nastavnik.schedule.ScheduleRepo
 import app.nastavnik.campus.CampusRepo
 import app.nastavnik.sync.SyncManager
+import app.nastavnik.grades.GradesRepo
 import app.nastavnik.study.Speaker
 import app.nastavnik.study.StudyRepo
 import app.nastavnik.study.Trainer
@@ -64,6 +65,9 @@ class NastavnikApp : Application() {
 
     /** Карта кампуса: этажи, поиск аудиторий, маршруты. */
     val campus: CampusRepo by lazy { CampusRepo(this) }
+
+    /** Успеваемость из личного кабинета (Moodle). */
+    val grades: GradesRepo by lazy { GradesRepo(this, settings) }
 
     /** Синхронизация с другими устройствами через облако. */
     val sync: SyncManager by lazy { SyncManager(this) }
@@ -125,6 +129,11 @@ class NastavnikApp : Application() {
             },
         )
         nm.createNotificationChannel(
+            NotificationChannel(CHANNEL_GRADES, "Новые оценки", NotificationManager.IMPORTANCE_DEFAULT).apply {
+                description = "Когда в личном кабинете появляется новая оценка"
+            },
+        )
+        nm.createNotificationChannel(
             NotificationChannel(CHANNEL_LESSONS, "Скоро пара", NotificationManager.IMPORTANCE_HIGH).apply {
                 description = "За несколько минут до пары: что и в какой аудитории, с маршрутом по карте"
             },
@@ -136,6 +145,7 @@ class NastavnikApp : Application() {
         const val CHANNEL_REMINDERS = "reminders"
         const val CHANNEL_PERSONAL = "personal"
         const val CHANNEL_LESSONS = "lessons"
+        const val CHANNEL_GRADES = "grades"
     }
 }
 

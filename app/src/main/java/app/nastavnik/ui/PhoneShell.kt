@@ -192,6 +192,8 @@ private fun TodayTab(resumeTick: Int, go: (String) -> Unit, onRoom: (String) -> 
             }
         }
 
+        GradesCard(onOpen = { go(MainActivity.SCREEN_GRADES) })
+
         // Карточки и серия.
         val today = Streaks.day(nowMs)
         val perDay = remember(events) { events.groupingBy { Streaks.day(it.at) }.eachCount() }
@@ -301,16 +303,19 @@ private fun StudyTab(resumeTick: Int, go: (String) -> Unit) {
                 InkButton(if (due > 0) "Повторить" else "Открыть", icon = R.drawable.ic_cards) { go(MainActivity.SCREEN_REVIEW) }
             }
         }
-        Column(Modifier.fillMaxWidth().enter().glass(RoundedCornerShape(26.dp), 8.dp).padding(vertical = 6.dp)) {
+        // Сгруппированный список, как в настройках Android 16–17.
+        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             val rows = listOf(
-                Triple(R.drawable.ic_chart, "Прогресс", "Серия и темы с ошибками") to MainActivity.SCREEN_PROGRESS,
+                Triple(R.drawable.ic_chart, "Успеваемость", "Оценки из личного кабинета") to MainActivity.SCREEN_GRADES,
+                Triple(R.drawable.ic_flame, "Прогресс", "Серия и темы с ошибками") to MainActivity.SCREEN_PROGRESS,
                 Triple(R.drawable.ic_bell, "Напоминания", "Дедлайны и дела на всех устройствах") to MainActivity.SCREEN_REMINDERS,
                 Triple(R.drawable.ic_notebook, "Конспекты", "Тетради с планшета — посмотреть") to MainActivity.SCREEN_NOTEBOOKS,
                 Triple(R.drawable.ic_history, "Чистовики", "PDF аккуратных конспектов") to MainActivity.SCREEN_HISTORY,
             )
             rows.forEachIndexed { i, (spec, screen) ->
                 Row(
-                    Modifier.fillMaxWidth().clickable { go(screen) }.padding(horizontal = 16.dp, vertical = 12.dp),
+                    Modifier.fillMaxWidth().enter().clip(groupShape(i, rows.size)).background(Brand.Glass.copy(alpha = if (Brand.dark) 1f else 0.85f))
+                        .clickable { go(screen) }.padding(horizontal = 16.dp, vertical = 14.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
@@ -321,7 +326,6 @@ private fun StudyTab(resumeTick: Int, go: (String) -> Unit) {
                     }
                     Icon(painterResource(R.drawable.ic_chevron), contentDescription = null, tint = Brand.InkSoft, modifier = Modifier.size(18.dp))
                 }
-                if (i < rows.lastIndex) HorizontalDivider(Modifier.padding(start = 70.dp, end = 18.dp), color = MaterialTheme.colorScheme.outlineVariant)
             }
         }
     }

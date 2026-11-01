@@ -51,6 +51,8 @@ class CampusFlowTest {
         device.executeShellCommand("settings put global hide_error_dialogs 1")
         // Иначе поверх экрана выскочит системный вопрос про уведомления.
         device.executeShellCommand("pm grant ${ctx.packageName} android.permission.POST_NOTIFICATIONS")
+        device.executeShellCommand("pm grant ${ctx.packageName} android.permission.ACCESS_FINE_LOCATION")
+        device.executeShellCommand("pm grant ${ctx.packageName} android.permission.ACTIVITY_RECOGNITION")
         ctx.app.settings.setOnboardingDone(true)
     }
 
@@ -120,6 +122,18 @@ class CampusFlowTest {
             assertNotNull("маршрут не построен", device.wait(Until.findObject(By.textContains(" мин")), 20000))
             SystemClock.sleep(1500)
             screenshot("phone_route")
+
+            // По шагам, как в картах: плашка с манёвром сверху, «Завершить» снизу.
+            device.findObject(By.text("Поехали")).click()
+            assertNotNull("нет навигации по шагам", device.wait(Until.findObject(By.text("Завершить")), 8000))
+            assertNotNull(device.wait(Until.findObject(By.textContains("через")), 5000))
+            SystemClock.sleep(1200)
+            screenshot("phone_navigation")
+            device.findObject(By.desc("Следующий шаг"))?.click()
+            SystemClock.sleep(900)
+            screenshot("phone_navigation_next")
+            device.findObject(By.text("Завершить")).click()
+            SystemClock.sleep(600)
 
             // Поиск на карте.
             device.findObject(By.desc("Поиск на карте")).click()

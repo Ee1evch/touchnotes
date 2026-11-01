@@ -59,6 +59,7 @@ fun SettingsScreen(onBack: () -> Unit, onAppearance: () -> Unit = {}, onOnboardi
         AppearanceEntry(onAppearance)
         val tablet = remember(s) { context.app.isTablet() }
         SyncSection()
+        GradesSettingsSection()
         DeviceSection(tablet)
         if (tablet) SectionCard("Нейросеть") {
             ProviderEditor(onChanged = {})

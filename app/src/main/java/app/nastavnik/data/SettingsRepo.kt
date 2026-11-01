@@ -278,6 +278,23 @@ class SettingsRepo(private val context: Context) {
     fun lessonAlertMin(): Int = prefs.getInt(K_LESSON_ALERT, 10)
     fun setLessonAlertMin(m: Int) = prefs.edit { putInt(K_LESSON_ALERT, m.coerceIn(0, 60)) }
 
+    // ---------- успеваемость (ЛКС) ----------
+    fun gradesUrl(): String = prefs.getString(K_GRADES_URL, "").orEmpty()
+    fun gradesLogin(): String = prefs.getString(K_GRADES_LOGIN, "").orEmpty()
+    /** Пароль ЛКС и выданный сайтом токен — только в зашифрованных настройках. */
+    fun gradesPassword(): String = secure?.getString(K_GRADES_PASSWORD, null).orEmpty()
+    fun gradesToken(): String = secure?.getString(K_GRADES_TOKEN, null).orEmpty()
+    fun setGrades(url: String, login: String, password: String, token: String) {
+        prefs.edit { putString(K_GRADES_URL, url.trim()); putString(K_GRADES_LOGIN, login.trim()) }
+        secure?.edit { putString(K_GRADES_PASSWORD, password); putString(K_GRADES_TOKEN, token) }
+    }
+    fun setGradesToken(token: String) { secure?.edit { putString(K_GRADES_TOKEN, token) } }
+    fun clearGrades() {
+        prefs.edit { remove(K_GRADES_URL); remove(K_GRADES_LOGIN) }
+        secure?.edit { remove(K_GRADES_PASSWORD); remove(K_GRADES_TOKEN) }
+    }
+    val gradesConfigured: Boolean get() = gradesUrl().isNotEmpty() && gradesToken().isNotEmpty()
+
     // ---------- устройство ----------
     /** "auto", "phone" или "tablet": как вести себя — с тетрадями для стилуса или без. */
     fun deviceRole(): String = prefs.getString(K_ROLE, "auto").orEmpty()
@@ -342,6 +359,10 @@ class SettingsRepo(private val context: Context) {
         private const val SECURE_PREFS = "secure_settings"
         private const val K_EXAMS = "exams"
         private const val K_GROUP = "schedule_group"
+        private const val K_GRADES_URL = "grades_url"
+        private const val K_GRADES_LOGIN = "grades_login"
+        private const val K_GRADES_PASSWORD = "grades_password"
+        private const val K_GRADES_TOKEN = "grades_token"
         private const val K_LANG_TEACHER = "language_teacher"
         private const val K_LESSON_ALERT = "lesson_alert_min"
         private const val K_ROLE = "device_role"
