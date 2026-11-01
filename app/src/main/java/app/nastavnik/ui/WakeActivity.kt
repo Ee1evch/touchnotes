@@ -23,9 +23,12 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -77,8 +80,11 @@ class WakeActivity : ComponentActivity() {
         )
         val check = intent.getBooleanExtra(EXTRA_CHECK, false)
         val test = intent.getBooleanExtra(WakeAlarm.EXTRA_TEST, false)
+        // Тема — как во всём приложении. Цвета темы общие: со светлой по умолчанию будильник перекрашивал
+        // и приложение. До первой разблокировки настройки недоступны — тогда тема по умолчанию.
+        val appearance = if (WakePrefs.unlocked(this)) appearanceOf(app.settings.load()) else Appearance()
         setContent {
-            NastavnikTheme {
+            NastavnikTheme(appearance) {
                 if (check) CheckScreen { app.appScope.launch { WakeAlarm.onAwake(this@WakeActivity) }; finish() }
                 else RingScreen(test, onDone = { finish() })
             }
@@ -122,7 +128,9 @@ private fun RingScreen(test: Boolean, onDone: () -> Unit) {
         }
     }
     Column(
-        Modifier.fillMaxSize().paperBackdrop().statusBarsPadding().navigationBarsPadding().padding(horizontal = 28.dp, vertical = 24.dp),
+        // Клавиатура поднимает поле ответа, а не закрывает его: отступ под клавиатуру и прокрутка.
+        Modifier.fillMaxSize().paperBackdrop().statusBarsPadding().navigationBarsPadding().imePadding()
+            .verticalScroll(rememberScrollState()).padding(horizontal = 28.dp, vertical = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
@@ -143,7 +151,7 @@ private fun RingScreen(test: Boolean, onDone: () -> Unit) {
                 )
             }
         }
-        Spacer(Modifier.weight(1f))
+        Spacer(Modifier.height(32.dp))
         if (math) {
             Column(
                 Modifier.fillMaxWidth().glass(androidx.compose.foundation.shape.RoundedCornerShape(28.dp), 10.dp, strong = true).padding(20.dp),

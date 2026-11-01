@@ -29,6 +29,7 @@ import app.nastavnik.study.StudyLockRules
 import app.nastavnik.study.WakeGuard
 import app.nastavnik.study.WakeAlarm
 import app.nastavnik.study.WakePrefs
+import app.nastavnik.ui.Brand
 import app.nastavnik.ui.MainActivity
 import app.nastavnik.ui.WakeActivity
 import kotlinx.coroutines.runBlocking
@@ -226,6 +227,8 @@ class CampusFlowTest {
             runBlocking { WakeAlarm.reschedule(ctx) }
             assertEquals(WakeAlarm.ms(tomorrow.atTime(10, 15)), st.lessonAt)
 
+            // Тёмная тема: будильник не должен перекрашивать приложение в светлое (был такой баг).
+            ctx.app.settings.setThemeMode("DARK")
             val sc = ActivityScenario.launch<WakeActivity>(Intent(ctx, WakeActivity::class.java).putExtra(WakeAlarm.EXTRA_TEST, true))
             try {
                 assertNotNull(device.wait(Until.findObject(By.text("Проверка будильника")), 10000))
@@ -233,12 +236,27 @@ class CampusFlowTest {
                 assertNotNull(device.findObject(By.text("Реши, чтобы выключить")))
                 SystemClock.sleep(800)
                 screenshot("wake_ring")
+                assertTrue("будильник перекрасил тему в светлую", Brand.dark)
+                // Клавиатура не закрывает поле ответа — поле поднимается над ней.
+                device.findObject(By.clazz("android.widget.EditText")).click()
+                SystemClock.sleep(1500)
+                val ua = instr.uiAutomation
+                ua.serviceInfo = ua.serviceInfo.apply { flags = flags or android.accessibilityservice.AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS }
+                val ime = ua.windows.firstOrNull { it.type == android.view.accessibility.AccessibilityWindowInfo.TYPE_INPUT_METHOD }
+                screenshot("wake_keyboard")
+                if (ime != null) {
+                    val r = android.graphics.Rect().also { ime.getBoundsInScreen(it) }
+                    val f = device.findObject(By.clazz("android.widget.EditText")).visibleBounds
+                    assertTrue("клавиатура перекрывает поле ответа: поле $f, клавиатура $r", f.bottom <= r.top)
+                }
+                device.pressBack()
                 device.findObject(By.text("Выключить проверку")).click()
                 SystemClock.sleep(800)
             } finally {
                 sc.close()
             }
         } finally {
+            ctx.app.settings.setThemeMode("LIGHT")
             st.on = false
             st.bedAt = 0
             runBlocking { WakeAlarm.reschedule(ctx) }

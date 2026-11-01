@@ -10,6 +10,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import app.nastavnik.R
+import app.nastavnik.data.AppSettings
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -83,14 +84,7 @@ class MainActivity : ComponentActivity() {
             val prefs by remember { app.settings.flow() }.collectAsStateWithLifecycle(initialValue = null)
             // Оформление входит в настройки: поменяли — поток выдаёт новые настройки, и экран сразу перекрашивается.
             val st = prefs ?: app.settings.load()
-            val appearance = Appearance(
-                mode = runCatching { ThemeMode.valueOf(st.themeMode) }.getOrDefault(ThemeMode.LIGHT),
-                light = st.lightTheme,
-                dark = st.darkTheme,
-                accent = st.accent,
-                backdrop = runCatching { Backdrop.valueOf(st.backdrop) }.getOrDefault(Backdrop.BLOBS),
-                textScale = st.textScale,
-            )
+            val appearance = appearanceOf(st)
             val dark = appearance.resolve(isSystemInDarkTheme()).dark
             LaunchedEffect(dark) {
                 val t = android.graphics.Color.TRANSPARENT
@@ -329,3 +323,13 @@ private fun ImportingScreen() {
         }
     }
 }
+
+/** Оформление из настроек — одно для всех экранов (и для будильника: иначе он перекрашивал приложение в светлое). */
+internal fun appearanceOf(st: AppSettings) = Appearance(
+    mode = runCatching { ThemeMode.valueOf(st.themeMode) }.getOrDefault(ThemeMode.LIGHT),
+    light = st.lightTheme,
+    dark = st.darkTheme,
+    accent = st.accent,
+    backdrop = runCatching { Backdrop.valueOf(st.backdrop) }.getOrDefault(Backdrop.BLOBS),
+    textScale = st.textScale,
+)
