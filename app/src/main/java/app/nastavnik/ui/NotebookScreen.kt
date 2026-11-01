@@ -173,7 +173,7 @@ fun NotebookScreen(notebookId: Long, onBack: () -> Unit, onCleanReady: () -> Uni
                     SelectionMenu(ctl)
                     EditorHint(ctl, Modifier.align(Alignment.TopCenter).padding(top = 14.dp))
                     // Лист увеличен — маленькая плашка с масштабом; нажатие возвращает по ширине.
-                    AnimatedVisibility(
+                    androidx.compose.animation.AnimatedVisibility(
                         visible = abs(ctl.zoom - 1f) > 0.04f,
                         modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 14.dp),
                         enter = fadeIn() + scaleIn(initialScale = 0.8f),
