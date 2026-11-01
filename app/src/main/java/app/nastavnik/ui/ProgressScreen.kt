@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -38,6 +39,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.nastavnik.R
 import app.nastavnik.app
 import app.nastavnik.study.Event
+import app.nastavnik.study.Learning
 import app.nastavnik.study.Leitner
 import app.nastavnik.study.Progress
 import app.nastavnik.study.ProgressSummary
@@ -87,6 +89,41 @@ fun ProgressScreen(onBack: () -> Unit, onReview: () -> Unit) {
             Stat("$learned/$allCards", "карточек выучено", R.drawable.ic_cards, Modifier.weight(1f), onClick = onReview)
         }
         if (s.weakTopics.isNotEmpty()) WeakTopics(s.weakTopics)
+        val events = remember(list) { list.map { Event(it.kind, it.topic, it.errors, it.at) } }
+        Growth(events, now)
+    }
+}
+
+/** Рост: опасные темы (уверен, но ошибаешься), задачи без подсказок и контрольные срезы. */
+@Composable
+private fun Growth(events: List<Event>, now: Long) {
+    val danger = remember(events) { Learning.dangerous(events, now) }
+    val noHint = remember(events) { Learning.noHintShare(events, now) }
+    val cps = remember(events) { Learning.checkpoints(events) }
+    if (danger.isEmpty() && noHint == null && cps.isEmpty()) return
+    SectionCard("Насколько ты растёшь") {
+        if (danger.isNotEmpty()) {
+            FieldLabel("Иллюзия знания", "Был уверен, но не вспомнил — эти темы идут в повторении первыми.")
+            danger.forEach { (topic, n) ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(topic, style = MaterialTheme.typography.bodyMedium, color = Brand.Error, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text("$n", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+        noHint?.let { FieldLabel("Задачи без подсказок · 2 недели: $it%", "Чем больше — тем самостоятельнее решаешь.") }
+        if (cps.isNotEmpty()) {
+            FieldLabel("Контрольные срезы", cps.joinToString(" → ") { "${it.second}%" })
+            // Столбики срезов: видно, растёт ли результат.
+            Row(Modifier.fillMaxWidth().height(64.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.Bottom) {
+                cps.takeLast(8).forEach { (_, pct) ->
+                    Box(
+                        Modifier.weight(1f).fillMaxHeight(pct.coerceIn(4, 100) / 100f).clip(RoundedCornerShape(6.dp))
+                            .background(if (pct >= 70) Brand.Ok else Brand.Accent),
+                    )
+                }
+            }
+        }
     }
 }
 

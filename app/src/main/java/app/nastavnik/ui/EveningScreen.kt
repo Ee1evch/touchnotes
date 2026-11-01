@@ -28,6 +28,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -44,6 +45,8 @@ import app.nastavnik.R
 import app.nastavnik.app
 import app.nastavnik.data.CardEntity
 import app.nastavnik.study.LockPrefs
+import app.nastavnik.study.QuizQuestion
+import app.nastavnik.study.TrainResult
 import app.nastavnik.study.StudyLock
 import app.nastavnik.study.StudyLockRules
 import app.nastavnik.study.ruPlural
@@ -186,11 +189,24 @@ private fun SummaryRow(date: LocalDate, subject: String, done: Boolean, onSave: 
     }
 }
 
-/** Подготовка к паре: прошлый конспект и карточки предмета; без материалов — 90 секунд на учебник. */
+/**
+ * Подготовка к паре: прошлый конспект и карточки предмета; без материалов — 90 секунд на учебник.
+ * Если настроена нейросеть — ещё 3 вопроса по следующей теме ДО лекции (попытка ответить заранее помогает
+ * запомнить лекцию); после пары они вернутся карточками.
+ */
 @Composable
 private fun PrepRow(date: LocalDate, subject: String, done: Boolean, onDone: () -> Unit) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var open by remember(subject) { mutableStateOf(false) }
+    var pre by remember(subject) { mutableStateOf<List<QuizQuestion>?>(null) }
+    val picked = remember(subject) { mutableStateMapOf<Int, Int>() }
+    LaunchedEffect(open) {
+        if (open && pre == null && !done) {
+            val last = StudyLock.materials(context, date, subject).first
+            pre = (context.app.trainer.pretest(subject, last) as? TrainResult.Ok)?.value.orEmpty()
+        }
+    }
     val materials by produceState<Pair<String?, List<CardEntity>>?>(null, open) {
         if (open) value = StudyLock.materials(context, date, subject)
     }
@@ -226,6 +242,29 @@ private fun PrepRow(date: LocalDate, subject: String, done: Boolean, onDone: () 
                             AnimatedVisibility(shown) { Text(c.back, style = MaterialTheme.typography.bodySmall, color = Brand.Accent) }
                         }
                     }
+                    pre?.takeIf { it.isNotEmpty() }?.let { qs ->
+                        Text("Вопросы до лекции — попробуй ответить, даже если не знаешь:", style = MaterialTheme.typography.labelMedium, color = Brand.InkSoft)
+                        qs.forEachIndexed { qi, q ->
+                            Column(Modifier.fillMaxWidth().glass(RoundedCornerShape(14.dp), 4.dp).padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                MathText(q.q, 15)
+                                q.options.forEachIndexed { oi, option ->
+                                    val chosen = picked[qi]
+                                    val color = when {
+                                        chosen == null -> Brand.Ink.copy(alpha = 0.04f)
+                                        oi == q.correct -> Brand.OkSoft
+                                        oi == chosen -> Brand.ErrorSoft
+                                        else -> Brand.Ink.copy(alpha = 0.02f)
+                                    }
+                                    Row(
+                                        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(color)
+                                            .clickable(enabled = chosen == null) { picked[qi] = oi }.padding(horizontal = 10.dp, vertical = 8.dp),
+                                    ) { MathText(option, 14) }
+                                }
+                                if (picked[qi] != null && q.why.isNotBlank()) Text(q.why, style = MaterialTheme.typography.bodySmall, color = Brand.InkSoft)
+                            }
+                        }
+                    }
+                    val needPre = pre?.let { picked.size < it.size } ?: false
                     val needCards = m.second.isNotEmpty() && flipped.size < m.second.size
                     val needTime = m.first == null && m.second.isEmpty() && seconds < StudyLockRules.PREP_MIN_SECONDS
                     if (m.first == null && m.second.isEmpty()) {
@@ -237,10 +276,33 @@ private fun PrepRow(date: LocalDate, subject: String, done: Boolean, onDone: () 
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            if (needCards) "Переверни все карточки (${flipped.size}/${m.second.size})" else "",
+                            when {
+                                needCards -> "Переверни все карточки (${flipped.size}/${m.second.size})"
+                                needPre -> "Ответь на вопросы до лекции (${picked.size}/${pre?.size ?: 0})"
+                                else -> ""
+                            },
                             style = MaterialTheme.typography.bodySmall, color = Brand.InkSoft, modifier = Modifier.weight(1f),
                         )
-                        InkButton(if (done) "Готов" else "Готов к паре", enabled = !done && !needCards && !needTime) { onDone(); open = false }
+                        InkButton(if (done) "Готов" else "Готов к паре", enabled = !done && !needCards && !needTime && !needPre) {
+                            // Вопросы до лекции вернутся карточками на следующий вечер — уже после пары.
+                            pre?.takeIf { it.isNotEmpty() }?.let { qs ->
+                                scope.launch {
+                                    val now = System.currentTimeMillis()
+                                    context.app.db.cards().insertAll(
+                                        qs.map { q ->
+                                            val answer = q.options.getOrNull(q.correct).orEmpty()
+                                            CardEntity(
+                                                noteId = null, subject = subject, topic = "До лекции", front = q.q,
+                                                back = if (q.why.isBlank()) answer else "$answer\n\n${q.why}",
+                                                dueAt = now + 20 * 3_600_000L, createdAt = now,
+                                            )
+                                        },
+                                    )
+                                }
+                            }
+                            onDone()
+                            open = false
+                        }
                     }
                 }
             }

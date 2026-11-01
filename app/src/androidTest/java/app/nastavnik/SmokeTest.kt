@@ -20,6 +20,7 @@ import app.nastavnik.notes.CleanNoteParser
 import app.nastavnik.notes.NoteStorage
 import app.nastavnik.notes.PdfExporter
 import app.nastavnik.overlay.BubbleService
+import app.nastavnik.study.Learning
 import app.nastavnik.study.Progress
 import app.nastavnik.ui.MainActivity
 import kotlinx.coroutines.Dispatchers
@@ -138,17 +139,21 @@ class SmokeTest {
             Intent(ctx, MainActivity::class.java).putExtra(MainActivity.EXTRA_SCREEN, MainActivity.SCREEN_REVIEW),
         )
         dismissSystemAnr()
-        assertNotNull("нет карточки", device.wait(Until.findObject(By.text("Показать ответ")), 8000))
+        // Уверенность до ответа: «Знаю», а потом «Не помню» — тема становится опасной.
+        assertNotNull("нет карточки", device.wait(Until.findObject(By.text("Знаю")), 8000))
         SystemClock.sleep(1500)
         screenshot("review_question")
-        device.findObject(By.text("Показать ответ")).click()
+        device.findObject(By.text("Знаю")).click()
         assertNotNull("нет кнопки «Помню»", device.wait(Until.findObject(By.text("Помню")), 4000))
         SystemClock.sleep(1500)
         screenshot("review_answer")
-        device.findObject(By.text("Помню")).click()
+        device.findObject(By.text("Не помню")).click()
+        assertNotNull("нет пометки об иллюзии знания", device.wait(Until.findObject(By.textStartsWith("Был уверен")), 4000))
         SystemClock.sleep(1000)
+        screenshot("review_overconfident")
         val events = runBlocking { ctx.app.db.activity().observeAll().first() }
         assertTrue("повторение не записалось", events.any { it.kind == Progress.KIND_CARD })
+        assertTrue("калибровка не записалась", events.any { it.kind == Learning.KIND_CALIB && it.errors == 1 })
         scenario.close()
 
         val progress = ActivityScenario.launch<MainActivity>(

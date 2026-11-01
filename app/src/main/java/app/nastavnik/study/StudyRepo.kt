@@ -54,6 +54,9 @@ class StudyRepo(private val app: NastavnikApp) {
         app.sync.soon(8000)
     }
 
+    /** Все учебные события — для калибровки, срезов и плана на день. */
+    suspend fun events(): List<Event> = app.db.activity().all().map { Event(it.kind, it.topic, it.errors, it.at) }
+
     suspend fun record(kind: String, topic: String, errors: Int = 0) {
         runCatching { app.db.activity().insert(ActivityEntity(kind = kind, topic = topic, errors = errors, at = System.currentTimeMillis())) }
     }

@@ -147,6 +147,7 @@ fun HomeScreen(resumeTick: Int, go: (String) -> Unit, openNotebook: (Long) -> Un
                     Row(horizontalArrangement = Arrangement.spacedBy(22.dp)) {
                         Column(Modifier.weight(1.55f), verticalArrangement = Arrangement.spacedBy(18.dp)) {
                             dayCard()
+                            PlanCard(resumeTick)
                             notebooks()
                             mentor()
                         }
@@ -158,6 +159,7 @@ fun HomeScreen(resumeTick: Int, go: (String) -> Unit, openNotebook: (Long) -> Un
                     }
                 } else {
                     dayCard()
+                    PlanCard(resumeTick)
                     tiles()
                     notebooks()
                     mentor()

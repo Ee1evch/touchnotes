@@ -161,6 +161,7 @@ private fun TodayTab(resumeTick: Int, go: (String) -> Unit, onRoom: (String) -> 
         }
         EveningCard(resumeTick, go)
         DayCard(lessons, tomorrow, now, hasGroup, onRoom = onRoom, onSchedule = { onTab(PhoneTab.SCHEDULE) })
+        PlanCard(resumeTick)
         val today = Streaks.day(nowMs)
         val perDay = remember(events) { events.groupingBy { Streaks.day(it.at) }.eachCount() }
         val streak = remember(perDay, today) { Streaks.current(perDay.keys, today) }

@@ -29,6 +29,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -45,6 +47,7 @@ import app.nastavnik.schedule.Lesson
 import app.nastavnik.schedule.ScheduleNow
 import app.nastavnik.study.Exam
 import app.nastavnik.study.ExamPlan
+import app.nastavnik.study.DayPlan
 import app.nastavnik.study.StudyLock
 import app.nastavnik.study.WakeAlarm
 import app.nastavnik.study.WakePrefs
@@ -377,6 +380,39 @@ fun EveningCard(resumeTick: Int, go: (String) -> Unit) {
             )
         }
         InkButton(if (s.steps == 0) "Начать" else "Дальше") { go(MainActivity.SCREEN_EVENING) }
+    }
+}
+
+/**
+ * План на день от наставника: 3–4 дела по сводке учёбы и времени в телефоне. Один запрос в день;
+ * без нейросети карточки нет.
+ */
+@Composable
+fun PlanCard(resumeTick: Int) {
+    val context = LocalContext.current
+    var refresh by remember { mutableIntStateOf(0) }
+    val plan by produceState<List<String>?>(null, resumeTick, refresh) { value = DayPlan.today(context, refresh = refresh > 0) }
+    val items = plan ?: return
+    if (items.isEmpty()) return
+    val usage = remember(resumeTick) { DayPlan.usageAccess(context) }
+    Column(
+        Modifier.fillMaxWidth().enter().glass(RoundedCornerShape(26.dp), 10.dp).padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(painterResource(R.drawable.ic_sparkle), contentDescription = null, tint = Brand.Accent, modifier = Modifier.size(18.dp))
+            Text("План на сегодня", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f).padding(start = 8.dp))
+            LinkText("Обновить") { refresh++ }
+        }
+        items.forEachIndexed { i, item ->
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("${i + 1}.", style = MaterialTheme.typography.bodyMedium, color = Brand.Accent)
+                Text(item, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+            }
+        }
+        if (!usage) LinkText("Учитывать время в телефоне") {
+            runCatching { context.startActivity(DayPlan.usageIntent().addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }
+        }
     }
 }
 

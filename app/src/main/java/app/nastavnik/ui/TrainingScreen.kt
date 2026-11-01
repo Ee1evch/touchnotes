@@ -39,6 +39,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -59,8 +61,10 @@ import app.nastavnik.R
 import app.nastavnik.app
 import app.nastavnik.ink.Paper
 import app.nastavnik.notes.NoteStorage
+import app.nastavnik.study.Event
 import app.nastavnik.study.Exam
 import app.nastavnik.study.ExamPlan
+import app.nastavnik.study.Learning
 import app.nastavnik.study.Material
 import app.nastavnik.study.PracticeTask
 import app.nastavnik.study.Progress
@@ -158,6 +162,9 @@ private fun VariantTab(topic: String, noteId: Long?, onOpenNotebook: (Long) -> U
     var problem by remember { mutableStateOf<Pair<String, Boolean>?>(null) }
     val tasks = remember { mutableStateListOf<PracticeTask>() }
     var showAnswers by remember { mutableStateOf(false) }
+    // Лестница подсказок: сколько открыто у каждой задачи; итог по задаче — «Решил» / «Не решил».
+    val hintsOpen = remember { mutableStateMapOf<Int, Int>() }
+    val decided = remember { mutableStateMapOf<Int, Boolean>() }
 
     fun generate() {
         loading = true
@@ -169,6 +176,8 @@ private fun VariantTab(topic: String, noteId: Long?, onOpenNotebook: (Long) -> U
                     tasks.clear()
                     tasks.addAll(r.value)
                     showAnswers = false
+                    hintsOpen.clear()
+                    decided.clear()
                 }
                 is TrainResult.Failed -> problem = r.message to r.needsSettings
             }
@@ -212,6 +221,16 @@ private fun VariantTab(topic: String, noteId: Long?, onOpenNotebook: (Long) -> U
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         LevelDots(t.level)
                         MathText(t.task, 16)
+                        // Подсказки — по одной и только по просьбе: сначала попробуй сам.
+                        val open = hintsOpen[i] ?: 0
+                        t.hints.take(open).forEachIndexed { h, hint ->
+                            Row(
+                                Modifier.clip(RoundedCornerShape(12.dp)).background(Brand.Ink.copy(alpha = 0.05f)).padding(horizontal = 12.dp, vertical = 8.dp),
+                            ) { MathText("Подсказка ${h + 1}: $hint", 15) }
+                        }
+                        if (open < t.hints.size && !showAnswers) {
+                            LinkText("Подсказка ${open + 1} из ${t.hints.size}") { hintsOpen[i] = open + 1 }
+                        }
                         if (showAnswers) {
                             Row(
                                 Modifier
@@ -219,6 +238,24 @@ private fun VariantTab(topic: String, noteId: Long?, onOpenNotebook: (Long) -> U
                                     .background(Brand.OkSoft)
                                     .padding(horizontal = 12.dp, vertical = 8.dp),
                             ) { MathText("Ответ: ${t.answer}", 15) }
+                            // Честный итог: нерешённая задача вернётся через 1, 3, 7 дней.
+                            when (decided[i]) {
+                                null -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    ChipButton("Решил") {
+                                        decided[i] = true
+                                        scope.launch { context.app.study.record(Learning.KIND_TASK, topic, open) }
+                                    }
+                                    ChipButton("Не решил") {
+                                        decided[i] = false
+                                        scope.launch {
+                                            context.app.trainer.problemCard(t, topic)
+                                            context.app.study.record(Learning.KIND_TASK, topic, open + 1)
+                                        }
+                                    }
+                                }
+                                true -> Text("Решено${if (open > 0) " с подсказками: $open" else " без подсказок"}", style = MaterialTheme.typography.bodySmall, color = Brand.Ok)
+                                false -> Text("Вернётся завтра, потом через 3 и 7 дней — пока не решишь", style = MaterialTheme.typography.bodySmall, color = Brand.InkSoft)
+                            }
                         }
                     }
                 }
@@ -270,24 +307,59 @@ private fun QuizTab(topic: String, noteId: Long?, onReview: () -> Unit, onSettin
     val wrong = remember { mutableStateListOf<QuizQuestion>() }
     var cardsAdded by remember { mutableStateOf(false) }
     var quizTopic by remember { mutableStateOf("") }
+    // Обычный тест, смешанный по слабым темам или контрольный срез (его итог пишется в график).
+    var checkpoint by remember { mutableStateOf(false) }
+    val events by produceState(emptyList<Event>()) { value = context.app.study.events() }
+    val weak = remember(events) {
+        val now = System.currentTimeMillis()
+        (Learning.dangerous(events, now).map { it.first } + Progress.summarize(events, now).weakTopics.map { it.first }).distinct().take(5)
+    }
+    val checkpointDue = remember(events) { Learning.checkpointDue(events, System.currentTimeMillis()) }
+
+    fun begin(r: TrainResult<List<QuizQuestion>>, name: String, isCheckpoint: Boolean) {
+        when (r) {
+            is TrainResult.Ok -> {
+                questions = r.value
+                index = 0
+                picked = null
+                wrong.clear()
+                cardsAdded = false
+                quizTopic = name
+                checkpoint = isCheckpoint
+            }
+            is TrainResult.Failed -> problem = r.message to r.needsSettings
+        }
+        loading = false
+    }
 
     fun start() {
         loading = true
         problem = null
         scope.launch {
             val m = material(context, topic, noteId)
-            when (val r = context.app.trainer.quiz(m)) {
-                is TrainResult.Ok -> {
-                    questions = r.value
-                    index = 0
-                    picked = null
-                    wrong.clear()
-                    cardsAdded = false
-                    quizTopic = m.topic
-                }
-                is TrainResult.Failed -> problem = r.message to r.needsSettings
-            }
-            loading = false
+            begin(context.app.trainer.quiz(m), m.topic, false)
+        }
+    }
+
+    /** Вперемешку по слабым и опасным темам — тренирует выбор метода, как на экзамене. */
+    fun startMixed() {
+        loading = true
+        problem = null
+        scope.launch {
+            val m = Material("Смешанный тест: вопросы вперемешку по темам", "Темы:\n" + weak.joinToString("\n") { "— $it" })
+            begin(context.app.trainer.quiz(m), "Смешанный тест", false)
+        }
+    }
+
+    /** Контрольный срез: 10 вопросов по всем темам карточек — раз в две недели, результат в «Прогресс». */
+    fun startCheckpoint() {
+        loading = true
+        problem = null
+        scope.launch {
+            val topics = context.app.db.cards().all().map { it.subject.ifBlank { it.topic } }.filter { it.isNotBlank() }
+                .groupingBy { it }.eachCount().entries.sortedByDescending { it.value }.take(15).map { it.key }
+                .ifEmpty { weak }.ifEmpty { listOf(topic.ifBlank { "высшая математика 1 курса" }) }
+            begin(context.app.trainer.checkpoint(topics), "Контрольный срез", true)
         }
     }
 
@@ -295,11 +367,21 @@ private fun QuizTab(topic: String, noteId: Long?, onReview: () -> Unit, onSettin
         SectionCard("Мини-тест") {
             FieldLabel("8 вопросов с вариантами", "Сразу видно, где верно, и почему. Ошибки можно одним нажатием отправить в карточки.")
             InkButton("Начать тест", Modifier.fillMaxWidth(), enabled = !loading, icon = R.drawable.ic_quiz) { start() }
+            if (weak.size >= 2) {
+                SoftButton("Вперемешку по слабым темам", Modifier.fillMaxWidth()) { startMixed() }
+            }
             if (loading) Working("Готовлю вопросы…")
             problem?.let { (text, settings) ->
                 StatusLine(text, Tone.ERROR)
                 if (settings) LinkText("Открыть настройки", onClick = onSettings)
             }
+        }
+        SectionCard("Контрольный срез") {
+            FieldLabel(
+                if (checkpointDue) "Пора: 10 вопросов по всем темам" else "Раз в две недели",
+                "Один и тот же размер теста — по графику в «Прогрессе» видно, растёшь ли ты на самом деле.",
+            )
+            SoftButton("Пройти срез", Modifier.fillMaxWidth()) { if (!loading) startCheckpoint() }
         }
         return
     }
@@ -396,7 +478,10 @@ private fun QuizTab(topic: String, noteId: Long?, onReview: () -> Unit, onSettin
             }
             InkButton(if (index == questions.lastIndex) "Итог" else "Дальше", Modifier.fillMaxWidth().bringIntoViewRequester(bring)) {
                 if (index == questions.lastIndex) {
-                    scope.launch { context.app.study.record(Progress.KIND_QUIZ, quizTopic, wrong.size) }
+                    scope.launch {
+                        context.app.study.record(Progress.KIND_QUIZ, quizTopic, wrong.size)
+                        if (checkpoint) context.app.study.record(Learning.KIND_CHECKPOINT, "${questions.size - wrong.size}/${questions.size}", wrong.size)
+                    }
                 }
                 index++
                 picked = null

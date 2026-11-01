@@ -44,6 +44,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.nastavnik.R
 import app.nastavnik.app
 import app.nastavnik.data.CardEntity
+import app.nastavnik.study.Learning
 import app.nastavnik.study.Leitner
 import app.nastavnik.study.ruPlural
 import kotlinx.coroutines.launch
@@ -52,8 +53,9 @@ import java.util.Date
 import java.util.Locale
 
 /**
- * Повторение карточек из чистовиков. Вопрос → «Показать ответ» → «Помню» / «Не помню».
- * Забытая карточка вернётся в конце этой же тренировки.
+ * Повторение карточек. Вопрос → «Знаю / Сомневаюсь / Не знаю» (уверенность до ответа) → ответ → «Помню» / «Не помню».
+ * Забытая карточка вернётся в конце этой же тренировки. Сначала — темы, где был уверен, но ошибался;
+ * остальные — вперемешку по темам. Выученная карточка порождает карточку следующего уровня.
  */
 @Composable
 fun ReviewScreen(onBack: () -> Unit, onExample: () -> Unit) {
@@ -67,11 +69,16 @@ fun ReviewScreen(onBack: () -> Unit, onExample: () -> Unit) {
     var revealed by remember { mutableStateOf(false) }
     var nextDue by remember { mutableStateOf<Long?>(null) }
     var reload by remember { mutableIntStateOf(0) }
+    var confidence by remember { mutableStateOf<Learning.Confidence?>(null) }
+    var danger by remember { mutableStateOf(emptySet<String>()) }
+    var note by remember { mutableStateOf<String?>(null) }
     val allCount by remember { cards.observeCount() }.collectAsStateWithLifecycle(initialValue = 0)
     val learned by remember { cards.observeLearned(Leitner.LEARNED_BOX) }.collectAsStateWithLifecycle(initialValue = 0)
 
     LaunchedEffect(reload) {
-        val due = cards.due(System.currentTimeMillis(), SESSION_SIZE)
+        val now = System.currentTimeMillis()
+        danger = Learning.dangerous(study.events(), now).map { it.first }.toSet()
+        val due = Learning.order(cards.due(now, SESSION_SIZE), { it.topic }, danger)
         queue = due
         total = due.size
         remembered = 0
@@ -145,9 +152,9 @@ fun ReviewScreen(onBack: () -> Unit, onExample: () -> Unit) {
                 ) {
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(
-                            card.topic,
+                            (if (card.topic in danger) "Опасная тема · " else "") + card.topic,
                             style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = if (card.topic in danger) Brand.Error else MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
                             modifier = Modifier.weight(1f),
                         )
@@ -176,6 +183,17 @@ fun ReviewScreen(onBack: () -> Unit, onExample: () -> Unit) {
         fun answer(ok: Boolean) {
             val updated = study.answered(card, ok)
             revealed = false
+            // Калибровка: был уверен, но не вспомнил — тема становится опасной и пойдёт первой.
+            confidence?.let { c ->
+                val over = Learning.overconfident(c, ok)
+                note = if (over) "Был уверен, но не вспомнил — «${card.topic}» теперь в опасных темах, пойдёт первой." else null
+                scope.launch { study.record(Learning.KIND_CALIB, card.topic, if (over) 1 else 0) }
+            }
+            confidence = null
+            // Стала выученной — нейросеть сделает карточку следующего уровня (применить, потом объяснить).
+            if (Learning.shouldUpgrade(card.front, card.box, updated.box)) {
+                context.app.appScope.launch { runCatching { context.app.trainer.upgrade(updated) } }
+            }
             // Забытая карточка — в конец очереди: ещё раз в этой же тренировке.
             val rest = q.drop(1)
             queue = if (ok) rest else rest + updated
@@ -188,14 +206,22 @@ fun ReviewScreen(onBack: () -> Unit, onExample: () -> Unit) {
 
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally)) {
             if (!revealed) {
-                InkButton("Показать ответ", modifier = Modifier.widthIn(min = 240.dp)) { revealed = true }
+                // Уверенность — до ответа: так видно, где знание только кажется.
+                SoftButton("Не знаю") { confidence = Learning.Confidence.NO; revealed = true }
+                SoftButton("Сомневаюсь") { confidence = Learning.Confidence.UNSURE; revealed = true }
+                InkButton("Знаю") { confidence = Learning.Confidence.SURE; revealed = true }
             } else {
                 SoftButton("Не помню", modifier = Modifier.widthIn(min = 180.dp), icon = R.drawable.ic_refresh) { answer(false) }
                 InkButton("Помню", modifier = Modifier.widthIn(min = 180.dp), icon = R.drawable.ic_check) { answer(true) }
             }
         }
+        note?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Brand.Error, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) }
         Text(
-            if (!revealed) "Сначала ответь про себя или на листе, потом открой ответ." else intervalHint(card.box),
+            when {
+                revealed -> intervalHint(card.box)
+                Learning.isProblem(card.front) -> "Задача: реши письменно — на листе или в тетради, потом отметь, насколько уверен в ответе."
+                else -> "Ответь про себя или на листе, потом честно отметь, насколько уверен."
+            },
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
