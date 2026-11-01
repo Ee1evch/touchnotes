@@ -125,6 +125,7 @@ class MainActivity : ComponentActivity() {
                         SCREEN_CLEAN_TEST -> go(SCREEN_CLEAN)
                         SCREEN_APPEARANCE -> go(SCREEN_SETTINGS)
                         SCREEN_VIEWER -> go(SCREEN_NOTEBOOKS)
+                        SCREEN_LKS -> go(SCREEN_GRADES)
                         else -> home()
                     }
                 }
@@ -148,7 +149,8 @@ class MainActivity : ComponentActivity() {
                         SCREEN_SCHEDULE -> ScheduleScreen(onBack = home, onRoom = showRoom)
                         SCREEN_MAP -> MapScreen(initialRoom = mapRoom, onBack = home)
                         SCREEN_REMINDERS -> RemindersScreen(onBack = home)
-                        SCREEN_GRADES -> GradesScreen(onBack = home, onSettings = { go(SCREEN_SETTINGS) })
+                        SCREEN_GRADES -> GradesScreen(onBack = home, onSettings = { go(SCREEN_SETTINGS) }, onLks = { go(SCREEN_LKS) })
+                        SCREEN_LKS -> LksScreen(onBack = { go(SCREEN_GRADES) }, onDone = { go(SCREEN_GRADES) })
                         SCREEN_NOTEBOOK -> if (notebookId != 0L) {
                             NotebookScreen(
                                 notebookId,
@@ -167,7 +169,7 @@ class MainActivity : ComponentActivity() {
                             onSettings = { go(SCREEN_SETTINGS) },
                         )
                         SCREEN_ONBOARDING -> OnboardingScreen(resumeTick, onDone = { screen = SCREEN_HOME; moveTaskToBack(true) }, onSkip = { screen = SCREEN_HOME })
-                        SCREEN_SETTINGS -> SettingsScreen(onBack = home, onAppearance = { go(SCREEN_APPEARANCE) }, onOnboarding = { go(SCREEN_ONBOARDING) })
+                        SCREEN_SETTINGS -> SettingsScreen(onBack = home, onAppearance = { go(SCREEN_APPEARANCE) }, onOnboarding = { go(SCREEN_ONBOARDING) }, onLks = { go(SCREEN_LKS) })
                         SCREEN_APPEARANCE -> AppearanceScreen(onBack = { go(SCREEN_SETTINGS) })
                         SCREEN_HISTORY -> HistoryScreen(onBack = home, onCleanReady = { go(SCREEN_CLEAN) })
                         SCREEN_SEARCH -> SearchScreen(
@@ -294,6 +296,7 @@ class MainActivity : ComponentActivity() {
         const val SCREEN_REMINDERS = "reminders"
         const val SCREEN_VIEWER = "viewer"
         const val SCREEN_GRADES = "grades"
+        const val SCREEN_LKS = "lks"
         const val EXTRA_ROOM = "room"
         const val EXTRA_NOTEBOOK = "notebook_id"
         const val EXTRA_FROM_OVERLAY = "from_overlay"

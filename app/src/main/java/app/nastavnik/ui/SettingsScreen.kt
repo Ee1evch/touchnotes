@@ -49,7 +49,7 @@ import app.nastavnik.study.Reminders
 import kotlin.math.roundToInt
 
 @Composable
-fun SettingsScreen(onBack: () -> Unit, onAppearance: () -> Unit = {}, onOnboarding: () -> Unit = {}) {
+fun SettingsScreen(onBack: () -> Unit, onAppearance: () -> Unit = {}, onOnboarding: () -> Unit = {}, onLks: () -> Unit = {}) {
     val context = LocalContext.current
     val repo = context.app.settings
     val s by remember { repo.flow() }.collectAsStateWithLifecycle(initialValue = repo.load())
@@ -59,7 +59,7 @@ fun SettingsScreen(onBack: () -> Unit, onAppearance: () -> Unit = {}, onOnboardi
         AppearanceEntry(onAppearance)
         val tablet = remember(s) { context.app.isTablet() }
         SyncSection()
-        GradesSettingsSection()
+        GradesSettingsSection(onLks)
         DeviceSection(tablet)
         if (tablet) SectionCard("Нейросеть") {
             ProviderEditor(onChanged = {})

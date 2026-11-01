@@ -295,6 +295,22 @@ class SettingsRepo(private val context: Context) {
     }
     val gradesConfigured: Boolean get() = gradesUrl().isNotEmpty() && gradesToken().isNotEmpty()
 
+    /** ЛКС Сириуса: вход на сайт во встроенном окне (он пускает только с российских адресов — то есть с телефона). */
+    fun lksLogin(): String = prefs.getString(K_LKS_LOGIN, "").orEmpty()
+    fun lksPassword(): String = secure?.getString(K_LKS_PASSWORD, null).orEmpty()
+    /** Адрес страницы успеваемости, которую человек показал один раз. */
+    fun lksPage(): String = prefs.getString(K_LKS_PAGE, "").orEmpty()
+    fun setLks(login: String, password: String) {
+        prefs.edit { putString(K_LKS_LOGIN, login.trim()) }
+        secure?.edit { putString(K_LKS_PASSWORD, password) }
+    }
+    fun setLksPage(url: String) = prefs.edit { putString(K_LKS_PAGE, url) }
+    fun clearLks() {
+        prefs.edit { remove(K_LKS_LOGIN); remove(K_LKS_PAGE) }
+        secure?.edit { remove(K_LKS_PASSWORD) }
+    }
+    val lksConfigured: Boolean get() = lksLogin().isNotEmpty() && lksPassword().isNotEmpty()
+
     // ---------- устройство ----------
     /** "auto", "phone" или "tablet": как вести себя — с тетрадями для стилуса или без. */
     fun deviceRole(): String = prefs.getString(K_ROLE, "auto").orEmpty()
@@ -360,6 +376,9 @@ class SettingsRepo(private val context: Context) {
         private const val K_EXAMS = "exams"
         private const val K_GROUP = "schedule_group"
         private const val K_GRADES_URL = "grades_url"
+        private const val K_LKS_LOGIN = "lks_login"
+        private const val K_LKS_PASSWORD = "lks_password"
+        private const val K_LKS_PAGE = "lks_page"
         private const val K_GRADES_LOGIN = "grades_login"
         private const val K_GRADES_PASSWORD = "grades_password"
         private const val K_GRADES_TOKEN = "grades_token"

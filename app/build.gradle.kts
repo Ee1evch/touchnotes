@@ -92,6 +92,7 @@ dependencies {
 
     implementation(libs.androidx.security.crypto)
     implementation(libs.okhttp)
+    implementation(libs.androidx.webkit)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.android)
 

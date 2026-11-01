@@ -69,7 +69,7 @@ fun gradeColor(i: GradeItem?): Color {
 
 /** Успеваемость: курсы с итогами; касание раскрывает оценки за задания и отзывы преподавателя. */
 @Composable
-fun GradesScreen(onBack: (() -> Unit)?, onSettings: () -> Unit) {
+fun GradesScreen(onBack: (() -> Unit)?, onSettings: () -> Unit, onLks: () -> Unit = {}) {
     val context = LocalContext.current
     val repo = context.app.grades
     val scope = rememberCoroutineScope()
@@ -77,6 +77,11 @@ fun GradesScreen(onBack: (() -> Unit)?, onSettings: () -> Unit) {
     val error by repo.error.collectAsStateWithLifecycle()
     val loading by repo.loading.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { repo.load(); repo.refresh() }
+    // ЛКС: страницу открывает сам телефон — невидимо, с автовходом; оценки снимаются с неё.
+    val app = context.app
+    var lksBusy by remember { mutableStateOf(repo.viaLks && app.settings.lksPage().isNotEmpty() && System.currentTimeMillis() - (snap?.loadedAt ?: 0) > 10 * 60_000) }
+    var lksFailed by remember { mutableStateOf(false) }
+    if (lksBusy) LksSilentRefresh { ok -> lksBusy = false; lksFailed = !ok }
 
     ScreenScaffold(title = "", onBack = null) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -91,8 +96,13 @@ fun GradesScreen(onBack: (() -> Unit)?, onSettings: () -> Unit) {
                 }
             }
             if (repo.configured) {
-                Box(Modifier.size(44.dp).glass(CircleShape, 6.dp, strong = true).clickable(enabled = !loading) { scope.launch { repo.refresh(force = true) } }, contentAlignment = Alignment.Center) {
-                    if (loading) CircularProgressIndicator(Modifier.size(20.dp), color = Brand.Accent, strokeWidth = 2.dp)
+                Box(
+                    Modifier.size(44.dp).glass(CircleShape, 6.dp, strong = true).clickable(enabled = !loading && !lksBusy) {
+                        if (repo.viaLks) { if (app.settings.lksPage().isEmpty()) onLks() else lksBusy = true } else scope.launch { repo.refresh(force = true) }
+                    },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (loading || lksBusy) CircularProgressIndicator(Modifier.size(20.dp), color = Brand.Accent, strokeWidth = 2.dp)
                     else Icon(painterResource(R.drawable.ic_refresh), "Обновить", tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(22.dp))
                 }
             }
@@ -106,6 +116,23 @@ fun GradesScreen(onBack: (() -> Unit)?, onSettings: () -> Unit) {
             return@ScreenScaffold
         }
         error?.let { StatusLine(it, Tone.ERROR) }
+        if (repo.viaLks && app.settings.lksPage().isEmpty()) {
+            Column(Modifier.fillMaxWidth().enter().glass(RoundedCornerShape(28.dp), 10.dp).padding(22.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("Покажи, где оценки", style = MaterialTheme.typography.titleMedium)
+                Text("Открою ЛКС и войду сам. Перейди на страницу с успеваемостью и нажми «Это моя успеваемость» — один раз.", style = MaterialTheme.typography.bodyMedium, color = Brand.InkSoft)
+                InkButton("Открыть ЛКС", onClick = onLks)
+            }
+            return@ScreenScaffold
+        }
+        if (repo.viaLks && lksFailed && snap == null) {
+            Column(Modifier.fillMaxWidth().enter().glass(RoundedCornerShape(28.dp), 10.dp).padding(22.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("Не получилось прочитать оценки", style = MaterialTheme.typography.titleMedium)
+                Text("Открой ЛКС: оценки там, как на сайте. Кнопка «Отчёт» сохранит, как устроена страница, — пришли его, и я научу приложение её читать.", style = MaterialTheme.typography.bodyMedium, color = Brand.InkSoft)
+                InkButton("Открыть ЛКС", onClick = onLks)
+            }
+            return@ScreenScaffold
+        }
+        if (repo.viaLks) LinkText("Открыть ЛКС", onClick = onLks)
         val s = snap ?: run {
             Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Brand.Accent) }
             return@ScreenScaffold
@@ -203,6 +230,9 @@ fun GradesCard(onOpen: () -> Unit) {
     val snap by repo.snapshot.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { repo.load(); repo.refresh() }
     if (!repo.configured) return
+    val app = context.app
+    var lksBusy by remember { mutableStateOf(repo.viaLks && app.settings.lksPage().isNotEmpty() && System.currentTimeMillis() - (snap?.loadedAt ?: 0) > 60 * 60_000) }
+    if (lksBusy) LksSilentRefresh { lksBusy = false }
     val recent = snap?.courses.orEmpty().flatMap { c -> c.items.filter { it.gradedAt > 0 && it.grade != "-" }.map { c to it } }
         .sortedByDescending { it.second.gradedAt }.take(3)
     Column(
@@ -224,45 +254,78 @@ fun GradesCard(onOpen: () -> Unit) {
     }
 }
 
-/** Настройки: адрес ЛКС, логин и пароль; проверка входа сразу. */
+/** Настройки: ЛКС — логин и пароль, вход во встроенном окне; Moodle — запасной вариант. */
 @Composable
-fun GradesSettingsSection() {
+fun GradesSettingsSection(onLks: () -> Unit = {}) {
     val context = LocalContext.current
     val app = context.app
     val scope = rememberCoroutineScope()
-    var configured by remember { mutableStateOf(app.grades.configured) }
-    var url by remember { mutableStateOf(app.settings.gradesUrl().ifEmpty { MoodleClient.SIRIUS }) }
-    var login by remember { mutableStateOf(app.settings.gradesLogin()) }
+    var lks by remember { mutableStateOf(app.settings.lksConfigured) }
+    var moodle by remember { mutableStateOf(app.settings.gradesConfigured) }
+    var showMoodle by remember { mutableStateOf(false) }
+    var login by remember { mutableStateOf(app.settings.lksLogin()) }
     var password by remember { mutableStateOf("") }
+    var url by remember { mutableStateOf(app.settings.gradesUrl().ifEmpty { MoodleClient.SIRIUS }) }
+    var mLogin by remember { mutableStateOf(app.settings.gradesLogin()) }
+    var mPassword by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     SectionCard("Успеваемость (ЛКС)") {
-        if (configured) {
-            Text("Подключено: ${app.settings.gradesLogin()}", style = MaterialTheme.typography.titleSmall)
-            Text(app.settings.gradesUrl(), style = MaterialTheme.typography.bodySmall, color = Brand.InkSoft)
-            LinkText("Отключить") { app.grades.disconnect(); configured = false }
+        if (lks) {
+            Text("ЛКС: ${app.settings.lksLogin()}", style = MaterialTheme.typography.titleSmall)
+            Text(
+                if (app.settings.lksPage().isEmpty()) "Осталось показать страницу с оценками" else "Оценки обновляются сами при открытии",
+                style = MaterialTheme.typography.bodySmall, color = Brand.InkSoft,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                LinkText("Открыть ЛКС", onClick = onLks)
+                LinkText("Отключить") { app.grades.disconnectLks(); lks = false }
+            }
+        } else {
+            FieldLabel("Вход в ЛКС", "Почта и пароль от lks.siriusuniversity.ru. Хранятся зашифрованными только на этом устройстве и уходят только на сайт ЛКС.")
+            AppTextField(login, { login = it }, label = "Почта", keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email))
+            AppTextField(
+                password, { password = it }, label = "Пароль",
+                visualTransformation = PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            )
+            InkButton("Подключить", enabled = login.isNotBlank() && password.isNotBlank()) {
+                app.settings.setLks(login, password)
+                password = ""
+                lks = true
+                onLks()
+            }
+        }
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        if (moodle) {
+            Text("Moodle: ${app.settings.gradesLogin()}", style = MaterialTheme.typography.bodyMedium)
+            LinkText("Отключить Moodle") { app.grades.disconnect(); moodle = false }
             return@SectionCard
         }
-        FieldLabel("Оценки из личного кабинета", "Логин и пароль хранятся зашифрованными только на этом устройстве и уходят только на сайт ЛКС.")
-        AppTextField(url, { url = it }, label = "Адрес сайта", placeholder = MoodleClient.SIRIUS)
-        AppTextField(login, { login = it }, label = "Логин")
-        AppTextField(
-            password, { password = it }, label = "Пароль",
-            visualTransformation = PasswordVisualTransformation(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-        )
-        AnimatedVisibility(error != null, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) { StatusLine(error.orEmpty(), Tone.ERROR) }
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            InkButton("Подключить", enabled = !busy && url.isNotBlank() && login.isNotBlank() && password.isNotBlank()) {
-                busy = true; error = null
-                scope.launch {
-                    runCatching { app.grades.connect(url, login, password) }
-                        .onSuccess { configured = true; password = "" }
-                        .onFailure { error = it.message ?: "Не удалось войти" }
-                    busy = false
+        LinkText(if (showMoodle) "Скрыть" else "Другой сайт (Moodle)") { showMoodle = !showMoodle }
+        AnimatedVisibility(showMoodle, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                AppTextField(url, { url = it }, label = "Адрес сайта", placeholder = MoodleClient.SIRIUS)
+                AppTextField(mLogin, { mLogin = it }, label = "Логин")
+                AppTextField(
+                    mPassword, { mPassword = it }, label = "Пароль",
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                )
+                error?.let { StatusLine(it, Tone.ERROR) }
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    InkButton("Подключить Moodle", enabled = !busy && url.isNotBlank() && mLogin.isNotBlank() && mPassword.isNotBlank()) {
+                        busy = true; error = null
+                        scope.launch {
+                            runCatching { app.grades.connect(url, mLogin, mPassword) }
+                                .onSuccess { moodle = true; mPassword = "" }
+                                .onFailure { error = it.message ?: "Не удалось войти" }
+                            busy = false
+                        }
+                    }
+                    if (busy) CircularProgressIndicator(Modifier.size(22.dp), color = Brand.Accent, strokeWidth = 2.dp)
                 }
             }
-            if (busy) CircularProgressIndicator(Modifier.size(22.dp), color = Brand.Accent, strokeWidth = 2.dp)
         }
     }
 }

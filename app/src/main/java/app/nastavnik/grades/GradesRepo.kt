@@ -34,7 +34,43 @@ class GradesRepo(private val context: Context, private val settings: SettingsRep
     private val _loading = MutableStateFlow(false)
     val loading: StateFlow<Boolean> = _loading
 
-    val configured get() = settings.gradesConfigured
+    val configured get() = settings.gradesConfigured || settings.lksConfigured
+    val viaLks get() = settings.lksConfigured
+
+    /** Ответы сайта ЛКС за последнее открытие (для отчёта). */
+    val captured = java.util.concurrent.ConcurrentLinkedDeque<Pair<String, String>>()
+
+    /** Снимок со страницы ЛКС (разобран из таблиц). */
+    suspend fun saveLks(snap: GradesSnapshot) = lock.withLock {
+        load()
+        val old = _snapshot.value
+        withContext(Dispatchers.IO) {
+            file.parentFile?.mkdirs()
+            val tmp = File(file.path + ".tmp")
+            tmp.writeText(json.encodeToString(GradesSnapshot.serializer(), snap))
+            tmp.renameTo(file)
+        }
+        _snapshot.value = snap
+        _error.value = null
+        notifyNew(MoodleClient.changes(old, snap))
+    }
+
+    /** Отчёт для настройки разбора: адрес страницы, таблицы и ответы сайта. Пароль сюда не попадает. */
+    suspend fun report(pageJson: String?): File = withContext(Dispatchers.IO) {
+        val dir = File(context.cacheDir, "export").apply { mkdirs() }
+        val f = File(dir, "lks-report.txt")
+        f.bufferedWriter().use { w ->
+            w.write("Страница успеваемости: ${settings.lksPage()}\n\n== Таблицы ==\n${pageJson.orEmpty()}\n\n== Ответы сайта ==\n")
+            for ((u, t) in captured.toList().takeLast(40)) { w.write("--- $u\n"); w.write(t.take(60_000)); w.write("\n") }
+        }
+        f
+    }
+
+    fun disconnectLks() {
+        settings.clearLks()
+        file.delete()
+        _snapshot.value = null
+    }
 
     suspend fun load() = withContext(Dispatchers.IO) {
         if (_snapshot.value == null) _snapshot.value = runCatching { json.decodeFromString(GradesSnapshot.serializer(), file.readText()) }.getOrNull()
@@ -57,7 +93,7 @@ class GradesRepo(private val context: Context, private val settings: SettingsRep
 
     /** Обновить, если давно (или [force]). Новые оценки — уведомлением. */
     suspend fun refresh(force: Boolean = false) = lock.withLock {
-        if (!configured) return@withLock
+        if (!settings.gradesConfigured) return@withLock
         load()
         val last = _snapshot.value?.loadedAt ?: 0
         if (!force && System.currentTimeMillis() - last < 60 * 60 * 1000L) return@withLock
