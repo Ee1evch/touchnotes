@@ -19,6 +19,8 @@
     <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <!-- Шаги между сканами Wi-Fi: датчик шагов просит разрешение «Физическая активность». -->
+    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
     <!-- Обновление из приложения: скачанный с GitHub APK ставится через системный установщик. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 

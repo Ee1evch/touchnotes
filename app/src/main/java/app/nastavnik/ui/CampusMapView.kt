@@ -38,6 +38,8 @@ class CampusMapView(context: Context) : View(context) {
     private val density = resources.displayMetrics.density
 
     var onRoomTap: ((Room?) -> Unit)? = null
+    /** Если задано — касание отдаёт точку плана (метры) вместо помещения: «я здесь». */
+    var onPointTap: ((Double, Double) -> Unit)? = null
 
     private var site: Site? = null
     var floor: Int = 1
@@ -51,6 +53,12 @@ class CampusMapView(context: Context) : View(context) {
     private var selected: Room? = null
     private var route: Route? = null
     private var me: Triple<Int, Double, Double>? = null
+    private var meRadius = 0.0
+    private var meHeading = Double.NaN
+    // Точка «я здесь» плавно доезжает до новой оценки, а не прыгает.
+    private var meShownX = Double.NaN
+    private var meShownY = Double.NaN
+    private var meAnim: ValueAnimator? = null
     private var dark = false
 
     // Камера: центр в метрах и пикселей на метр.
@@ -120,9 +128,24 @@ class CampusMapView(context: Context) : View(context) {
         invalidate()
     }
 
-    fun setMe(floor: Int, x: Double, y: Double, focus: Boolean) {
+    fun setMe(floor: Int, x: Double, y: Double, focus: Boolean, radius: Double = 0.0, heading: Double = Double.NaN) {
+        val prev = me
         me = Triple(floor, x, y)
-        if (focus) animateTo(x, y, max(scale, 6.0 * density))
+        meRadius = radius
+        meHeading = heading
+        if (prev == null || prev.first != floor || meShownX.isNaN()) {
+            meShownX = x; meShownY = y
+        } else {
+            val x0 = meShownX; val y0 = meShownY
+            meAnim?.cancel()
+            meAnim = ValueAnimator.ofFloat(0f, 1f).apply {
+                duration = 450
+                interpolator = DecelerateInterpolator()
+                addUpdateListener { val t = it.animatedValue as Float; meShownX = x0 + (x - x0) * t; meShownY = y0 + (y - y0) * t; invalidate() }
+                start()
+            }
+        }
+        if (focus) animateTo(x, y, max(scale, 5.0 * density))
         invalidate()
     }
 
@@ -221,6 +244,8 @@ class CampusMapView(context: Context) : View(context) {
     private val labelBoxes = ArrayList<RectF>()
 
     var accent: Int = 0xFF2F6BFF.toInt()
+    /** Человек сам двигает карту — перестаём следовать за «я здесь». */
+    var onUserMove: (() -> Unit)? = null
 
     override fun onDraw(canvas: Canvas) {
         canvas.drawColor(if (dark) 0xFF1B1D22.toInt() else 0xFFF4F2EE.toInt())
@@ -350,12 +375,24 @@ class CampusMapView(context: Context) : View(context) {
             val (x, y) = toScreen(r.x, r.y)
             pin(canvas, x, y, accent)
         }
-        me?.takeIf { it.first == floor }?.let { (_, x, y) ->
-            val (sx, sy) = toScreen(x, y)
-            dotPaint.color = 0xFF2F80FF.toInt()
+        me?.takeIf { it.first == floor }?.let { _ ->
+            val (sx, sy) = toScreen(meShownX, meShownY)
+            val blue = 0xFF2F80FF.toInt()
+            // Круг точности: где я могу быть.
+            if (meRadius > 0) {
+                dotPaint.color = blue; dotPaint.alpha = 28
+                canvas.drawCircle(sx, sy, (meRadius * scale).toFloat().coerceAtLeast(14f * density), dotPaint)
+            }
+            dotPaint.color = blue
             dotPaint.alpha = (90 * (1 - pulse)).toInt()
             canvas.drawCircle(sx, sy, (10f + 22f * pulse) * density, dotPaint)
-            dot(canvas, sx, sy, 0xFF2F80FF.toInt(), 8f)
+            // Куда смотрю: луч-сектор.
+            if (!meHeading.isNaN()) {
+                val a = Math.toDegrees(-meHeading).toFloat()
+                dotPaint.alpha = 70
+                canvas.drawArc(RectF(sx - 34 * density, sy - 34 * density, sx + 34 * density, sy + 34 * density), a - 28f, 56f, true, dotPaint)
+            }
+            dot(canvas, sx, sy, blue, 8f)
         }
     }
 
@@ -407,7 +444,7 @@ class CampusMapView(context: Context) : View(context) {
     })
 
     private val gestures = GestureDetector(context, object : GestureDetector.SimpleOnGestureListener() {
-        override fun onDown(e: MotionEvent): Boolean { scroller.forceFinished(true); camAnim?.cancel(); return true }
+        override fun onDown(e: MotionEvent): Boolean { scroller.forceFinished(true); camAnim?.cancel(); onUserMove?.invoke(); return true }
         override fun onScroll(e1: MotionEvent?, e2: MotionEvent, dx: Float, dy: Float): Boolean {
             cx += dx / scale; cy -= dy / scale; invalidate(); return true
         }
@@ -423,7 +460,13 @@ class CampusMapView(context: Context) : View(context) {
             return true
         }
         override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
-            onRoomTap?.invoke(roomAt(e.x, e.y))
+            val point = onPointTap
+            if (point != null) {
+                val (x, y) = toWorld(e.x, e.y)
+                point(x, y)
+            } else {
+                onRoomTap?.invoke(roomAt(e.x, e.y))
+            }
             return true
         }
     })
@@ -460,7 +503,7 @@ class CampusMapView(context: Context) : View(context) {
     }
 
     override fun onAttachedToWindow() { super.onAttachedToWindow(); pulseAnim.start() }
-    override fun onDetachedFromWindow() { pulseAnim.cancel(); camAnim?.cancel(); super.onDetachedFromWindow() }
+    override fun onDetachedFromWindow() { pulseAnim.cancel(); camAnim?.cancel(); meAnim?.cancel(); super.onDetachedFromWindow() }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)

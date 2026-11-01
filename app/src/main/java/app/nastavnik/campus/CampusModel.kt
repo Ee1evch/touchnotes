@@ -96,7 +96,39 @@ class Site(
     val floors: List<Floor>,
     val rooms: List<Room>,
     val conns: List<Connector>,
+    /** План → долгота/широта: [x, y, 1] · M = [lon, lat] (6 чисел построчно) или null. */
+    val geo: DoubleArray? = null,
 ) {
+    /**
+     * Перевод сдвига «на восток, на север» (метры) в сдвиг по плану — для шагов по компасу и GPS.
+     * Без привязки к местности считаем, что план смотрит на север.
+     */
+    val enToPlan: DoubleArray by lazy {
+        val m = geo ?: return@lazy doubleArrayOf(1.0, 0.0, 0.0, 1.0)
+        val kx = 111_320.0 * kotlin.math.cos(Math.toRadians(m[5]))
+        val ky = 110_540.0
+        // d(восток, север)/d(x, y)
+        val a = m[0] * kx; val b = m[2] * kx; val c = m[1] * ky; val d = m[3] * ky
+        val det = a * d - b * c
+        doubleArrayOf(d / det, -b / det, -c / det, a / det)
+    }
+
+    /** Точка плана для широты/долготы (GPS на территории) или null без привязки. */
+    fun planOf(lat: Double, lon: Double): Pair<Double, Double>? {
+        val m = geo ?: return null
+        val a = m[0]; val b = m[2]; val c = m[1]; val d = m[3]
+        val dl = lon - m[4]; val dt = lat - m[5]
+        val det = a * d - b * c
+        return (d * dl - b * dt) / det to (-c * dl + a * dt) / det
+    }
+
+    /** Соседний этаж выше (+1) или ниже (−1) или null. */
+    fun nextFloor(n: Int, dir: Int): Int? {
+        val ns = floors.map { it.n }.sorted()
+        val i = ns.indexOf(n)
+        return ns.getOrNull(i + dir)?.takeIf { i >= 0 }
+    }
+
     val byId: Map<Pair<Int, Int>, Room> = rooms.associateBy { it.floor to it.id }
     fun floor(n: Int) = floors.firstOrNull { it.n == n }
 
@@ -148,6 +180,7 @@ class Site(
                 floors = o["floors"]!!.jsonArray.map { Floor(it.jsonObject["n"]!!.jsonPrimitive.int, it.jsonObject["name"]!!.jsonPrimitive.content) },
                 rooms = rooms,
                 conns = conns,
+                geo = (o["geo"] as? JsonArray)?.flatMap { row -> row.jsonArray.map { it.jsonPrimitive.double } }?.toDoubleArray(),
             )
         }
     }

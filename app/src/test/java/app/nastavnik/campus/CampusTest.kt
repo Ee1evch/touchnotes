@@ -6,6 +6,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
+import kotlin.math.hypot
 
 class CampusTest {
     companion object {
@@ -67,5 +68,56 @@ class CampusTest {
         val loc = WifiLocator.parse(File(root, "gmc/wifi.bin").readBytes())
         assertEquals(0x18c3f4b609d0L, WifiLocator.macKey("18:c3:f4:b6:09:d0"))
         assertNull(loc.locate(mapOf("00:11:22:33:44:55" to -50)))
+    }
+}
+
+class PositioningTest {
+    @Test fun walkAlongFingerprintsKeepsFloorAndPlace() {
+        val site = CampusTest.gmc
+        val loc = WifiLocator.parse(java.io.File(CampusTest.root, "gmc/wifi.bin").readBytes())
+        val macOf = loc.bssids.entries.associate { (mac, i) -> i to (0 until 6).joinToString(":") { b -> "%02x".format((mac shr (8 * (5 - b))) and 0xff) } }
+        // Отрезок обхода на 2 этаже: подряд идущие отпечатки на расстоянии 1–4 м.
+        val pts = loc.points
+        var walk: List<WifiLocator.Fingerprint> = emptyList()
+        var i = 0
+        while (i < pts.size - 30 && walk.isEmpty()) {
+            val seg = pts.subList(i, i + 20)
+            val ok = seg.all { it.floor == 2 } && seg.zipWithNext().all { (a, b) -> hypot(a.x - b.x, a.y - b.y) <= 6.0 } &&
+                hypot(seg.first().x - seg.last().x, seg.first().y - seg.last().y) > 15
+            
+            if (ok) walk = seg
+            i++
+        }
+        assertTrue("нет подходящего отрезка обхода", walk.isNotEmpty())
+        val p = Positioning(site, loc, CampusTest::grid)
+        val inv = site.enToPlan.let { m -> val det = m[0] * m[3] - m[1] * m[2]; doubleArrayOf(m[3] / det, -m[1] / det, -m[2] / det, m[0] / det) }
+        var t = 0L
+        walk.forEachIndexed { k, fp ->
+            if (k > 0) {
+                val prev = walk[k - 1]
+                val dx = fp.x - prev.x; val dy = fp.y - prev.y
+                // Обратно в «восток, север», азимут — как у телефона.
+                val de = inv[0] * dx + inv[1] * dy; val dn = inv[2] * dx + inv[3] * dy
+                val steps = (hypot(dx, dy) / 0.75).toInt()
+                repeat(steps) { t += 500; p.onStep(kotlin.math.atan2(de, dn), t) }
+            }
+            t += 500
+            p.onWifi(fp.rssi.entries.associate { (ap, lv) -> macOf.getValue(ap) to lv }, t)
+        }
+        val fix = p.estimate()!!
+        assertEquals(2, fix.floor)
+        val end = walk.last()
+        assertTrue("далеко от конца пути: ${hypot(fix.x - end.x, fix.y - end.y)} м", hypot(fix.x - end.x, fix.y - end.y) < 8)
+        assertTrue(fix.floorShare > 0.8)
+        // «Я здесь» сразу переносит оценку.
+        p.reset(1, end.x, end.y)
+        assertEquals(1, p.estimate()!!.floor)
+    }
+
+    @Test fun geoReferenceRoundTrips() {
+        val site = CampusTest.gmc
+        val (x, y) = site.planOf(43.4142558, 39.9497525)!!
+        // Центр ГМЦ из sites.json — где-то посреди плана.
+        assertTrue(x in -150.0..550.0 && y in -260.0..480.0)
     }
 }

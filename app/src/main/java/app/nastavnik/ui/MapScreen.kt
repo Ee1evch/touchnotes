@@ -73,6 +73,8 @@ import androidx.core.content.ContextCompat
 import app.nastavnik.R
 import app.nastavnik.app
 import app.nastavnik.campus.Place
+import app.nastavnik.campus.PositionTracker
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.nastavnik.campus.Room
 import app.nastavnik.campus.RoomSearch
 import app.nastavnik.campus.Route
@@ -199,35 +201,65 @@ fun MapScreen(initialRoom: String?, onBack: (() -> Unit)?) {
         }
     }
 
-    // «Где я»: Wi-Fi рядом → отпечатки здания.
+    // «Где я»: живое слежение — Wi-Fi, шаги, компас, барометр, GPS (см. Positioning).
+    val tracker = remember { PositionTracker(context.applicationContext, app.campus) }
+    var tracking by remember { mutableStateOf(false) }
+    var follow by remember { mutableStateOf(true) }
+    var correcting by remember { mutableStateOf(false) }
+    val here by tracker.state.collectAsStateWithLifecycle()
+    val trackStatus by tracker.status.collectAsStateWithLifecycle()
+    DisposableEffect(Unit) { onDispose { tracker.stop() } }
     fun locate() {
-        val s = site ?: return
-        locating = true
-        scope.launch {
-            val fix = withContext(Dispatchers.IO) {
-                val wifi = context.applicationContext.getSystemService(WifiManager::class.java)
-                @Suppress("DEPRECATION") runCatching { wifi?.startScan() }
-                withTimeoutOrNull(6000) { awaitScan(context) }
-                val scan = runCatching { wifi?.scanResults.orEmpty().associate { it.BSSID to it.level } }.getOrDefault(emptyMap())
-                app.campus.locator(s)?.locate(scan)
-            }
-            locating = false
-            if (fix == null) {
-                message = "Не узнаю это место по Wi-Fi. Внутри здания и с включённым Wi-Fi получится лучше."
-                return@launch
-            }
-            from = From.Here(fix.floor, fix.x, fix.y)
-            if (floor != fix.floor) floor = fix.floor
-            map?.setMe(fix.floor, fix.x, fix.y, focus = true)
+        if (sites.isEmpty()) return
+        follow = true
+        if (!tracking) {
+            tracking = true
+            locating = true
+            scope.launch { tracker.start(sites) }
+        } else {
+            here?.let { h -> if (floor != h.fix.floor) floor = h.fix.floor; map?.setMe(h.fix.floor, h.fix.x, h.fix.y, focus = true, radius = h.fix.radius, heading = h.fix.heading) }
         }
     }
-    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
-        if (ok) locate() else message = "Без доступа к местоположению Android не показывает сети Wi-Fi"
+    LaunchedEffect(here) {
+        val h = here ?: return@LaunchedEffect
+        locating = false
+        if (site?.id != h.site.id) { site = h.site; selected = null; route = null; map?.setRoute(null, false) }
+        if (follow && floor != h.fix.floor) floor = h.fix.floor
+        map?.setMe(h.fix.floor, h.fix.x, h.fix.y, focus = follow, radius = h.fix.radius, heading = h.fix.heading)
+        from = From.Here(h.fix.floor, h.fix.x, h.fix.y)
+    }
+    LaunchedEffect(trackStatus) { if (trackStatus.isNotEmpty() && here == null && tracking) message = trackStatus }
+    // Касание в режиме «я здесь» — поправить место и запомнить этот скан.
+    LaunchedEffect(correcting, map) {
+        val v = map ?: return@LaunchedEffect
+        v.onPointTap = if (!correcting) null else { x, y ->
+            val s = site
+            if (s != null) {
+                tracker.correct(s, floor, x, y)
+                map?.setMe(floor, x, y, focus = false)
+                message = "Запомнил: в следующий раз узнаю это место точнее"
+            }
+            correcting = false
+        }
+        v.onUserMove = { follow = false }
+    }
+    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { res ->
+        if (res[Manifest.permission.ACCESS_FINE_LOCATION] == true) locate()
+        else message = "Без доступа к местоположению Android не показывает сети Wi-Fi"
+    }
+    fun askAndLocate() {
+        val need = buildList {
+            if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) add(Manifest.permission.ACCESS_FINE_LOCATION)
+            if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACTIVITY_RECOGNITION) != PackageManager.PERMISSION_GRANTED) add(Manifest.permission.ACTIVITY_RECOGNITION)
+        }
+        if (need.isEmpty() || (need.size == 1 && need[0] == Manifest.permission.ACTIVITY_RECOGNITION && tracking)) locate()
+        else permission.launch(need.toTypedArray())
     }
 
     Box(Modifier.fillMaxSize().background(if (dark) Brand.Paper else androidx.compose.ui.graphics.Color(0xFFF4F2EE))) {
         AndroidView(
             factory = { ctx -> CampusMapView(ctx).also { v ->
+                v.contentDescription = "Карта этажа"
                 v.onRoomTap = { r ->
                     val s = site
                     if (r != null && s != null) {
@@ -297,20 +329,22 @@ fun MapScreen(initialRoom: String?, onBack: (() -> Unit)?) {
             ) {
                 FloorPicker(s, floor, route) { floor = it }
                 Box(
-                    Modifier.size(48.dp).glass(CircleShape, 8.dp, strong = true).clickable {
-                        if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) locate()
-                        else permission.launch(Manifest.permission.ACCESS_FINE_LOCATION)
-                    },
+                    Modifier.size(48.dp).clip(CircleShape)
+                        .then(if (tracking && follow) Modifier.background(Brand.Accent) else Modifier.glass(CircleShape, 8.dp, strong = true))
+                        .clickable { askAndLocate() },
                     contentAlignment = Alignment.Center,
                 ) {
-                    if (locating) CircularProgressIndicator(Modifier.size(22.dp), color = Brand.Accent, strokeWidth = 2.dp)
-                    else Icon(painterResource(R.drawable.ic_location), contentDescription = "Где я", tint = Brand.Accent, modifier = Modifier.size(22.dp))
+                    if (locating) CircularProgressIndicator(Modifier.size(22.dp), color = if (tracking && follow) Brand.OnAccent else Brand.Accent, strokeWidth = 2.dp)
+                    else Icon(painterResource(R.drawable.ic_location), contentDescription = "Где я", tint = if (tracking && follow) Brand.OnAccent else Brand.Accent, modifier = Modifier.size(22.dp))
                 }
             }
         }
 
         // Снизу: выбранная аудитория или маршрут.
         Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().navigationBarsPadding().padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            AnimatedVisibility(here != null || correcting, enter = fadeIn() + slideInVertically { it / 2 }, exit = fadeOut()) {
+                HereChip(here, correcting, onFix = { correcting = !correcting }, onStop = { tracker.stop(); tracking = false; correcting = false; map?.clearMe() })
+            }
             AnimatedVisibility(message != null, enter = fadeIn() + slideInVertically { it / 2 }, exit = fadeOut()) {
                 Row(
                     Modifier.widthIn(max = 560.dp).fillMaxWidth().padding(bottom = 10.dp).glass(RoundedCornerShape(18.dp), 8.dp, strong = true)
@@ -330,7 +364,7 @@ fun MapScreen(initialRoom: String?, onBack: (() -> Unit)?) {
                     room == null -> Spacer(Modifier.size(1.dp))
                     picking -> FromPicker(
                         from = from,
-                        onHere = { pickingFrom = false; if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) locate() else permission.launch(Manifest.permission.ACCESS_FINE_LOCATION) },
+                        onHere = { pickingFrom = false; askAndLocate() },
                         onCancel = { pickingFrom = false },
                     )
                     r != null -> RouteCard(site!!, room, r, from, currentFloor = floor, onFloor = { floor = it; map?.post { map?.focusRoute() } }, onChangeFrom = { pickingFrom = true }, onClose = { route = null; map?.setRoute(null, false) })
@@ -493,5 +527,36 @@ private fun RouteCard(site: Site, room: Room, r: Route, from: From?, currentFloo
             }
         }
         LinkText("Другая точка отправления", onClick = onChangeFrom)
+    }
+}
+
+/** «Ты здесь: Альфа 5.8 · 1 этаж ±4 м» и «Не здесь?» — поправить касанием. */
+@Composable
+private fun HereChip(here: PositionTracker.State?, correcting: Boolean, onFix: () -> Unit, onStop: () -> Unit) {
+    Row(
+        Modifier.widthIn(max = 560.dp).fillMaxWidth().padding(bottom = 10.dp).glass(RoundedCornerShape(18.dp), 8.dp, strong = true)
+            .padding(start = 14.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Box(Modifier.size(10.dp).clip(CircleShape).background(androidx.compose.ui.graphics.Color(0xFF2F80FF)))
+        Column(Modifier.weight(1f)) {
+            if (correcting) {
+                Text("Коснись места, где ты сейчас", style = MaterialTheme.typography.titleSmall)
+                Text("Запомню сети Wi-Fi здесь — потом узнаю точнее", style = MaterialTheme.typography.bodySmall, color = Brand.InkSoft)
+            } else if (here != null) {
+                val room = here.site.byId[here.fix.floor to here.fix.roomId]?.takeIf { !it.isGeneric }
+                Text(
+                    "Ты здесь: " + (room?.title ?: "коридор"),
+                    style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    "${here.site.floor(here.fix.floor)?.short.orEmpty()} · ±${here.fix.radius.roundToInt()} м",
+                    style = MaterialTheme.typography.bodySmall, color = Brand.InkSoft,
+                )
+            }
+        }
+        LinkText(if (correcting) "Отмена" else "Не здесь?", onClick = onFix)
+        Icon(painterResource(R.drawable.ic_close), contentDescription = "Выключить «где я»", tint = Brand.InkSoft, modifier = Modifier.size(20.dp).clickable(onClick = onStop))
     }
 }

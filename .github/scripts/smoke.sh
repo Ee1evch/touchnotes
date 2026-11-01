@@ -2,6 +2,8 @@
 # Дымовые тесты на эмуляторе: запускает androidTest и печатает нужную часть logcat в лог CI.
 set -u
 adb logcat -c || true
+# Скриншоты печатаются в журнал — буфер побольше, чтобы ранние тесты не вытеснялись.
+adb logcat -G 64M || true
 # Системные окна «… isn't responding» на медленном эмуляторе перекрывают экран и ломают тесты.
 adb shell settings put global hide_error_dialogs 1 || true
 ./gradlew --no-daemon connectedDebugAndroidTest
