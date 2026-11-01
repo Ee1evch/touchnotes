@@ -8,7 +8,9 @@ import android.util.Base64
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import android.app.UiAutomation
 import androidx.test.uiautomator.By
+import androidx.test.uiautomator.Configurator
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.Until
 import app.nastavnik.data.CardEntity
@@ -285,6 +287,10 @@ class CampusFlowTest {
         ctx.app.settings.setScheduleGroup("")
         runBlocking { ctx.app.db.cards().insertAll(listOf(CardEntity(noteId = null, subject = "Замок", topic = "Замок", front = "2 + 2", back = "4", dueAt = 0, createdAt = 0))) }
         lp.configureOnce(0, emptySet(), LocalDate.now())
+        // UiAutomator сам — служба спец. возможностей и по умолчанию глушит остальные, в том числе нашу защиту.
+        // На телефоне его нет; в тесте просим не глушить.
+        Configurator.getInstance().uiAutomationFlags = UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES
+        instr.getUiAutomation(UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES)
         val guard = "${ctx.packageName}/${WakeGuard::class.java.name}"
         device.executeShellCommand("settings put secure enabled_accessibility_services $guard")
         device.executeShellCommand("settings put secure accessibility_enabled 1")
@@ -314,6 +320,7 @@ class CampusFlowTest {
             screenshot("lock_home")
         } finally {
             device.executeShellCommand("settings delete secure enabled_accessibility_services")
+            Configurator.getInstance().uiAutomationFlags = 0
             lp.markDone(StudyLockRules.sessionDate(java.time.LocalDateTime.now()))
             runBlocking {
                 ctx.app.db.cards().all().filter { it.subject == "Замок" }.forEach { ctx.app.db.cards().update(it.copy(dueAt = Long.MAX_VALUE / 2)) }
