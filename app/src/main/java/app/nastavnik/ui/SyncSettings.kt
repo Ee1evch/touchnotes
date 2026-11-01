@@ -375,7 +375,7 @@ fun WakeSection() {
                 }
                 if (guardOn && !guardService) Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Включи службу «Наставник: защита будильника» в спец. возможностях", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.weight(1f))
+                        Text("Включи службу «Наставник: защита и учебный замок» в спец. возможностях", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.weight(1f))
                         LinkText("Открыть") {
                             runCatching { context.startActivity(Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
                         }

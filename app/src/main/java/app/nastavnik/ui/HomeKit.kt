@@ -45,6 +45,7 @@ import app.nastavnik.schedule.Lesson
 import app.nastavnik.schedule.ScheduleNow
 import app.nastavnik.study.Exam
 import app.nastavnik.study.ExamPlan
+import app.nastavnik.study.StudyLock
 import app.nastavnik.study.WakeAlarm
 import app.nastavnik.study.WakePrefs
 import app.nastavnik.study.ruPlural
@@ -342,3 +343,40 @@ val TABLET_SECTIONS = listOf(
     Triple(R.drawable.ic_note, "Чистовик", MainActivity.SCREEN_CLEAN),
     Triple(R.drawable.ic_bell, "Напоминания", MainActivity.SCREEN_REMINDERS),
 )
+
+/**
+ * Вечерняя учёба на главной: видна вечером (с 16:00), пока не сделана, и всегда — пока замок закрыт.
+ */
+@Composable
+fun EveningCard(resumeTick: Int, go: (String) -> Unit) {
+    val context = LocalContext.current
+    val status by produceState<StudyLock.Status?>(null, resumeTick) {
+        value = StudyLock.status(context)
+    }
+    val s = status ?: return
+    val show = s.locked || (!s.allDone && LocalDateTime.now().hour >= 16) || (s.configured && !s.allDone && s.date != java.time.LocalDate.now())
+    if (!show) return
+    val src = remember { MutableInteractionSource() }
+    Row(
+        Modifier.fillMaxWidth().enter().pressable(src)
+            .glass(RoundedCornerShape(24.dp), 12.dp, strong = s.locked)
+            .clickable(src, indication = null) { go(MainActivity.SCREEN_EVENING) }
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Box(
+            Modifier.size(40.dp).clip(CircleShape).background(if (s.locked) Brand.Error else Brand.Accent),
+            contentAlignment = Alignment.Center,
+        ) { Icon(painterResource(R.drawable.ic_cards), contentDescription = null, tint = Brand.OnAccent, modifier = Modifier.size(20.dp)) }
+        Column(Modifier.weight(1f)) {
+            Text(if (s.locked) "Приложения закрыты" else "Вечерняя учёба", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "${s.steps} из 3 · карточки, что было сегодня, подготовка к завтра",
+                style = MaterialTheme.typography.bodySmall, color = Brand.InkSoft, maxLines = 2, overflow = TextOverflow.Ellipsis,
+            )
+        }
+        InkButton(if (s.steps == 0) "Начать" else "Дальше") { go(MainActivity.SCREEN_EVENING) }
+    }
+}
+

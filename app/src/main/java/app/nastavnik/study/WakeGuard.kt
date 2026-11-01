@@ -9,68 +9,139 @@ import android.os.Looper
 import android.provider.Settings
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import app.nastavnik.R
+import app.nastavnik.app
+import app.nastavnik.ui.MainActivity
 import app.nastavnik.ui.WakeActivity
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 
 /**
- * Защита будильника (служба специальных возможностей). Работает ТОЛЬКО пока будильник звонит и до конца
- * проверки «Ты встал?» ([WakePrefs.guarding]); в остальное время ничего не делает и ничего не читает.
+ * Служба защиты «Наставника» (специальные возможности). Делает три вещи:
  *
- * Пока звонит, закрывает:
- *  - меню выключения/перезагрузки (кнопка питания, плитка в шторке) — система его рисует, мы жмём «Назад»;
- *  - удаление приложения (окно установщика пакетов, Google Play);
- *  - системные настройки целиком — там «Остановить», «Удалить» и отключение этой самой защиты.
- * После этого возвращает экран будильника.
+ * 1. Будильник: пока звонит и до конца проверки «Ты встал?» — закрывает меню выключения/перезагрузки,
+ *    удаление приложения, Google Play и системные настройки, возвращает экран будильника.
+ * 2. Учебный замок: вечером, пока не сделана вечерняя учёба, любое приложение, кроме выбранных один раз
+ *    (и телефона, экстренных вызовов, клавиатуры, рабочего стола), сразу закрывается — открывается вечерняя
+ *    учёба. Настройки, Google Play и установщик в это время тоже закрыты.
+ * 3. Если замок включён — всегда: окна настроек и установщика, где видно «Наставник» (сведения о приложении,
+ *    «Удалить», спец. возможности), закрываются. Так замок нельзя снять, удалив приложение или выключив службу.
  *
- * Что нельзя перехватить ни одному приложению: принудительную перезагрузку (кнопка питания ~10 секунд).
- * На этот случай будильник хранит состояние до разблокировки ([WakePrefs]) и после включения звонит снова.
+ * Смотрит только на то, какое приложение на экране, а текст окон читает лишь у настроек, установщика и
+ * системного интерфейса. Принудительную перезагрузку и безопасный режим ни одно приложение не перехватит.
  */
 class WakeGuard : AccessibilityService() {
     private val main = Handler(Looper.getMainLooper())
     private var lastBlock = 0L
+    private var always: Set<String> = emptySet()
+    private var alwaysAt = 0L
+    private var refresher: Job? = null
+    private val label by lazy { getString(R.string.app_name).lowercase() }
+
+    override fun onServiceConnected() {
+        super.onServiceConnected()
+        // Замок пересчитываем каждые 20 секунд (и сразу — его обновляют экраны учёбы).
+        refresher = app.appScope.launch {
+            while (isActive) {
+                if (WakePrefs.unlocked(this@WakeGuard) && LockPrefs.of(this@WakeGuard).configured) {
+                    runCatching { StudyLock.status(this@WakeGuard) }
+                }
+                delay(20_000)
+            }
+        }
+        main.post(tick)
+    }
+
+    override fun onDestroy() {
+        refresher?.cancel()
+        main.removeCallbacksAndMessages(null)
+        super.onDestroy()
+    }
+
+    /** Раз в 2 секунды — что на экране (приложение могло быть открыто до начала замка). */
+    private val tick = object : Runnable {
+        override fun run() {
+            if (LockPrefs.of(this@WakeGuard).configured || WakePrefs.of(this@WakeGuard).guarding) {
+                val root = runCatching { rootInActiveWindow }.getOrNull()
+                val pkg = root?.packageName?.toString()
+                if (pkg != null) evaluate(pkg, "", "", root)
+            }
+            main.postDelayed(this, 2_000)
+        }
+    }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         val e = event ?: return
         if (e.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
-        val w = WakePrefs.of(this)
-        if (!w.guardOn || !w.guarding) return
-        val pkg = e.packageName?.toString().orEmpty()
-        if (pkg == packageName) return
-        val cls = e.className?.toString().orEmpty()
+        val pkg = e.packageName?.toString() ?: return
         val text = (e.text.joinToString(" ") + " " + (e.contentDescription ?: "")).lowercase()
-        val block = when {
-            isPowerMenu(pkg, cls, text, e.source) -> true
-            pkg.contains("packageinstaller") -> true
-            pkg == "com.android.vending" -> true
-            isSettings(pkg) -> true
-            else -> false
+        evaluate(pkg, e.className?.toString().orEmpty(), text, runCatching { e.source }.getOrNull())
+    }
+
+    private fun evaluate(pkg: String, cls: String, text: String, root: AccessibilityNodeInfo?) {
+        if (pkg == packageName) return
+        val wake = WakePrefs.of(this)
+        val lock = LockPrefs.of(this)
+        val system = isSettings(pkg) || pkg.contains("packageinstaller") || pkg == "com.android.vending"
+
+        // 1. Будильник.
+        if (wake.guardOn && wake.guarding) {
+            if (isPowerMenu(pkg, cls, text, root) || system) {
+                block(home = system) { bringAlarmBack() }
+                return
+            }
         }
-        if (!block) return
-        // Закрываем окно и возвращаем будильник. Повторяем дважды: некоторые меню открываются с анимацией.
+        if (!lock.configured) return
+
+        // 2. Учебный замок.
+        val lockedNow = StudyLock.locked && !lock.emergencyActive
+        if (lockedNow) {
+            if (system) { block(home = true) { openEvening() }; return }
+            if (!StudyLockRules.allowed(pkg, lock.allowed, alwaysAllowed())) { block(home = true) { openEvening() }; return }
+        }
+
+        // 3. Самозащита: окна про «Наставник» в настройках и установщике.
+        if (system && mentionsMe(text, root)) block(home = true) { }
+    }
+
+    private fun alwaysAllowed(): Set<String> {
         val now = System.currentTimeMillis()
-        if (now - lastBlock < 250) return
+        if (now - alwaysAt > 60_000L) { always = StudyLock.alwaysAllowed(this); alwaysAt = now }
+        return always
+    }
+
+    private fun block(home: Boolean, then: () -> Unit) {
+        val now = System.currentTimeMillis()
+        if (now - lastBlock < 700) return
         lastBlock = now
         performGlobalAction(GLOBAL_ACTION_BACK)
-        main.postDelayed({ performGlobalAction(GLOBAL_ACTION_BACK) }, 180)
-        if (isSettings(pkg) || pkg == "com.android.vending" || pkg.contains("packageinstaller")) {
-            main.postDelayed({ performGlobalAction(GLOBAL_ACTION_HOME) }, 260)
-        }
-        main.postDelayed({ bringAlarmBack() }, 420)
+        if (home) main.postDelayed({ performGlobalAction(GLOBAL_ACTION_HOME) }, 150)
+        main.postDelayed(then, 380)
+    }
+
+    private fun mentionsMe(text: String, root: AccessibilityNodeInfo?): Boolean {
+        if (label in text) return true
+        val sb = StringBuilder()
+        runCatching { collect(root, sb, 0, 25) }
+        return label in sb.toString().lowercase()
     }
 
     private fun isSettings(pkg: String) =
         pkg == "com.android.settings" || pkg == "com.samsung.android.settings" || pkg.endsWith(".securitycenter") ||
-            pkg == "com.miui.securitycenter" || pkg == "com.coloros.safecenter" || pkg == "com.huawei.systemmanager"
+            pkg == "com.miui.securitycenter" || pkg == "com.coloros.safecenter" || pkg == "com.huawei.systemmanager" ||
+            pkg == "com.google.android.settings.intelligence"
 
     /** Меню питания: по имени окна, а если оно нестандартное — по кнопкам «Выключить»/«Перезапустить». */
     private fun isPowerMenu(pkg: String, cls: String, text: String, root: AccessibilityNodeInfo?): Boolean {
         val c = cls.lowercase()
         if (c.contains("globalactions") || c.contains("shutdown") || c.contains("powermenu") || c.contains("poweroff")) return true
         if (pkg.contains("globalactions")) return true
-        if (pkg != "com.android.systemui" && !pkg.contains("systemui")) return false
+        if (!pkg.contains("systemui")) return false
         if (hasPowerWords(text)) return true
-        // Текст кнопок внутри окна.
         val words = StringBuilder()
-        runCatching { collect(root, words, 0) }
+        runCatching { collect(root, words, 0, 8) }
         return hasPowerWords(words.toString().lowercase())
     }
 
@@ -80,21 +151,29 @@ class WakeGuard : AccessibilityService() {
         return off && restart
     }
 
-    private fun collect(n: AccessibilityNodeInfo?, out: StringBuilder, depth: Int) {
-        if (n == null || depth > 6 || out.length > 2000) return
+    private fun collect(n: AccessibilityNodeInfo?, out: StringBuilder, depth: Int, max: Int) {
+        if (n == null || depth > max || out.length > 6000) return
         n.text?.let { out.append(it).append(' ') }
         n.contentDescription?.let { out.append(it).append(' ') }
-        for (i in 0 until n.childCount) collect(n.getChild(i), out, depth + 1)
+        for (i in 0 until n.childCount) collect(n.getChild(i), out, depth + 1, max)
     }
 
     private fun bringAlarmBack() {
-        // Экран будильника — только если он ещё звонит (а не ждёт «Ты встал?»).
         val ringing = WakeService.ringing
         runCatching {
             startActivity(
                 Intent(this, WakeActivity::class.java)
                     .putExtra(WakeActivity.EXTRA_CHECK, !ringing)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT),
+            )
+        }
+    }
+
+    private fun openEvening() {
+        runCatching {
+            startActivity(
+                Intent(this, MainActivity::class.java).putExtra(MainActivity.EXTRA_SCREEN, MainActivity.SCREEN_EVENING)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP),
             )
         }
     }

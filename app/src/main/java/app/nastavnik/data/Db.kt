@@ -209,6 +209,9 @@ interface CardDao {
     @Query("SELECT COUNT(*) FROM cards WHERE due_at <= :now")
     fun observeDueCount(now: Long): Flow<Int>
 
+    @Query("SELECT COUNT(*) FROM cards WHERE due_at <= :now")
+    suspend fun dueCount(now: Long): Int
+
     @Query("SELECT COUNT(*) FROM cards")
     fun observeCount(): Flow<Int>
 

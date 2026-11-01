@@ -21,6 +21,7 @@ import app.nastavnik.sync.AppSyncSource
 import app.nastavnik.sync.LocalItem
 import app.nastavnik.sync.SyncRecord
 import app.nastavnik.sync.SyncEngine
+import app.nastavnik.study.StudyLock
 import app.nastavnik.study.WakeAlarm
 import app.nastavnik.study.WakePrefs
 import app.nastavnik.ui.MainActivity
@@ -235,6 +236,34 @@ class CampusFlowTest {
             st.on = false
             st.bedAt = 0
             runBlocking { WakeAlarm.reschedule(ctx) }
+        }
+    }
+
+    /** Вечерняя учёба: конспекты сегодняшних пар становятся карточками, подготовка к завтрашней паре. */
+    @Test
+    fun eveningSessionSummariesAndPrep() {
+        seedSchedule()
+        val today = LocalDate.now()
+        val sc = ActivityScenario.launch<MainActivity>(Intent(ctx, MainActivity::class.java).putExtra(MainActivity.EXTRA_SCREEN, MainActivity.SCREEN_EVENING))
+        try {
+            assertNotNull(device.wait(Until.findObject(By.text("Карточки на сегодня")), 15000))
+            assertNotNull(device.findObject(By.text("Физика")))
+            SystemClock.sleep(800)
+            screenshot("evening_start")
+            // До 5 утра «день» ещё вчерашний — тогда проверять нечего.
+            if (runBlocking { StudyLock.status(ctx).date } != today) return
+            runBlocking {
+                StudyLock.saveSummary(ctx, today, "Математический анализ", "Пределы: замечательный предел sin x / x стремится к 1, разбирали эквивалентности и примеры.")
+                StudyLock.saveSummary(ctx, today, "Физика", "Законы Ньютона: второй закон F = ma, разбирали задачи на наклонную плоскость и силу трения.")
+                val st = StudyLock.status(ctx)
+                assertTrue("конспекты не засчитаны: ${st.summaries}", st.summariesDone)
+                assertTrue(st.prep.any { it.first == "Иностранный язык" })
+                StudyLock.markPrepared(ctx, st.date, "Иностранный язык")
+                assertTrue(StudyLock.status(ctx).prepDone)
+                assertTrue(ctx.app.db.cards().all().any { it.subject == "Физика" && it.front.contains("Физика") })
+            }
+        } finally {
+            sc.close()
         }
     }
 

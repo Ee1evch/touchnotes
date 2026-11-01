@@ -166,6 +166,11 @@ class NastavnikApp : Application() {
             },
         )
         nm.createNotificationChannel(
+            NotificationChannel(CHANNEL_LOCK, "Вечерняя учёба", NotificationManager.IMPORTANCE_HIGH).apply {
+                description = "Предупреждение за 30 минут и замок приложений до вечерней учёбы"
+            },
+        )
+        nm.createNotificationChannel(
             NotificationChannel(CHANNEL_SLEEP, "Сон", NotificationManager.IMPORTANCE_DEFAULT).apply {
                 description = "Вечером: когда лечь, чтобы проснуться в конце цикла сна"
             },
@@ -185,6 +190,7 @@ class NastavnikApp : Application() {
         const val CHANNEL_GRADES = "grades"
         const val CHANNEL_WAKE = "wake"
         const val CHANNEL_SLEEP = "sleep"
+        const val CHANNEL_LOCK = "study_lock"
     }
 }
 

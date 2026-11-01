@@ -172,7 +172,9 @@ class MainActivity : ComponentActivity() {
                             onSettings = { go(SCREEN_SETTINGS) },
                         )
                         SCREEN_ONBOARDING -> OnboardingScreen(resumeTick, onDone = { screen = SCREEN_HOME; moveTaskToBack(true) }, onSkip = { screen = SCREEN_HOME })
-                        SCREEN_SETTINGS -> SettingsScreen(onBack = home, onAppearance = { go(SCREEN_APPEARANCE) }, onOnboarding = { go(SCREEN_ONBOARDING) }, onLks = { go(SCREEN_LKS) })
+                        SCREEN_SETTINGS -> SettingsScreen(onBack = home, onAppearance = { go(SCREEN_APPEARANCE) }, onOnboarding = { go(SCREEN_ONBOARDING) }, onLks = { go(SCREEN_LKS) }, go = go)
+                        SCREEN_EVENING -> EveningScreen(resumeTick, onBack = home, go = go)
+                        SCREEN_LOCK_SETUP -> StudyLockSetupScreen(onBack = { go(SCREEN_SETTINGS) }, onDone = { go(SCREEN_EVENING) })
                         SCREEN_APPEARANCE -> AppearanceScreen(onBack = { go(SCREEN_SETTINGS) })
                         SCREEN_HISTORY -> HistoryScreen(onBack = home, onCleanReady = { go(SCREEN_CLEAN) })
                         SCREEN_SEARCH -> SearchScreen(
@@ -302,6 +304,8 @@ class MainActivity : ComponentActivity() {
         const val SCREEN_VIEWER = "viewer"
         const val SCREEN_GRADES = "grades"
         const val SCREEN_LKS = "lks"
+        const val SCREEN_EVENING = "evening"
+        const val SCREEN_LOCK_SETUP = "lock_setup"
         const val EXTRA_ROOM = "room"
         const val EXTRA_NOTEBOOK = "notebook_id"
         const val EXTRA_FROM_OVERLAY = "from_overlay"

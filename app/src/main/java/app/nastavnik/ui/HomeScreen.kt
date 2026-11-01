@@ -134,6 +134,7 @@ fun HomeScreen(resumeTick: Int, go: (String) -> Unit, openNotebook: (Long) -> Un
                     }
                 }
                 if (notReady != null) Banner("$notReady — без этого наставник не ответит.", "Настроить") { go(MainActivity.SCREEN_SETTINGS) }
+                EveningCard(resumeTick, go)
 
                 val dayCard = @Composable { DayCard(lessons, tomorrow, clock, hasGroup, onRoom = onRoom, onSchedule = { go(MainActivity.SCREEN_SCHEDULE) }) }
                 val tiles = @Composable { DayTiles(due, streak, week, exam, resumeTick, promoteAlarm = false, go = go) }

@@ -159,6 +159,7 @@ private fun TodayTab(resumeTick: Int, go: (String) -> Unit, onRoom: (String) -> 
             if (app.sync.configured) SyncDot(sync.running, sync.ok) { app.sync.soon(0) }
             RoundIconButton(R.drawable.ic_tune, "Настройки") { go(MainActivity.SCREEN_SETTINGS) }
         }
+        EveningCard(resumeTick, go)
         DayCard(lessons, tomorrow, now, hasGroup, onRoom = onRoom, onSchedule = { onTab(PhoneTab.SCHEDULE) })
         val today = Streaks.day(nowMs)
         val perDay = remember(events) { events.groupingBy { Streaks.day(it.at) }.eachCount() }

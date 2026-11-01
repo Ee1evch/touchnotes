@@ -192,7 +192,11 @@
             android:directBootAware="true"
             android:exported="false"
             android:foregroundServiceType="mediaPlayback" />
-        <!-- Защита будильника: пока звонит — нельзя выключить телефон и удалить приложение. -->
+        <!-- Учебный замок: предупреждение за 30 минут и начало вечером. -->
+        <receiver
+            android:name=".study.StudyLockReceiver"
+            android:exported="false" />
+        <!-- Защита: будильник (нельзя выключить телефон и удалить приложение) и учебный замок. -->
         <service
             android:name=".study.WakeGuard"
             android:directBootAware="true"
