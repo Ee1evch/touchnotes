@@ -42,6 +42,10 @@ class FocusFeedTest {
         assertTrue(FocusFeed.allowed("https://www.tiktok.com/@teacher/video/123", s, false))
         assertTrue(FocusFeed.allowed("https://www.tiktok.com/messages?lang=ru", s, false))
         assertTrue(FocusFeed.allowed("https://www.tiktok.com/login/phone-or-email", s, false))
+        // Служебные переходы TikTok (язык, проверка) не ломаем.
+        assertTrue(FocusFeed.allowed("https://www.tiktok.com/search?q=x&lang=ru-RU", s, false))
+        assertTrue(FocusFeed.allowed("https://m.tiktok.com/v/123.html", s, false))
+        assertFalse(FocusFeed.allowed("intent://tiktok.com/#Intent;scheme=snssdk1233;end", s, false))
         assertFalse(FocusFeed.allowed("https://www.tiktok.com/foryou", s, false))
         assertFalse(FocusFeed.allowed("https://www.tiktok.com/", s, false))
         assertFalse(FocusFeed.allowed("https://www.tiktok.com/explore", s, false))

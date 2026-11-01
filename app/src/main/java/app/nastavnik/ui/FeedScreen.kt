@@ -59,6 +59,8 @@ import kotlinx.coroutines.delay
 import java.time.LocalDate
 
 private const val DESKTOP_UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+/** Как обычный Chrome на телефоне: встроенное окно с пометкой «wv» TikTok может не показывать вовсе (белый экран). */
+private const val MOBILE_UA = "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
 
 /**
  * «Лента»: настоящий TikTok (вход один раз, куки сохраняются), но по правилам учёбы — см. [FocusFeed].
@@ -71,6 +73,12 @@ fun FeedScreen() {
     var mode by remember { mutableStateOf(Mode.STUDY) }
     var message by remember { mutableStateOf<String?>(null) }
     var canBack by remember { mutableStateOf(false) }
+    var progress by remember { mutableStateOf(0) }
+    var loadError by remember { mutableStateOf<String?>(null) }
+    var loggedIn by remember { mutableStateOf(CookieManager.getInstance().getCookie("https://www.tiktok.com").orEmpty().contains("sessionid")) }
+    // Защита от зацикливания: если TikTok раз за разом уводит на запрещённую страницу — не воюем, а объясняем.
+    var bounces by remember { mutableStateOf(0) }
+    var lastBounce by remember { mutableLongStateOf(0L) }
     val nowMs = remember { System.currentTimeMillis() }
     val activity by remember { app.db.activity().observeAll() }.collectAsStateWithLifecycle(initialValue = emptyList())
     val due by remember(nowMs) { app.db.cards().observeDueCount(nowMs) }.collectAsStateWithLifecycle(initialValue = 0)
@@ -95,7 +103,9 @@ fun FeedScreen() {
             settings.useWideViewPort = true
             CookieManager.getInstance().setAcceptCookie(true)
             CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
-            webChromeClient = WebChromeClient()
+            settings.databaseEnabled = true
+            settings.javaScriptCanOpenWindowsAutomatically = false
+            settings.userAgentString = MOBILE_UA
         }
     }
     // Правила для текущего режима: лишнее — назад к разрешённой странице.
@@ -105,7 +115,19 @@ fun FeedScreen() {
         Mode.REWARD -> FocusFeed.FEED_URL
         Mode.STUDY -> query?.let { FocusFeed.searchUrl(it) } ?: FocusFeed.searchUrl("наука объяснение")
     }
+    web.webChromeClient = object : WebChromeClient() {
+        override fun onProgressChanged(view: WebView, newProgress: Int) { progress = newProgress }
+    }
     web.webViewClient = object : WebViewClient() {
+        override fun onReceivedError(view: WebView, request: WebResourceRequest, error: android.webkit.WebResourceError) {
+            if (request.isForMainFrame) loadError = "TikTok не загрузился: ${error.description}. Проверь интернет и нажми «Обновить»."
+        }
+
+        override fun onPageFinished(view: WebView, url: String) {
+            loggedIn = CookieManager.getInstance().getCookie("https://www.tiktok.com").orEmpty().contains("sessionid")
+            CookieManager.getInstance().flush()
+        }
+
         override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
             if (!request.isForMainFrame) return false
             val ok = FocusFeed.allowed(request.url.toString(), mode, rewardActive)
@@ -116,8 +138,17 @@ fun FeedScreen() {
         // TikTok — одностраничный сайт: переходы внутри него тоже проверяем.
         override fun doUpdateVisitedHistory(view: WebView, url: String, isReload: Boolean) {
             if (!FocusFeed.allowed(url, mode, rewardActive)) {
-                message = blockedText(mode, gate)
-                view.post { view.loadUrl(home(mode)) }
+                val now = System.currentTimeMillis()
+                bounces = if (now - lastBounce < 8_000) bounces + 1 else 1
+                lastBounce = now
+                if (bounces <= 2) {
+                    message = blockedText(mode, gate)
+                    view.post { view.loadUrl(home(mode)) }
+                } else {
+                    // TikTok упорно ведёт на ленту (например, без входа) — останавливаемся и показываем вход.
+                    view.stopLoading()
+                    loadError = if (!loggedIn) "TikTok просит войти. Нажми «Войти в TikTok» — это нужно один раз." else blockedText(mode, gate)
+                }
             }
             canBack = view.canGoBack()
             CookieManager.getInstance().flush()
@@ -125,7 +156,9 @@ fun FeedScreen() {
     }
     LaunchedEffect(mode, query) {
         // Сообщения у TikTok полноценно работают в версии для компьютера.
-        web.settings.userAgentString = if (mode == Mode.MESSAGES) DESKTOP_UA else null
+        web.settings.userAgentString = if (mode == Mode.MESSAGES) DESKTOP_UA else MOBILE_UA
+        loadError = null
+        bounces = 0
         web.loadUrl(home(mode))
     }
     // Награда идёт по времени: кончилось — обратно к учёбе.
@@ -141,6 +174,15 @@ fun FeedScreen() {
 
     Column(Modifier.fillMaxSize().background(Brand.Paper)) {
         Column(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (!loggedIn) {
+                Row(
+                    Modifier.fillMaxWidth().glass(RoundedCornerShape(18.dp), 6.dp, strong = true).padding(start = 14.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("Войди в TikTok один раз — сообщения и видео сохранятся", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                    InkButton("Войти") { loadError = null; bounces = 0; web.loadUrl("https://www.tiktok.com/login") }
+                }
+            }
             ModeSwitch(mode, gate) { m ->
                 if (m == Mode.REWARD && !gate.unlocked) message = blockedText(Mode.STUDY, gate) else mode = m
             }
@@ -152,6 +194,22 @@ fun FeedScreen() {
         }
         Box(Modifier.weight(1f).fillMaxWidth()) {
             AndroidView(factory = { web }, modifier = Modifier.fillMaxSize().semantics { contentDescription = "TikTok" })
+            // Полоса загрузки — чтобы пустой экран не казался зависанием.
+            if (progress in 1..99) {
+                Box(Modifier.align(Alignment.TopStart).fillMaxWidth(progress / 100f).height(3.dp).background(Brand.Accent))
+            }
+            loadError?.let { err ->
+                Column(
+                    Modifier.align(Alignment.Center).padding(24.dp).fillMaxWidth().glass(RoundedCornerShape(24.dp), 12.dp, strong = true).padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Text(err, style = MaterialTheme.typography.bodyMedium)
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        InkButton("Войти в TikTok") { loadError = null; bounces = 0; web.loadUrl("https://www.tiktok.com/login") }
+                        SoftButton("Обновить") { loadError = null; bounces = 0; web.loadUrl(home(mode)) }
+                    }
+                }
+            }
             androidx.compose.animation.AnimatedVisibility(
                 message != null,
                 enter = fadeIn() + slideInVertically(spring(dampingRatio = 0.7f, stiffness = 400f)) { -it },

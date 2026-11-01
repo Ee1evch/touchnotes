@@ -171,17 +171,56 @@ private fun TodayTab(resumeTick: Int, go: (String) -> Unit, onRoom: (String) -> 
             RoundIconButton(R.drawable.ic_tune, "Настройки") { go(MainActivity.SCREEN_SETTINGS) }
         }
 
+        // 1. Главное — что сейчас по расписанию.
         NowCard(lessons, tomorrow, now, hasGroup = app.settings.scheduleGroup().isNotBlank(), onRoom = onRoom, onSchedule = { onTab(PhoneTab.SCHEDULE) })
 
-        // Напоминания: ближайшие три и «добавить».
+        // 2. Две плитки рядом: карточки и серия — сразу видно, что сделать сегодня.
+        val today = Streaks.day(nowMs)
+        val perDay = remember(events) { events.groupingBy { Streaks.day(it.at) }.eachCount() }
+        val streak = remember(perDay, today) { Streaks.current(perDay.keys, today) }
+        val week = remember(perDay, today) { Streaks.lastDays(perDay, today, 7) }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            TodayTile(
+                modifier = Modifier.weight(1f),
+                icon = R.drawable.ic_cards,
+                big = if (due > 0) due.toString() else "✓",
+                caption = if (due > 0) ruPlural(due, "карточка ждёт", "карточки ждут", "карточек ждут") else "всё повторено",
+                accent = due > 0,
+                onClick = { go(MainActivity.SCREEN_REVIEW) },
+            )
+            TodayTile(
+                modifier = Modifier.weight(1f),
+                icon = R.drawable.ic_flame,
+                big = streak.toString(),
+                caption = if (streak > 0) ruPlural(streak, "день подряд", "дня подряд", "дней подряд") else "начни серию",
+                accent = false,
+                onClick = { go(MainActivity.SCREEN_PROGRESS) },
+            ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.padding(top = 8.dp)) {
+                    week.forEach { n -> Box(Modifier.size(9.dp).clip(CircleShape).background(if (n > 0) Brand.Theory else Brand.Line)) }
+                }
+            }
+        }
+
+        // 3. Напоминания — одной карточкой: заголовок с «+», ближайшие три.
         val open = reminders.filter { !it.done }.take(3)
-        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(
+            Modifier.fillMaxWidth().enter().glass(RoundedCornerShape(26.dp), 10.dp).padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Напоминания", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f).padding(start = 4.dp))
-                LinkText(if (open.isEmpty()) "Добавить" else "Все", onClick = { go(MainActivity.SCREEN_REMINDERS) })
+                Icon(painterResource(R.drawable.ic_bell), contentDescription = null, tint = Brand.Accent, modifier = Modifier.size(20.dp))
+                Text("Напоминания", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f).padding(start = 10.dp))
+                if (reminders.any { !it.done }) LinkText("Все", onClick = { go(MainActivity.SCREEN_REMINDERS) })
+                Spacer(Modifier.width(8.dp))
+                Box(
+                    Modifier.size(34.dp).clip(CircleShape).background(Brand.Accent).clickable { go(MainActivity.SCREEN_REMINDERS) }
+                        .semantics { contentDescription = "Добавить напоминание" },
+                    contentAlignment = Alignment.Center,
+                ) { Icon(painterResource(R.drawable.ic_plus), contentDescription = null, tint = Brand.OnAccent, modifier = Modifier.size(18.dp)) }
             }
             if (open.isEmpty()) {
-                Text("Пусто. Дедлайны и дела — сюда, напомню вовремя.", style = MaterialTheme.typography.bodyMedium, color = Brand.InkSoft, modifier = Modifier.padding(start = 4.dp))
+                Text("Пусто. Дедлайны и дела — сюда, напомню вовремя.", style = MaterialTheme.typography.bodyMedium, color = Brand.InkSoft)
             }
             open.forEach { r ->
                 ReminderRow(r, onToggle = {
@@ -190,34 +229,34 @@ private fun TodayTab(resumeTick: Int, go: (String) -> Unit, onRoom: (String) -> 
             }
         }
 
+        // 4. Успеваемость (если ЛКС подключён).
         GradesCard(onOpen = { go(MainActivity.SCREEN_GRADES) })
+    }
+}
 
-        // Карточки и серия.
-        val today = Streaks.day(nowMs)
-        val perDay = remember(events) { events.groupingBy { Streaks.day(it.at) }.eachCount() }
-        val streak = remember(perDay, today) { Streaks.current(perDay.keys, today) }
-        Row(
-            Modifier.fillMaxWidth().enter().glass(RoundedCornerShape(24.dp), 10.dp).clickable { go(MainActivity.SCREEN_REVIEW) }.padding(18.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
-            Column(Modifier.weight(1f)) {
-                if (due > 0) {
-                    AnimatedCount(due)
-                    Text(ruPlural(due, "карточка ждёт", "карточки ждут", "карточек ждут"), style = MaterialTheme.typography.bodyMedium, color = Brand.InkSoft)
-                } else {
-                    Text("Всё повторено", style = MaterialTheme.typography.titleMedium)
-                }
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 6.dp)) {
-                    Icon(painterResource(R.drawable.ic_flame), contentDescription = null, tint = if (streak > 0) Brand.Theory else Brand.InkSoft, modifier = Modifier.size(16.dp))
-                    Text(
-                        if (streak > 0) " $streak ${ruPlural(streak, "день", "дня", "дней")} подряд" else " начни серию сегодня",
-                        style = MaterialTheme.typography.labelMedium, color = Brand.InkSoft,
-                    )
-                }
-            }
-            if (due > 0) InkButton("Повторить", icon = R.drawable.ic_cards) { go(MainActivity.SCREEN_REVIEW) }
-        }
+/** Плитка на «Сегодня»: значок, большое число и подпись; «проседает» под пальцем с пружинкой. */
+@Composable
+private fun TodayTile(
+    modifier: Modifier,
+    icon: Int,
+    big: String,
+    caption: String,
+    accent: Boolean,
+    onClick: () -> Unit,
+    extra: @Composable () -> Unit = {},
+) {
+    val src = remember { MutableInteractionSource() }
+    Column(
+        modifier.enter().pressable(src).glass(RoundedCornerShape(24.dp), 10.dp)
+            .clickable(src, indication = null, onClick = onClick).padding(16.dp),
+    ) {
+        Box(
+            Modifier.size(34.dp).clip(CircleShape).background(if (accent) Brand.Accent else Brand.Accent.copy(alpha = 0.12f)),
+            contentAlignment = Alignment.Center,
+        ) { Icon(painterResource(icon), contentDescription = null, tint = if (accent) Brand.OnAccent else Brand.Accent, modifier = Modifier.size(18.dp)) }
+        Text(big, style = MaterialTheme.typography.headlineMedium, modifier = Modifier.padding(top = 10.dp))
+        Text(caption, style = MaterialTheme.typography.bodySmall, color = Brand.InkSoft, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        extra()
     }
 }
 

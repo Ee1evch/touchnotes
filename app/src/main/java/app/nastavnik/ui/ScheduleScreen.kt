@@ -148,6 +148,8 @@ fun ScheduleScreen(onBack: (() -> Unit)?, onRoom: (String) -> Unit) {
 
         WeekStrip(day, week.orEmpty(), onPick = { day = it }, onShift = { day = day.plusWeeks(it.toLong()) })
 
+        LanguageGroup(monday, version)
+
         AnimatedVisibility(error != null) {
             StatusLine(error.orEmpty(), Tone.ERROR)
         }
@@ -364,6 +366,59 @@ private fun GroupPicker(current: String, onBack: (() -> Unit)?, onPick: (String)
             }
         } else if (!loading && query.isNotBlank() && error == null) {
             Text("Такой группы не нашлось", style = MaterialTheme.typography.bodyMedium, color = Brand.InkSoft)
+        }
+    }
+}
+
+/**
+ * Группа английского: у группы несколько пар иностранного в одно время — у разных преподавателей.
+ * Спрашиваем один раз, какая твоя; дальше в расписании, на «Сегодня» и в уведомлениях — только она.
+ */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun LanguageGroup(monday: LocalDate, version: Int) {
+    val context = LocalContext.current
+    val app = context.app
+    var chosen by remember { mutableStateOf(app.settings.languageTeacher()) }
+    var editing by remember { mutableStateOf(false) }
+    val options by produceState(emptyList<String>(), monday, version) { value = app.schedule.languageTeachers(monday) }
+    if (options.size < 2) return
+    val ask = chosen.isBlank() || editing
+    androidx.compose.animation.AnimatedContent(targetState = ask, label = "langGroup") { open ->
+        if (open) {
+            Column(
+                Modifier.fillMaxWidth().enter().glass(RoundedCornerShape(24.dp), 10.dp, strong = true).padding(18.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text("В какой ты группе английского?", style = MaterialTheme.typography.titleMedium)
+                Text("У группы ${options.size} пары иностранного в одно время — оставлю только твою.", style = MaterialTheme.typography.bodySmall, color = Brand.InkSoft)
+                androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    options.forEachIndexed { i, t ->
+                        ChipButton("Группа ${i + 1} · ${Lesson.shortName(t)}", selected = t == chosen) {
+                            app.settings.setLanguageTeacher(t)
+                            chosen = t; editing = false
+                            app.schedule.changed()
+                            Alarms.rescheduleAll(context)
+                        }
+                    }
+                    ChipButton("Показывать все", selected = false) {
+                        app.settings.setLanguageTeacher("*")
+                        chosen = "*"; editing = false
+                        app.schedule.changed()
+                    }
+                }
+            }
+        } else {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    if (chosen == "*") "Английский: все группы" else "Английский: ${Lesson.shortName(chosen)}",
+                    style = MaterialTheme.typography.bodySmall, color = Brand.InkSoft, modifier = Modifier.weight(1f),
+                )
+                LinkText("сменить", onClick = { editing = true })
+            }
         }
     }
 }

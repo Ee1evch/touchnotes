@@ -72,9 +72,11 @@ class ScheduleRepo(private val context: Context, private val settings: SettingsR
 
     /** Все преподаватели иностранного языка в кеше — для выбора своего. */
     suspend fun languageTeachers(monday: LocalDate): List<String> = withContext(Dispatchers.IO) {
-        val f = File(dir(group), "$monday.json")
-        val w = runCatching { json.decodeFromString(Week.serializer(), f.readText()) }.getOrNull() ?: return@withContext emptyList()
-        w.lessons.filter { ScheduleText.isForeignLanguage(it.discipline) }.flatMap { it.teachers }.distinct().sorted()
+        // Эта и следующая неделя — английский может стоять не каждую неделю.
+        listOf(monday, monday.plusWeeks(1)).flatMap { m ->
+            val f = File(dir(group), "$m.json")
+            runCatching { json.decodeFromString(Week.serializer(), f.readText()) }.getOrNull()?.lessons.orEmpty()
+        }.filter { ScheduleText.isForeignLanguage(it.discipline) }.flatMap { it.teachers }.filter { it.isNotBlank() }.distinct().sorted()
     }
 
     fun changed() { _version.value++ }

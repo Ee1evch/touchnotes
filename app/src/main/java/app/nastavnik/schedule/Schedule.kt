@@ -107,7 +107,7 @@ object ScheduleText {
 
     /** Языковые группы: оставляем пары только своего преподавателя иностранного. */
     fun forLanguageTeacher(lessons: List<Lesson>, teacher: String?): List<Lesson> =
-        if (teacher.isNullOrBlank()) lessons else lessons.filter { l ->
+        if (teacher.isNullOrBlank() || teacher == "*") lessons else lessons.filter { l ->
             !isForeignLanguage(l.discipline) || l.teachers.all { it.isBlank() } || l.teachers.any { it.trim().equals(teacher.trim(), ignoreCase = true) }
         }
 }

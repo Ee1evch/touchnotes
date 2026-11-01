@@ -63,21 +63,29 @@ object FocusFeed {
     const val FEED_URL = "https://www.tiktok.com/foryou"
 
     /**
-     * Можно ли открыть адрес в этом режиме. Вход и сообщения — всегда; в «Учёбе» — поиск, видео и профили
-     * (на них попадаешь из поиска); в «Награде» с оставшимся временем — всё на tiktok.com.
+     * Можно ли открыть адрес в этом режиме. На tiktok.com разрешено всё, кроме лент для залипания:
+     * главная, For You, «Интересное», эфиры, подписки и друзья — они только в «Награде» с оставшимся временем.
+     * В «Сообщениях» — только сообщения и вход. Чужие сайты и уход в приложение TikTok — нельзя.
+     * (Раньше был список разрешённых страниц — TikTok сам перенаправлял, окно зацикливалось и оставалось белым.)
      */
     fun allowed(url: String, mode: Mode, rewardActive: Boolean): Boolean {
+        if (url.startsWith("about:")) return true
         val u = runCatching { URI(url) }.getOrNull() ?: return false
-        if (u.scheme == "about" || url.startsWith("about:")) return true
+        if (u.scheme != "https" && u.scheme != "http") return false
         val host = u.host?.lowercase() ?: return false
         if (!(host == "tiktok.com" || host.endsWith(".tiktok.com"))) return false
         val path = (u.path ?: "/").lowercase().trimEnd('/')
         if (isAccount(path)) return true
         if (path.startsWith("/messages")) return true
-        if (mode == Mode.REWARD && rewardActive) return true
         if (mode == Mode.MESSAGES) return false
-        return path.startsWith("/search") || Regex("""^/@[^/]+(/video/\d+|/photo/\d+)?$""").matches(path)
+        if (mode == Mode.REWARD && rewardActive) return true
+        return !isFeed(path)
     }
+
+    /** Ленты, в которых залипают: главная, For You, «Интересное», эфиры, подписки, друзья. */
+    fun isFeed(path: String): Boolean =
+        path.isEmpty() || path == "/foryou" || path.startsWith("/foryou/") || path.startsWith("/explore") || path.startsWith("/live") ||
+            path.endsWith("/live") || path.startsWith("/following") || path.startsWith("/friends") || path.startsWith("/discover")
 
     private fun isAccount(path: String) = listOf("/login", "/signup", "/passport", "/auth", "/logout", "/setting").any { path.startsWith(it) }
 }
