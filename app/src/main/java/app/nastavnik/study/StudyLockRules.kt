@@ -64,10 +64,10 @@ object StudyLockRules {
     )
 
     /**
-     * Карточки «заполни пропуск» из конспекта — без нейросети: в каждой фразе прячем самое длинное
-     * значимое слово. Длинные фразы делим по запятым. Не больше [max].
+     * Карточки «заполни пропуск» из конспекта — без нейросети: в каждой фразе по очереди прячем два самых
+     * длинных значимых слова (две карточки на фразу). Длинные фразы делим по запятым. Не больше [max].
      */
-    fun cloze(text: String, max: Int = 6): List<Pair<String, String>> {
+    fun cloze(text: String, max: Int = 8): List<Pair<String, String>> {
         val parts = text.split(sentenceEnd).flatMap { s ->
             val t = s.trim()
             if (t.length > 140) t.split(',').map { it.trim() } else listOf(t)
@@ -75,12 +75,16 @@ object StudyLockRules {
         val out = mutableListOf<Pair<String, String>>()
         val used = mutableSetOf<String>()
         for (p in parts) {
-            val w = wordRe.findAll(p).map { it.value }
+            val words = wordRe.findAll(p).map { it.value }
                 .filter { it.lowercase() !in stop && it.lowercase() !in used }
-                .maxByOrNull { it.length } ?: continue
-            used += w.lowercase()
-            out += p.replaceFirst(w, "_____") to w
-            if (out.size >= max) break
+                .distinctBy { it.lowercase() }
+                .sortedByDescending { it.length }
+                .take(2)
+            for (w in words) {
+                used += w.lowercase()
+                out += p.replaceFirst(w, "_____") to w
+                if (out.size >= max) return out
+            }
         }
         return out
     }

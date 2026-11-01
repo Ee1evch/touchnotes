@@ -106,7 +106,10 @@ class StudyLockRulesTest {
         val text = "Законы Ньютона: второй закон связывает силу и ускорение. Разбирали задачи на наклонную плоскость с трением! " +
             "Сила трения скольжения пропорциональна силе нормальной реакции опоры."
         val cards = StudyLockRules.cloze(text)
-        assertEquals(3, cards.size)
+        // Три фразы — по две карточки.
+        assertEquals(6, cards.size)
+        // Даже одна фраза даёт две карточки.
+        assertEquals(2, StudyLockRules.cloze("Законы Ньютона: второй закон F = ma, разбирали задачи на наклонную плоскость и силу трения.").size)
         cards.forEach { (front, back) ->
             assertTrue(front, "_____" in front)
             assertFalse(back in front)
