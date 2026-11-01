@@ -289,8 +289,8 @@ class CampusFlowTest {
                 StudyLock.saveSummary(ctx, today, "Физика", "Законы Ньютона: второй закон F = ma, разбирали задачи на наклонную плоскость и силу трения.")
                 val st = StudyLock.status(ctx)
                 assertTrue("конспекты не засчитаны: ${st.summaries}", st.summariesDone)
-                assertTrue(st.prep.any { it.first == "Иностранный язык" })
-                StudyLock.markPrepared(ctx, st.date, "Иностранный язык")
+                // Английский — не основной предмет: ни подготовки, ни карточек.
+                assertTrue("английский в подготовке", st.prep.none { it.first == "Иностранный язык" })
                 assertTrue(StudyLock.status(ctx).prepDone)
                 val physics = ctx.app.db.cards().all().filter { it.subject == "Физика" }
                 assertTrue(physics.any { it.front.contains("Вспомни главное") })

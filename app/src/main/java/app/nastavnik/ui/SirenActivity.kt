@@ -46,6 +46,7 @@ import app.nastavnik.study.SirenPrefs
 import app.nastavnik.study.SirenRules
 import app.nastavnik.study.SirenService
 import app.nastavnik.study.SleepPlan
+import app.nastavnik.study.StudyLockRules
 import app.nastavnik.study.TrainResult
 import app.nastavnik.study.WakePrefs
 import kotlinx.coroutines.delay
@@ -54,19 +55,27 @@ import kotlinx.coroutines.launch
 /** Основная задача сирены: условие и ответ, который нужно ввести. */
 private data class MainTask(val text: String, val answer: String, val cardId: Long? = null)
 
+/** Карточка по основному предмету (матан, линал, матлог, физика). */
+private fun CardEntity.core() = StudyLockRules.isCore(subject) || StudyLockRules.isCore(topic)
+
 /**
- * Основная задача по слабым темам: сначала нерешённые задачи («Задача. …»), потом задача от наставника по
- * слабой теме, без нейросети — карточка «Заполни пропуск». [skip] — те, что уже пропущены сегодня.
+ * Основная задача — только по основным предметам: сначала нерешённые задачи («Задача. …»), потом задача от
+ * наставника по слабой теме основного предмета, без нейросети — карточка «Заполни пропуск».
+ * [skip] — те, что уже пропущены сегодня.
  */
 private suspend fun nextMainTask(context: Context, skip: Set<String>): MainTask? {
     val app = context.app
-    val cards = app.db.cards().all()
+    val cards = app.db.cards().all().filter { it.core() }
     cards.filter { Learning.isProblem(it.front) && it.front.removePrefix(Learning.PROBLEM_PREFIX) !in skip }.sortedWith(compareBy({ it.box }, { it.dueAt })).firstOrNull()
         ?.let { return MainTask(it.front.removePrefix(Learning.PROBLEM_PREFIX), it.back, it.id) }
     val now = System.currentTimeMillis()
     val events = app.study.events()
+    // Тема: опасная или слабая — из основных предметов; иначе сам основной предмет (сегодняшний или из карточек).
+    val today = StudyLockRules.disciplines(app.schedule.day(StudyLockRules.sessionDate(java.time.LocalDateTime.now())))
     val topic = (Learning.dangerous(events, now).map { it.first } + Progress.summarize(events, now).weakTopics.map { it.first })
-        .firstOrNull() ?: cards.firstOrNull()?.let { it.subject.ifBlank { it.topic } }
+        .firstOrNull { StudyLockRules.isCore(it) }
+        ?: today.firstOrNull()
+        ?: cards.firstOrNull()?.let { it.subject.ifBlank { it.topic } }
     if (topic != null && app.settings.notReadyReason() == null) {
         val r = app.trainer.variant(Material(topic, "Нужны задачи с коротким ответом: одно число или одно слово."), 2)
         if (r is TrainResult.Ok) r.value.firstOrNull { it.task !in skip }?.let { return MainTask(it.task, it.answer) }
@@ -210,7 +219,9 @@ private fun MainPanel(s: SirenPrefs, onDone: () -> Unit) {
 private fun CardsFallback(onDone: () -> Unit) {
     val context = LocalContext.current
     val cards by produceState<List<CardEntity>?>(null) {
-        value = context.app.db.cards().due(System.currentTimeMillis(), 5).ifEmpty { context.app.db.cards().all().shuffled().take(5) }
+        val core = context.app.db.cards().all().filter { it.core() }
+        val now = System.currentTimeMillis()
+        value = core.filter { it.dueAt <= now }.take(5).ifEmpty { core.shuffled().take(5) }
     }
     val list = cards ?: return
     var i by remember { mutableIntStateOf(0) }

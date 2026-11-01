@@ -146,4 +146,23 @@ class StudyLockRulesTest {
         assertFalse(StudyLockRules.powerMenu("Выключить звук")) // не меню питания
         assertFalse(StudyLockRules.powerMenu("Перезагрузить страницу"))
     }
+
+    @Test
+    fun onlyCoreSubjects() {
+        listOf(
+            "Математический анализ", "Матан", "Линейная алгебра", "Линейная алгебра и аналитическая геометрия",
+            "Математическая логика", "Математическая логика и теория алгоритмов", "Физика", "Общая физика",
+        ).forEach { assertTrue(it, StudyLockRules.isCore(it)) }
+        listOf(
+            "Физическая культура и спорт", "Иностранный язык", "История России", "Программирование",
+            "Дискретная математика", "Философия", "Кураторский час",
+        ).forEach { assertFalse(it, StudyLockRules.isCore(it)) }
+        val day = listOf(
+            lesson("Иностранный язык", start = "09:00"),
+            lesson("Линейная алгебра", start = "10:40"),
+            lesson("Программирование", start = "12:40"),
+            lesson("Математическая логика", start = "14:20"),
+        )
+        assertEquals(listOf("Линейная алгебра", "Математическая логика"), StudyLockRules.disciplines(day))
+    }
 }

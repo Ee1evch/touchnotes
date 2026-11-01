@@ -89,12 +89,20 @@ object StudyLockRules {
         return out
     }
 
-    /** Пара, по которой нужен конспект: не физкультура и не внеучебное. */
-    fun needsSummary(l: Lesson): Boolean {
-        val d = l.discipline.lowercase()
-        val t = l.type.lowercase()
-        return d.isNotBlank() && "физическ" !in d && "физкульт" !in d && "внеучеб" !in t && "внеучеб" !in d
+    /**
+     * Основные предметы — только по ним вечерняя учёба, карточки из конспектов и сирена:
+     * матан, линал (и «…и аналитическая геометрия»), матлог, физика (не физкультура).
+     */
+    fun isCore(discipline: String): Boolean {
+        val d = discipline.lowercase().replace('ё', 'е')
+        return ("математическ" in d && "анализ" in d) || "матан" in d ||
+            ("линейн" in d && "алгебр" in d) || "линал" in d ||
+            "логик" in d && ("математическ" in d || "матлог" in d) || "матлог" in d ||
+            Regex("""(^|[^а-я])физик""").containsMatchIn(d)
     }
+
+    /** Пара, по которой нужен конспект: основная и не внеучебное. */
+    fun needsSummary(l: Lesson): Boolean = isCore(l.discipline) && "внеучеб" !in l.type.lowercase()
 
     /** Предметы дня по порядку пар, без повторов. */
     fun disciplines(lessons: List<Lesson>): List<String> =
