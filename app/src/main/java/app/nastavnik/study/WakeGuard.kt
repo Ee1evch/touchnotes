@@ -97,9 +97,12 @@ class WakeGuard : AccessibilityService() {
         if (!lock.configured) return
 
         // 2. Учебный замок: чужое приложение — «Домой» (оно уходит в фон, видео и звук не идут) и вечерняя учёба.
-        // Рабочий стол разрешён, поэтому «Домой» не зацикливается.
+        // Рабочий стол разрешён, поэтому «Домой» не зацикливается. Решаем только по окну, которое реально активно:
+        // события приходят и от фоновых окон (виджет поиска на рабочем столе и т. п.) — из-за них «Наставник»
+        // открывался поверх рабочего стола снова и снова.
         val lockedNow = StudyLock.locked && !lock.emergencyActive
-        if (lockedNow && (system || !StudyLockRules.allowed(pkg, lock.allowed, alwaysAllowed()))) {
+        val active = runCatching { rootInActiveWindow?.packageName?.toString() }.getOrNull()
+        if (lockedNow && active == pkg && (system || !StudyLockRules.allowed(pkg, lock.allowed, alwaysAllowed()))) {
             cover(home = true) { openEvening() }
             return
         }

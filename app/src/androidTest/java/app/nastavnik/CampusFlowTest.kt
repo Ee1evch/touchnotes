@@ -316,6 +316,7 @@ class CampusFlowTest {
             device.pressHome()
             SystemClock.sleep(4000)
             val home = device.currentPackageName
+            if (home == ctx.packageName || home == "com.android.settings") screenshot("lock_home_fail")
             assertTrue("рабочий стол закрыт: $home", home != ctx.packageName && home != "com.android.settings")
             screenshot("lock_home")
         } finally {
