@@ -22,7 +22,7 @@ import java.time.ZoneId
  *
  * Сделано системным режимом (AutomaticZenRule), а не прямым переключением «Не беспокоить»: система сама
  * совмещает его с режимами человека — если он уже включил «Не беспокоить» вручную, конец пары его не выключит.
- * В Android 15+ режим виден в настройках как «Пара» (тип «Учёба»), его можно донастроить там.
+ * В Android 15+ режим виден в настройках как «Пара» (тип «по расписанию»), его можно донастроить там.
  * Будильники и повторные звонки проходят — чтобы не пропустить важное.
  */
 object LessonQuiet {
@@ -55,7 +55,7 @@ object LessonQuiet {
         val activity = ComponentName(context, MainActivity::class.java)
         val rule = if (Build.VERSION.SDK_INT >= 35) {
             AutomaticZenRule.Builder("Пара", CONDITION)
-                .setType(AutomaticZenRule.TYPE_SCHOOLTIME)
+                .setType(AutomaticZenRule.TYPE_SCHEDULE_TIME)
                 .setConfigurationActivity(activity)
                 .setInterruptionFilter(NotificationManager.INTERRUPTION_FILTER_PRIORITY)
                 .setZenPolicy(policy)
