@@ -155,14 +155,6 @@ class CampusFlowTest {
             assertNotNull(device.wait(Until.findObject(By.text("Сдать лабу по физике")), 8000))
             SystemClock.sleep(800)
             screenshot("phone_reminders")
-            // «Лента»: TikTok по правилам учёбы — обычная лента закрыта, пока не всё сделано.
-            device.findObject(By.desc("Лента")).click()
-            assertNotNull("нет переключателя ленты", device.wait(Until.findObject(By.text("Сообщения")), 8000))
-            SystemClock.sleep(2500)
-            screenshot("phone_feed")
-            device.findObject(By.textContains("Награда"))?.click()
-            assertNotNull("награда не закрыта", device.wait(Until.findObject(By.textContains("Обычная лента закрыта")), 5000))
-            screenshot("phone_feed_locked")
             val saved = runBlocking { ctx.app.db.reminders().all() }
             assertEquals("Сдать лабу по физике", saved.single().title)
             assertTrue(saved.single().at > System.currentTimeMillis())

@@ -72,7 +72,6 @@ enum class PhoneTab(val title: String, val icon: Int) {
     TODAY("Сегодня", R.drawable.ic_home),
     SCHEDULE("Расписание", R.drawable.ic_calendar),
     MAP("Карта", R.drawable.ic_map),
-    FEED("Лента", R.drawable.ic_play),
     STUDY("Учёба", R.drawable.ic_cards),
 }
 
@@ -98,7 +97,6 @@ fun PhoneShell(tab: PhoneTab, onTab: (PhoneTab) -> Unit, mapRoom: String?, onMap
                 PhoneTab.TODAY -> TodayTab(resumeTick, go, onRoom = onMapRoom, onTab = onTab)
                 PhoneTab.SCHEDULE -> ScheduleScreen(onBack = null, onRoom = onMapRoom)
                 PhoneTab.MAP -> MapScreen(initialRoom = mapRoom, onBack = null)
-                PhoneTab.FEED -> FeedScreen()
                 PhoneTab.STUDY -> StudyTab(resumeTick, go)
             }
         }

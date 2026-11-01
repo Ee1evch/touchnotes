@@ -10,7 +10,6 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import app.nastavnik.R
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -152,10 +151,6 @@ class MainActivity : ComponentActivity() {
                         SCREEN_SCHEDULE -> ScheduleScreen(onBack = home, onRoom = showRoom)
                         SCREEN_MAP -> MapScreen(initialRoom = mapRoom, onBack = home)
                         SCREEN_REMINDERS -> RemindersScreen(onBack = home)
-                        SCREEN_FEED -> Column(Modifier.fillMaxSize()) {
-                            Box(Modifier.padding(start = 12.dp, top = 8.dp).statusBarsPadding()) { RoundIconButton(R.drawable.ic_arrow_back, "Назад", home) }
-                            Box(Modifier.weight(1f)) { FeedScreen() }
-                        }
                         SCREEN_GRADES -> GradesScreen(onBack = home, onSettings = { go(SCREEN_SETTINGS) }, onLks = { go(SCREEN_LKS) })
                         SCREEN_LKS -> LksScreen(onBack = { go(SCREEN_GRADES) }, onDone = { go(SCREEN_GRADES) })
                         SCREEN_NOTEBOOK -> if (notebookId != 0L) {
@@ -302,7 +297,6 @@ class MainActivity : ComponentActivity() {
         const val SCREEN_MAP = "map"
         const val SCREEN_REMINDERS = "reminders"
         const val SCREEN_VIEWER = "viewer"
-        const val SCREEN_FEED = "feed"
         const val SCREEN_GRADES = "grades"
         const val SCREEN_LKS = "lks"
         const val EXTRA_ROOM = "room"
