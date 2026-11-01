@@ -36,6 +36,7 @@ import app.nastavnik.schedule.ScheduleText
 import app.nastavnik.study.Alarms
 import app.nastavnik.study.LessonQuiet
 import app.nastavnik.study.SleepPlan
+import app.nastavnik.study.StudyLock
 import app.nastavnik.study.WakeAlarm
 import app.nastavnik.study.WakePrefs
 import app.nastavnik.study.WakeGuard
@@ -197,7 +198,7 @@ fun DeviceSection(tablet: Boolean) {
             AppSwitch(quiet) {
                 quiet = it
                 repo.setQuietLessons(it)
-                if (it && !access) runCatching { context.startActivity(LessonQuiet.accessIntent().addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                if (it && !access) StudyLock.openSettings(context, LessonQuiet.accessIntent())
                 Alarms.rescheduleAll(context)
             }
         }
@@ -207,7 +208,7 @@ fun DeviceSection(tablet: Boolean) {
                     "Нужно разрешить «Наставнику» доступ к режиму «Не беспокоить».",
                     style = MaterialTheme.typography.bodySmall, color = Brand.InkSoft, modifier = Modifier.weight(1f),
                 )
-                LinkText("Разрешить") { runCatching { context.startActivity(LessonQuiet.accessIntent().addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } }
+                LinkText("Разрешить") { StudyLock.openSettings(context, LessonQuiet.accessIntent()) }
             }
         }
     }
@@ -288,9 +289,7 @@ fun WakeSection() {
         tick++
         Alarms.rescheduleAll(context)
     }
-    fun open(action: String) = runCatching {
-        context.startActivity(Intent(action, Uri.parse("package:${context.packageName}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-    }
+    fun open(action: String) = StudyLock.openSettings(context, Intent(action, Uri.parse("package:${context.packageName}")))
 
     SectionCard("Будильник к первой паре") {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -377,7 +376,7 @@ fun WakeSection() {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("Включи службу «Наставник: защита и учебный замок» в спец. возможностях", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.weight(1f))
                         LinkText("Открыть") {
-                            runCatching { context.startActivity(Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                            StudyLock.openSettings(context, Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS))
                         }
                     }
                     Text(

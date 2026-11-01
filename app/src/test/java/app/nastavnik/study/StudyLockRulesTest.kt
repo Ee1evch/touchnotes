@@ -120,4 +120,20 @@ class StudyLockRulesTest {
         assertTrue(cards.none { it.second.lowercase() in setOf("разбирали", "задачи") })
         assertTrue(StudyLockRules.cloze("Коротко.").isEmpty())
     }
+
+    @Test
+    fun permissionPagesAreSafeButUninstallIsNot() {
+        val app = "Наставник"
+        val guard = "Наставник: защита и учебный замок"
+        // Разрешения, которые «Наставник» просит сам, — открыть можно.
+        assertFalse(StudyLockRules.dangerousSettings("Полноэкранные уведомления Наставник Разрешить полноэкранные уведомления", app, guard))
+        assertFalse(StudyLockRules.dangerousSettings("Доступ к истории использования Наставник Разрешить доступ", app, guard))
+        assertFalse(StudyLockRules.dangerousSettings("Разрешить приложению «Наставник» всегда работать в фоне? Разрешить Запретить", app, guard))
+        // Сведения о приложении с «Удалить» и «Остановить», выключатель службы — закрываем.
+        assertTrue(StudyLockRules.dangerousSettings("Сведения о приложении Наставник Открыть Удалить Остановить", app, guard))
+        assertTrue(StudyLockRules.dangerousSettings("Использовать сервис «Наставник: защита и учебный замок»", app, guard))
+        assertTrue(StudyLockRules.dangerousSettings("App info Наставник Uninstall Force stop", app, guard))
+        // Чужое приложение с «Удалить» — не наше дело.
+        assertFalse(StudyLockRules.dangerousSettings("Сведения о приложении Telegram Удалить Остановить", app, guard))
+    }
 }

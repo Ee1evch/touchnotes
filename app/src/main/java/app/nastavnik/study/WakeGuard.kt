@@ -39,6 +39,7 @@ class WakeGuard : AccessibilityService() {
     private var alwaysAt = 0L
     private var refresher: Job? = null
     private val label by lazy { getString(R.string.app_name).lowercase() }
+    private val guardLabel by lazy { getString(R.string.wake_guard_label) }
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -100,15 +101,18 @@ class WakeGuard : AccessibilityService() {
         // Рабочий стол разрешён, поэтому «Домой» не зацикливается. Решаем только по окну, которое реально активно:
         // события приходят и от фоновых окон (виджет поиска на рабочем столе и т. п.) — из-за них «Наставник»
         // открывался поверх рабочего стола снова и снова.
+        // Настройки, которые «Наставник» открыл сам ради разрешения, — можно, если окно не опасное.
         val lockedNow = StudyLock.locked && !lock.emergencyActive
         val active = runCatching { rootInActiveWindow?.packageName?.toString() }.getOrNull()
-        if (lockedNow && active == pkg && (system || !StudyLockRules.allowed(pkg, lock.allowed, alwaysAllowed()))) {
+        val granted = lock.grantActive && isSettings(pkg)
+        if (lockedNow && active == pkg && ((system && !granted) || (!system && !StudyLockRules.allowed(pkg, lock.allowed, alwaysAllowed())))) {
             cover(home = true) { openEvening() }
             return
         }
 
-        // 3. Самозащита: окна про «Наставник» в настройках и установщике — закрыть.
-        if (system && mentionsMe(text, root)) pressBack { performGlobalAction(GLOBAL_ACTION_HOME) }
+        // 3. Самозащита: удаление «Наставника» в установщике и опасные окна настроек про него (удалить,
+        // остановить, выключить службу). Окна разрешений не трогаем — иначе разрешение не выдать.
+        if (system && dangerous(pkg, text, root)) pressBack { performGlobalAction(GLOBAL_ACTION_HOME) }
     }
 
     private fun isLauncher(pkg: String) = pkg.contains("launcher") || pkg in homes()
@@ -148,11 +152,11 @@ class WakeGuard : AccessibilityService() {
         return always
     }
 
-    private fun mentionsMe(text: String, root: AccessibilityNodeInfo?): Boolean {
-        if (label in text) return true
-        val sb = StringBuilder()
+    private fun dangerous(pkg: String, text: String, root: AccessibilityNodeInfo?): Boolean {
+        val sb = StringBuilder(text).append(' ')
         runCatching { collect(root, sb, 0, 25) }
-        return label in sb.toString().lowercase()
+        val all = sb.toString().lowercase()
+        return if (isSettings(pkg)) StudyLockRules.dangerousSettings(all, label, guardLabel) else label in all
     }
 
     private fun isSettings(pkg: String) =

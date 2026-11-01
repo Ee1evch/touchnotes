@@ -411,7 +411,7 @@ fun PlanCard(resumeTick: Int) {
             }
         }
         if (!usage) LinkText("Учитывать время в телефоне") {
-            runCatching { context.startActivity(DayPlan.usageIntent().addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }
+            StudyLock.openSettings(context, DayPlan.usageIntent())
         }
     }
 }

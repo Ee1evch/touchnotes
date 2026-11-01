@@ -319,6 +319,18 @@ class CampusFlowTest {
             if (home == ctx.packageName || home == "com.android.settings") screenshot("lock_home_fail")
             assertTrue("рабочий стол закрыт: $home", home != ctx.packageName && home != "com.android.settings")
             screenshot("lock_home")
+
+            // Разрешение «будильник на заблокированном экране», открытое из «Наставника», — не закрывается даже в замок.
+            val pkgUri = android.net.Uri.parse("package:${ctx.packageName}")
+            StudyLock.openSettings(ctx, Intent("android.settings.MANAGE_APP_USE_FULL_SCREEN_INTENT", pkgUri))
+            SystemClock.sleep(5000)
+            screenshot("lock_permission_page")
+            assertEquals("страницу разрешения закрыло", "com.android.settings", device.currentPackageName)
+            // А «Сведения о приложении» с «Удалить» и «Остановить» — закрываются.
+            StudyLock.openSettings(ctx, Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, pkgUri))
+            SystemClock.sleep(5000)
+            screenshot("lock_app_info")
+            assertTrue("сведения о приложении не закрылись", device.currentPackageName != "com.android.settings")
         } finally {
             device.executeShellCommand("settings delete secure enabled_accessibility_services")
             Configurator.getInstance().uiAutomationFlags = 0

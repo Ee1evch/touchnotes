@@ -107,7 +107,7 @@ fun StudyLockSetupScreen(onBack: () -> Unit, onDone: () -> Unit) {
                     style = MaterialTheme.typography.bodySmall, color = Brand.InkSoft,
                 )
                 InkButton("Открыть спец. возможности") {
-                    runCatching { context.startActivity(Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                    StudyLock.openSettings(context, Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS))
                 }
             }
         }

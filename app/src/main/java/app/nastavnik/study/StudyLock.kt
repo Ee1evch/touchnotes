@@ -74,6 +74,12 @@ class LockPrefs private constructor(private val p: SharedPreferences) {
         get() = p.getLong("emergency_at", 0L)
         set(v) = p.edit { putLong("emergency_at", v) }
     val emergencyActive: Boolean get() = System.currentTimeMillis() - emergencyAt < StudyLockRules.EMERGENCY_MINUTES * 60_000L
+
+    /** До какого времени открыты настройки, которые «Наставник» открыл сам ради разрешения. */
+    var grantUntil: Long
+        get() = p.getLong("grant_until", 0L)
+        set(v) = p.edit { putLong("grant_until", v) }
+    val grantActive: Boolean get() = grantUntil > System.currentTimeMillis()
 }
 
 /** Что сделано за вечер: конспекты пар и подготовка к завтрашним. Лежит в files/evening/<дата>.json. */
@@ -252,6 +258,15 @@ object StudyLock {
         val cards = context.app.db.cards().all().filter { StudyLockRules.sameSubject(it.subject, subject) || StudyLockRules.sameSubject(it.topic, subject) }
             .sortedBy { it.box }.take(8)
         summary to cards
+    }
+
+    /**
+     * Открыть системную страницу разрешения. Полторы минуты служба защиты её не закрывает (даже во время замка),
+     * но опасные окна — удалить, остановить, выключить службу — по-прежнему закрываются.
+     */
+    fun openSettings(context: Context, intent: Intent) {
+        LockPrefs.of(context).grantUntil = System.currentTimeMillis() + 90_000L
+        runCatching { context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
     }
 
     fun startEmergency(context: Context): Boolean {

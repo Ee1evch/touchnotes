@@ -116,6 +116,22 @@ object StudyLockRules {
         return a.any { it in b }
     }
 
+    private val dangerWords = listOf(
+        "удалить", "остановить", "отключить", "деактивировать", "очистить", "сбросить",
+        "uninstall", "force stop", "disable", "deactivate", "clear storage", "clear data",
+    )
+
+    /**
+     * Окно настроек опасно для замка, если в нём есть «Наставник» и кнопка удалить/остановить/отключить
+     * (сведения о приложении, администраторы) или выключатель самой службы защиты. Окна разрешений
+     * (полноэкранные уведомления, батарея, «Не беспокоить», статистика) — не опасны: их можно открыть.
+     */
+    fun dangerousSettings(windowText: String, appLabel: String, guardLabel: String): Boolean {
+        val t = windowText.lowercase()
+        if (guardLabel.lowercase() in t) return true
+        return appLabel.lowercase() in t && dangerWords.any { it in t }
+    }
+
     /** Разрешено ли приложение во время замка. */
     fun allowed(pkg: String, chosen: Set<String>, always: Set<String>): Boolean = pkg in chosen || pkg in always
 
