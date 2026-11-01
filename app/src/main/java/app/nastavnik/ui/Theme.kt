@@ -104,9 +104,32 @@ object Palettes {
         Color(0xFF3D2618), Color(0xFF311B27), Color(0xFF3B3218),
     )
 
-    val light = listOf(PAPER, OCEAN, MINT, SUNSET, LAVENDER, SAKURA)
-    val dark = listOf(GRAPHITE, MIDNIGHT, FOREST, ESPRESSO)
-    val all = light + dark
+    /** «Обои» — цвета из обоев телефона (Material You, Android 12+); строятся при запуске. */
+    var wallpaperLight: Palette? = null
+        private set
+    var wallpaperDark: Palette? = null
+        private set
+
+    val light get() = listOfNotNull(wallpaperLight) + listOf(PAPER, OCEAN, MINT, SUNSET, LAVENDER, SAKURA)
+    val dark get() = listOfNotNull(wallpaperDark) + listOf(GRAPHITE, MIDNIGHT, FOREST, ESPRESSO)
+    val all get() = light + dark
+
+    /** Палитры «Обои» из системных динамических цветов — как у приложений Android 12–17. */
+    fun installWallpaper(context: android.content.Context) {
+        if (android.os.Build.VERSION.SDK_INT < 31) return
+        fun from(id: String, dark: Boolean, c: androidx.compose.material3.ColorScheme) = Palette(
+            id, "Обои", dark,
+            paper = c.surfaceContainerLow, ink = c.onSurface, inkSoft = c.onSurfaceVariant,
+            accent = c.primary, onAccent = c.onPrimary,
+            glass = if (dark) c.surfaceContainerHigh else c.surfaceContainerLowest,
+            line = c.outlineVariant.copy(alpha = 0.6f),
+            blobA = c.primaryContainer, blobB = c.tertiaryContainer, blobC = c.secondaryContainer,
+        )
+        runCatching {
+            wallpaperLight = from("wallpaper", false, androidx.compose.material3.dynamicLightColorScheme(context))
+            wallpaperDark = from("wallpaper_dark", true, androidx.compose.material3.dynamicDarkColorScheme(context))
+        }
+    }
 
     fun byId(id: String?, fallback: Palette) = all.firstOrNull { it.id == id } ?: fallback
 

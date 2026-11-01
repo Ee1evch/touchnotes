@@ -136,9 +136,9 @@ class MainActivity : ComponentActivity() {
                 AnimatedContent(
                     targetState = screen,
                     transitionSpec = {
-                        val back = targetState == SCREEN_HOME
-                        (fadeIn(tween(320, delayMillis = 40)) + scaleIn(tween(380, easing = FastOutSlowInEasing), initialScale = if (back) 1.03f else 0.97f))
-                            .togetherWith(fadeOut(tween(200)) + scaleOut(tween(300), targetScale = if (back) 0.98f else 1.02f))
+                        // «Сквозное проявление» Material 3: старый экран быстро гаснет, новый проявляется с лёгким приближением.
+                        (fadeIn(Motion.enter(300, delay = 60)) + scaleIn(Motion.enter(300, delay = 60), initialScale = 0.96f))
+                            .togetherWith(fadeOut(Motion.exit(90)))
                     },
                     label = "screen",
                 ) { target ->

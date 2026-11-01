@@ -75,9 +75,14 @@ class CampusMapView(context: Context) : View(context) {
     private val pulseAnim = ValueAnimator.ofFloat(0f, 1f).apply {
         duration = 1600
         repeatCount = ValueAnimator.INFINITE
-        addUpdateListener { pulse = it.animatedValue as Float; if (selected != null || me != null || route != null) invalidate() }
+        // Пульс — 30 кадров в секунду: глазу хватает, а карта не перерисовывается вхолостую 60 раз.
+        addUpdateListener {
+            pulse = it.animatedValue as Float
+            if ((selected != null || me != null || route != null) && (pulseFrame++ and 1) == 0) invalidate()
+        }
     }
     private var camAnim: ValueAnimator? = null
+    private var pulseFrame = 0
 
     private class Chunk(val verts: FloatArray, val colors: IntArray?, val indices: ShortArray, val color: Int)
 
@@ -91,6 +96,11 @@ class CampusMapView(context: Context) : View(context) {
         this.grid = null
         rooms = site.rooms.filter { it.floor == floor && !it.isGeneric }
             .sortedByDescending { it.area }
+        // Подписи считаем один раз на этаж: текст, ширина, точка — а не в каждом кадре.
+        labelText = Array(rooms.size) { i -> rooms[i].title.let { if (it.length > 22) it.take(21) + "…" else it } }
+        labelWidth = FloatArray(rooms.size) { textPaint.measureText(labelText[it]) }
+        labelX = DoubleArray(rooms.size) { rooms[it].labels.firstOrNull()?.first ?: rooms[it].x }
+        labelY = DoubleArray(rooms.size) { rooms[it].labels.firstOrNull()?.second ?: rooms[it].y }
         chunks = buildChunks(geo)
         lines = geo.layers.filter { !it.triangles }.associate { it.kind to it.verts }
         if (first || !keepCamera) fit(animate = !first)
@@ -241,7 +251,12 @@ class CampusMapView(context: Context) : View(context) {
     private val routePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeCap = Paint.Cap.ROUND; strokeJoin = Paint.Join.ROUND }
     private val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val routePath = Path()
-    private val labelBoxes = ArrayList<RectF>()
+    private var labelText: Array<String> = emptyArray()
+    private var labelWidth = FloatArray(0)
+    private var labelX = DoubleArray(0)
+    private var labelY = DoubleArray(0)
+    /** Занятые подписями прямоугольники: [left, top, right, bottom] подряд, без новых объектов в кадре. */
+    private val boxes = FloatArray(4 * 200)
 
     var accent: Int = 0xFF2F6BFF.toInt()
     /** Человек сам двигает карту — перестаём следовать за «я здесь». */
@@ -291,10 +306,11 @@ class CampusMapView(context: Context) : View(context) {
     private fun drawSelectedArea(canvas: Canvas, px: Float) {
         val r = selected ?: return
         if (r.floor != floor) return
-        val radius = (14f * density + 6f * density * sin(pulse * Math.PI.toFloat() * 2)) * px
+        // Мягкая волна от выбранного помещения, без мигания.
+        val radius = (12f + 26f * pulse) * density * px
         dotPaint.color = accent
-        dotPaint.alpha = (60 * (1 - pulse) + 30).toInt()
-        canvas.drawCircle(r.x.toFloat(), r.y.toFloat(), radius * (1 + pulse), dotPaint)
+        dotPaint.alpha = (50 * (1 - pulse)).toInt()
+        canvas.drawCircle(r.x.toFloat(), r.y.toFloat(), radius, dotPaint)
     }
 
     private fun drawRoute(canvas: Canvas, px: Float) {
@@ -338,25 +354,34 @@ class CampusMapView(context: Context) : View(context) {
 
     private fun drawLabels(canvas: Canvas) {
         if (floorAlpha < 0.5f) return
-        labelBoxes.clear()
         val textColor = if (dark) 0xFFE8E8EC.toInt() else 0xFF2B2E36.toInt()
         val halo = if (dark) 0xCC1B1D22.toInt() else 0xE6FFFFFF.toInt()
         textPaint.color = textColor
         haloPaint.color = halo
         val minArea = (44.0 * density / scale).let { it * it * 0.6 }
-        var drawn = 0
-        for (r in rooms) {
+        val h = textPaint.textSize
+        var n = 0
+        for (i in rooms.indices) {
+            val r = rooms[i]
             if (r.area < minArea && r != selected) continue
-            val (sx, sy) = toScreen(r.labels.firstOrNull()?.first ?: r.x, r.labels.firstOrNull()?.second ?: r.y)
+            val sx = ((labelX[i] - cx) * scale + width / 2).toFloat()
+            val sy = ((cy - labelY[i]) * scale + height / 2).toFloat()
             if (sx < -60 || sy < -20 || sx > width + 60 || sy > height + 20) continue
-            val text = r.title.let { if (it.length > 22) it.take(21) + "…" else it }
-            val w = textPaint.measureText(text)
-            val box = RectF(sx - w / 2 - 4, sy - textPaint.textSize, sx + w / 2 + 4, sy + 4)
-            if (labelBoxes.any { RectF.intersects(it, box) }) continue
-            labelBoxes += box
-            canvas.drawText(text, sx, sy, haloPaint)
-            canvas.drawText(text, sx, sy, textPaint)
-            if (++drawn > 160) break
+            val half = labelWidth[i] / 2 + 4
+            val l = sx - half; val t = sy - h; val rr = sx + half; val b = sy + 4
+            var hit = false
+            var k = 0
+            while (k < n) {
+                val o = k * 4
+                if (l < boxes[o + 2] && rr > boxes[o] && t < boxes[o + 3] && b > boxes[o + 1]) { hit = true; break }
+                k++
+            }
+            if (hit) continue
+            val o = n * 4
+            boxes[o] = l; boxes[o + 1] = t; boxes[o + 2] = rr; boxes[o + 3] = b
+            canvas.drawText(labelText[i], sx, sy, haloPaint)
+            canvas.drawText(labelText[i], sx, sy, textPaint)
+            if (++n >= 160) break
         }
     }
 
@@ -406,7 +431,7 @@ class CampusMapView(context: Context) : View(context) {
     private val pinPath = Path()
     private fun pin(canvas: Canvas, x: Float, y: Float, color: Int) {
         // Булавка чуть «подпрыгивает» в такт пульсу.
-        val lift = (abs(sin(pulse * Math.PI)) * 3f * density).toFloat()
+        val lift = 0f
         val r = 11f * density
         val top = y - r * 2.6f - lift
         pinPath.reset()

@@ -141,34 +141,9 @@ object Alarms {
         runCatching { context.getSystemService(NotificationManager::class.java).notify(r.uid.hashCode(), n) }
     }
 
+    /** За N минут до пары: «живое» уведомление с отсчётом (оно само обновится к началу и во время пары). */
     suspend fun onLesson(context: Context) {
-        val app = context.app
-        val before = app.settings.lessonAlertMin()
-        val now = LocalDateTime.now()
-        val lesson: Lesson? = app.schedule.day(LocalDate.now())
-            .filter { it.startsAt()?.let { s -> !s.isBefore(now) && !s.isAfter(now.plusMinutes(before + 5L)) } == true }
-            .minByOrNull { it.start }
-        if (lesson != null && Permissions.notifications(context)) {
-            val open = PendingIntent.getActivity(
-                context, 7701,
-                Intent(context, MainActivity::class.java)
-                    .putExtra(MainActivity.EXTRA_SCREEN, if (lesson.classroom != null) MainActivity.SCREEN_MAP else MainActivity.SCREEN_SCHEDULE)
-                    .putExtra(MainActivity.EXTRA_ROOM, lesson.classroom)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-            )
-            val where = listOfNotNull(lesson.classroom, lesson.type.takeIf { it.isNotBlank() }).joinToString(" · ")
-            val n = NotificationCompat.Builder(context, NastavnikApp.CHANNEL_LESSONS)
-                .setSmallIcon(R.drawable.ic_calendar)
-                .setContentTitle("${lesson.start} — ${lesson.discipline}")
-                .setContentText(if (lesson.classroom != null) "$where · нажми, чтобы проложить путь" else where.ifBlank { "Скоро пара" })
-                .setContentIntent(open)
-                .setAutoCancel(true)
-                .setCategory(NotificationCompat.CATEGORY_EVENT)
-                .setTimeoutAfter(before * 60_000L + 15 * 60_000L)
-                .build()
-            runCatching { context.getSystemService(NotificationManager::class.java).notify(7702, n) }
-        }
+        LiveNotifications.updateLesson(context)
         scheduleNextLesson(context)
     }
 }
@@ -184,6 +159,7 @@ class AlarmReceiver : BroadcastReceiver() {
                     Alarms.ACTION_PERSONAL -> if (uid != null) runCatching { Alarms.onPersonal(context, uid) }
                     Alarms.ACTION_DONE -> if (uid != null) runCatching { Alarms.markDone(context, uid) }
                     Alarms.ACTION_LESSON -> runCatching { Alarms.onLesson(context) }
+                    LiveNotifications.ACTION_LIVE -> runCatching { LiveNotifications.updateLesson(context) }
                 }
             } finally {
                 pending.finish()

@@ -149,7 +149,7 @@ fun RemindersScreen(onBack: (() -> Unit)?) {
 @Composable
 fun ReminderRow(r: ReminderEntity, onToggle: () -> Unit, onClick: () -> Unit) {
     var checked by remember(r.uid, r.done) { mutableStateOf(r.done) }
-    val k by animateFloatAsState(if (checked) 1f else 0f, spring(dampingRatio = 0.45f, stiffness = 600f), label = "check")
+    val k by animateFloatAsState(if (checked) 1f else 0f, spring(dampingRatio = 0.7f, stiffness = 700f), label = "check")
     val overdue = !r.done && r.repeat == Repeats.NONE && r.at < System.currentTimeMillis()
     val ring by animateColorAsState(if (checked) Brand.Accent else if (overdue) Brand.Error else Brand.InkSoft, tween(200), label = "ring")
     val scope = rememberCoroutineScope()

@@ -118,10 +118,10 @@ fun ReviewScreen(onBack: () -> Unit, onExample: () -> Unit) {
         }
 
         // Карточка переворачивается, когда открываешь ответ; новая карточка влетает справа.
-        val flip by animateFloatAsState(if (revealed) 1f else 0f, spring(dampingRatio = 0.78f, stiffness = 170f), label = "flip")
+        val flip by animateFloatAsState(if (revealed) 1f else 0f, androidx.compose.animation.core.tween(460, easing = Motion.Emphasized), label = "flip")
         key(card.uid) {
             val arrive = remember { Animatable(0f) }
-            LaunchedEffect(Unit) { arrive.animateTo(1f, spring(dampingRatio = 0.8f, stiffness = 260f)) }
+            LaunchedEffect(Unit) { arrive.animateTo(1f, Motion.enter(380)) }
             Column(
                 Modifier
                     .fillMaxWidth()
@@ -129,7 +129,7 @@ fun ReviewScreen(onBack: () -> Unit, onExample: () -> Unit) {
                         rotationY = flip * 180f
                         cameraDistance = 14f * density
                         alpha = arrive.value.coerceIn(0f, 1f)
-                        translationX = (1f - arrive.value) * 60.dp.toPx()
+                        translationX = (1f - arrive.value) * 32.dp.toPx()
                     }
                     .glass(RoundedCornerShape(28.dp))
                     .animateContentSize(spring(dampingRatio = 0.85f, stiffness = 300f))

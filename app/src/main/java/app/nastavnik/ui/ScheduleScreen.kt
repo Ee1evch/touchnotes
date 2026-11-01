@@ -156,8 +156,8 @@ fun ScheduleScreen(onBack: (() -> Unit)?, onRoom: (String) -> Unit) {
             targetState = day,
             transitionSpec = {
                 val dir = if (targetState.isAfter(initialState)) 1 else -1
-                (slideInHorizontally(spring(dampingRatio = 0.85f, stiffness = 420f)) { it / 5 * dir } + fadeIn(tween(220)))
-                    .togetherWith(slideOutHorizontally(tween(200)) { -it / 6 * dir } + fadeOut(tween(160)))
+                (slideInHorizontally(Motion.enter(340)) { it / 12 * dir } + fadeIn(Motion.enter(260)))
+                    .togetherWith(slideOutHorizontally(Motion.exit(160)) { -it / 16 * dir } + fadeOut(Motion.exit(120)))
             },
             label = "day",
             modifier = Modifier.pointerInput(Unit) {
@@ -217,7 +217,7 @@ private fun WeekStrip(day: LocalDate, lessons: List<Lesson>, onPick: (LocalDate)
         BoxWithConstraints(Modifier.weight(1f).glass(RoundedCornerShape(22.dp), 8.dp)) {
             val cell = maxWidth / 7
             val idx = (day.dayOfWeek.value - 1)
-            val x by androidx.compose.animation.core.animateDpAsState(cell * idx, spring(dampingRatio = 0.7f, stiffness = 520f), label = "dayX")
+            val x by androidx.compose.animation.core.animateDpAsState(cell * idx, Motion.spatial(), label = "dayX")
             Box(Modifier.offset(x = x).width(cell).height(64.dp).padding(4.dp).clip(RoundedCornerShape(18.dp)).background(Brand.Accent))
             Row(Modifier.fillMaxWidth()) {
                 (0..6).forEach { i ->
@@ -280,13 +280,13 @@ fun LessonCard(l: Lesson, now: LocalDateTime, index: Int = 0, compact: Boolean =
     val live = start != null && end != null && !now.isBefore(start) && now.isBefore(end)
     val past = end != null && !now.isBefore(end)
     var shown by remember(l.id) { mutableStateOf(false) }
-    LaunchedEffect(l.id) { delay(40L * index); shown = true }
-    val appear by animateFloatAsState(if (shown) 1f else 0f, spring(dampingRatio = 0.8f, stiffness = 300f), label = "appear")
+    LaunchedEffect(l.id) { delay(30L * index); shown = true }
+    val appear by animateFloatAsState(if (shown) 1f else 0f, Motion.enter(380), label = "appear")
     val color = lessonColor(l.type)
     Row(
         Modifier
             .fillMaxWidth()
-            .graphicsLayer { alpha = appear * (if (past) 0.62f else 1f); translationY = (1 - appear) * 24f }
+            .graphicsLayer { alpha = appear * (if (past) 0.62f else 1f); translationY = (1 - appear) * 10.dp.toPx() }
             .glass(RoundedCornerShape(22.dp), if (live) 14.dp else 8.dp, strong = live)
             .padding(start = 14.dp, end = 16.dp, top = 14.dp, bottom = 14.dp),
         horizontalArrangement = Arrangement.spacedBy(14.dp),

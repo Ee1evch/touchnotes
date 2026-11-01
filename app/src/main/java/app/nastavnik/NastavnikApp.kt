@@ -19,6 +19,7 @@ import app.nastavnik.ink.Notebooks
 import app.nastavnik.session.CleanSession
 import app.nastavnik.study.Reminders
 import app.nastavnik.study.Alarms
+import app.nastavnik.ui.Palettes
 import app.nastavnik.schedule.ScheduleRepo
 import app.nastavnik.campus.CampusRepo
 import app.nastavnik.sync.SyncManager
@@ -97,6 +98,7 @@ class NastavnikApp : Application() {
         // WebView рисует только видимую часть страницы.
         WebView.enableSlowWholeDocumentDraw()
         createChannels()
+        Palettes.installWallpaper(this)
         Reminders.schedule(this)
         Alarms.rescheduleAll(this)
     }

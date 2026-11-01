@@ -73,6 +73,8 @@ import androidx.core.content.ContextCompat
 import app.nastavnik.R
 import app.nastavnik.app
 import app.nastavnik.campus.Place
+import app.nastavnik.campus.Navigation
+import app.nastavnik.study.LiveNotifications
 import app.nastavnik.campus.PositionTracker
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.nastavnik.campus.Room
@@ -108,6 +110,13 @@ fun MapScreen(initialRoom: String?, onBack: (() -> Unit)?) {
     var floor by remember { mutableIntStateOf(1) }
     var selected by remember { mutableStateOf<Room?>(null) }
     var route by remember { mutableStateOf<Route?>(null) }
+    // Пошаговая навигация: шаги маршрута, текущий шаг, сколько до следующего, сколько осталось.
+    var navigating by remember { mutableStateOf(false) }
+    var step by remember { mutableIntStateOf(0) }
+    var toNext by remember { mutableStateOf<Double?>(null) }
+    var left by remember { mutableStateOf<Double?>(null) }
+    var offCount by remember { mutableIntStateOf(0) }
+    val steps = remember(route, selected) { route?.let { r -> site?.let { s -> Navigation.maneuvers(s, r, selected) } }.orEmpty() }
     var routing by remember { mutableStateOf(false) }
     var from by remember { mutableStateOf<From?>(null) }
     var query by remember { mutableStateOf("") }
@@ -195,10 +204,18 @@ fun MapScreen(initialRoom: String?, onBack: (() -> Unit)?) {
                 return@launch
             }
             route = r
+            step = 0; toNext = null; left = null; offCount = 0
             val first = r.legs.first().floor
             if (floor != first) floor = first
             map?.setRoute(r, focus = true)
         }
+    }
+
+    fun showStep(i: Int) {
+        val m = steps.getOrNull(i) ?: return
+        step = i
+        if (floor != m.floor) floor = m.floor
+        map?.post { map?.animateTo(m.x, m.y, 7.0 * context.resources.displayMetrics.density) }
     }
 
     // «Где я»: живое слежение — Wi-Fi, шаги, компас, барометр, GPS (см. Positioning).
@@ -226,7 +243,23 @@ fun MapScreen(initialRoom: String?, onBack: (() -> Unit)?) {
         if (site?.id != h.site.id) { site = h.site; selected = null; route = null; map?.setRoute(null, false) }
         if (follow && floor != h.fix.floor) floor = h.fix.floor
         map?.setMe(h.fix.floor, h.fix.x, h.fix.y, focus = follow, radius = h.fix.radius, heading = h.fix.heading)
-        from = From.Here(h.fix.floor, h.fix.x, h.fix.y)
+        if (!navigating) from = From.Here(h.fix.floor, h.fix.x, h.fix.y)
+        // Навигация: какой шаг, сколько до поворота; ушёл с маршрута — перестроить от текущего места.
+        val r = route
+        if (navigating && r != null && h.site.id == site?.id) {
+            val p = Navigation.progress(r, steps, h.fix.floor, h.fix.x, h.fix.y, from = step)
+            if (p != null) {
+                if (p.step != step) step = p.step
+                toNext = p.toNext; left = p.left
+                offCount = if (p.offRoute > 10 + h.fix.radius / 2) offCount + 1 else 0
+                if (offCount >= 3) {
+                    offCount = 0
+                    from = From.Here(h.fix.floor, h.fix.x, h.fix.y)
+                    message = "Сошёл с маршрута — перестраиваю"
+                    buildRoute()
+                }
+            }
+        }
     }
     LaunchedEffect(trackStatus) { if (trackStatus.isNotEmpty() && here == null && tracking) message = trackStatus }
     // Касание в режиме «я здесь» — поправить место и запомнить этот скан.
@@ -243,6 +276,15 @@ fun MapScreen(initialRoom: String?, onBack: (() -> Unit)?) {
         }
         v.onUserMove = { follow = false }
     }
+    // Навигация в шторке: текущий шаг, пока идёшь (и когда экран погас).
+    LaunchedEffect(navigating, step, toNext?.let { (it / 5).toInt() }) {
+        if (!navigating || steps.isEmpty()) { LiveNotifications.hideNavigation(context); return@LaunchedEffect }
+        val next = steps.getOrNull(step + 1) ?: steps[step]
+        val dist = toNext
+        val title = if (step < steps.lastIndex && dist != null) "Через ${Navigation.meters(dist)} — ${next.title.replaceFirstChar { it.lowercase() }}" else next.title
+        LiveNotifications.showNavigation(context, title, next.detail.ifBlank { selected?.title.orEmpty() }, step, steps.lastIndex)
+    }
+    DisposableEffect(Unit) { onDispose { LiveNotifications.hideNavigation(context) } }
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { res ->
         if (res[Manifest.permission.ACCESS_FINE_LOCATION] == true) locate()
         else message = "Без доступа к местоположению Android не показывает сети Wi-Fi"
@@ -271,8 +313,17 @@ fun MapScreen(initialRoom: String?, onBack: (() -> Unit)?) {
             modifier = Modifier.fillMaxSize().semantics { contentDescription = "Карта этажа" },
         )
 
+        // Навигация: крупная плашка с манёвром сверху, как в обычных картах.
+        AnimatedVisibility(
+            navigating && steps.isNotEmpty(),
+            enter = fadeIn(Motion.enter(260)) + slideInVertically(Motion.enter(360)) { -it / 2 },
+            exit = fadeOut(Motion.exit(140)) + slideOutVertically(Motion.exit(160)) { -it / 3 },
+            modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp),
+        ) {
+            NavigationBanner(steps, step, toNext, onPrev = { showStep(step - 1) }, onNext = { showStep(step + 1) })
+        }
         // Сверху: назад, поиск, здания.
-        Column(
+        if (!navigating) Column(
             Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 14.dp, vertical = 10.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
@@ -356,10 +407,11 @@ fun MapScreen(initialRoom: String?, onBack: (() -> Unit)?) {
                 }
             }
             AnimatedContent(
-                targetState = Triple(selected, route, pickingFrom),
-                transitionSpec = { (fadeIn(tween(220)) + slideInVertically(spring(dampingRatio = 0.8f, stiffness = Spring.StiffnessMediumLow)) { it / 3 }) togetherWith fadeOut(tween(150)) },
+                targetState = Triple(selected, route?.let { it to navigating }, pickingFrom),
+                transitionSpec = { (fadeIn(Motion.enter(240)) + slideInVertically(Motion.enter(320)) { it / 6 }) togetherWith fadeOut(Motion.exit(100)) },
                 label = "mapSheet",
-            ) { (room, r, picking) ->
+            ) { (room, rn, picking) ->
+                val r = rn?.first
                 when {
                     room == null -> Spacer(Modifier.size(1.dp))
                     picking -> FromPicker(
@@ -367,7 +419,18 @@ fun MapScreen(initialRoom: String?, onBack: (() -> Unit)?) {
                         onHere = { pickingFrom = false; askAndLocate() },
                         onCancel = { pickingFrom = false },
                     )
-                    r != null -> RouteCard(site!!, room, r, from, currentFloor = floor, onFloor = { floor = it; map?.post { map?.focusRoute() } }, onChangeFrom = { pickingFrom = true }, onClose = { route = null; map?.setRoute(null, false) })
+                    r != null && rn.second -> NavigationBottom(r, steps, step, left, onStep = { showStep(it) }, onFinish = { navigating = false; route = null; map?.setRoute(null, false) })
+                    r != null -> RouteCard(
+                        site!!, room, r, from, currentFloor = floor,
+                        onFloor = { floor = it; map?.post { map?.focusRoute() } }, onChangeFrom = { pickingFrom = true },
+                        onClose = { route = null; map?.setRoute(null, false) },
+                        onGo = {
+                            navigating = true
+                            showStep(0)
+                            // С «где я» шаги переключаются сами, по мере того как идёшь.
+                            if (!tracking) askAndLocate()
+                        },
+                    )
                     else -> RoomCard(site!!, room, from, routing, onRoute = ::buildRoute, onChangeFrom = { pickingFrom = true }, onClose = { selected = null; map?.select(null, false) })
                 }
             }
@@ -422,7 +485,7 @@ private fun SearchField(value: String, onChange: (String) -> Unit, modifier: Mod
 private fun FloorPicker(site: Site, floor: Int, route: Route?, onPick: (Int) -> Unit) {
     val floors = site.floors.sortedByDescending { it.n }
     val idx = floors.indexOfFirst { it.n == floor }.coerceAtLeast(0)
-    val y by animateDpAsState((idx * 46).dp, spring(dampingRatio = 0.72f, stiffness = 500f), label = "floorY")
+    val y by animateDpAsState((idx * 46).dp, Motion.spatial(), label = "floorY")
     val onRoute = route?.legs?.map { it.floor }?.toSet().orEmpty()
     Box(Modifier.width(48.dp).glass(RoundedCornerShape(24.dp), 8.dp, strong = true)) {
         Box(Modifier.padding(top = 1.dp).offset(y = y).size(48.dp, 46.dp).padding(4.dp).clip(RoundedCornerShape(19.dp)).background(Brand.Accent))
@@ -491,7 +554,7 @@ private fun FromPicker(from: From?, onHere: () -> Unit, onCancel: () -> Unit) {
 
 /** Маршрут: время, расстояние и шаги; шаг с другим этажом переключает карту на него. */
 @Composable
-private fun RouteCard(site: Site, room: Room, r: Route, from: From?, currentFloor: Int, onFloor: (Int) -> Unit, onChangeFrom: () -> Unit, onClose: () -> Unit) {
+private fun RouteCard(site: Site, room: Room, r: Route, from: From?, currentFloor: Int, onFloor: (Int) -> Unit, onChangeFrom: () -> Unit, onClose: () -> Unit, onGo: () -> Unit) {
     SheetCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
@@ -526,7 +589,10 @@ private fun RouteCard(site: Site, room: Room, r: Route, from: From?, currentFloo
                 }
             }
         }
-        LinkText("Другая точка отправления", onClick = onChangeFrom)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            LinkText("Другая точка отправления", modifier = Modifier.weight(1f), onClick = onChangeFrom)
+            InkButton("Поехали", icon = R.drawable.ic_route, onClick = onGo)
+        }
     }
 }
 

@@ -121,3 +121,40 @@ class PositioningTest {
         assertTrue(x in -150.0..550.0 && y in -260.0..480.0)
     }
 }
+
+class NavigationTest {
+    @Test fun turnsAreClassified() {
+        assertEquals(Maneuver.Kind.LEFT, Navigation.kindOf(Navigation.turnDeg(0.0 to 0.0, 10.0 to 0.0, 10.0 to 10.0)))
+        assertEquals(Maneuver.Kind.RIGHT, Navigation.kindOf(Navigation.turnDeg(0.0 to 0.0, 10.0 to 0.0, 10.0 to -10.0)))
+        assertEquals(Maneuver.Kind.STRAIGHT, Navigation.kindOf(Navigation.turnDeg(0.0 to 0.0, 10.0 to 0.0, 20.0 to 2.0)))
+        assertEquals(Maneuver.Kind.SLIGHT_RIGHT, Navigation.kindOf(-40.0))
+    }
+
+    @Test fun stepsAlongRealRoute() {
+        val site = CampusTest.gmc
+        val router = Router(site, CampusTest::grid)
+        val a = RoomSearch.forClassroom(listOf(site), "Бета 3.3")!!.second
+        val b = RoomSearch.forClassroom(listOf(site), "Альфа 5.8")!!.second
+        val r = router.route(router.placeOf(a)!!, router.placeOf(b)!!)!!
+        val steps = Navigation.maneuvers(site, r, b)
+        steps.forEach { println("STEP ${it.kind} ${it.title} | ${it.detail}") }
+        assertEquals(Maneuver.Kind.START, steps.first().kind)
+        assertEquals(Maneuver.Kind.ARRIVE, steps.last().kind)
+        assertTrue("слишком много шагов: ${steps.size}", steps.size in 3..14)
+        // Сумма расстояний шагов ≈ длина маршрута.
+        assertEquals(r.meters, steps.sumOf { it.distance }, r.meters * 0.15)
+        // Прогресс: у начала — шаг 0, у конца — последний.
+        val p0 = Navigation.progress(r, steps, a.floor, r.legs[0].points.first().first, r.legs[0].points.first().second)!!
+        assertEquals(0, p0.step)
+        val end = r.legs.last().points.last()
+        val p1 = Navigation.progress(r, steps, b.floor, end.first, end.second)!!
+        assertEquals(steps.lastIndex, p1.step)
+        assertTrue(p1.left < 3)
+
+        val up = site.rooms.first { it.floor == 3 && !it.isGeneric && it.reachable }
+        val r2 = router.route(router.placeOf(a)!!, router.placeOf(up)!!)!!
+        val s2 = Navigation.maneuvers(site, r2, up)
+        s2.forEach { println("STEP2 ${it.kind} ${it.title} | ${it.detail}") }
+        assertTrue(s2.any { it.kind == Maneuver.Kind.UP || it.kind == Maneuver.Kind.LIFT })
+    }
+}

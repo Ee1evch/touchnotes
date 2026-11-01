@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -84,12 +85,11 @@ fun PhoneShell(tab: PhoneTab, onTab: (PhoneTab) -> Unit, mapRoom: String?, onMap
         AnimatedContent(
             targetState = tab,
             transitionSpec = {
-                val dir = if (targetState.ordinal > initialState.ordinal) 1 else -1
-                (fadeIn(tween(260, delayMillis = 40)) + slideInHorizontally(spring(dampingRatio = 0.9f, stiffness = 500f)) { it / 10 * dir })
-                    .togetherWith(fadeOut(tween(160)) + slideOutHorizontally(tween(220)) { -it / 14 * dir })
+                // Вкладки нижней панели — «сквозное проявление», как в Material 3.
+                (fadeIn(Motion.enter(260, delay = 50)) + scaleIn(Motion.enter(260, delay = 50), initialScale = 0.97f)).togetherWith(fadeOut(Motion.exit(80)))
             },
             label = "tab",
-            modifier = Modifier.fillMaxSize().padding(bottom = 76.dp),
+            modifier = Modifier.fillMaxSize().padding(bottom = 72.dp),
         ) { t ->
             when (t) {
                 PhoneTab.TODAY -> TodayTab(resumeTick, go, onRoom = onMapRoom, onTab = onTab)
@@ -102,31 +102,41 @@ fun PhoneShell(tab: PhoneTab, onTab: (PhoneTab) -> Unit, mapRoom: String?, onMap
     }
 }
 
-/** Нижняя панель: стеклянная, выбранная вкладка — на скользящей подложке, значок «подпрыгивает». */
+/**
+ * Нижняя панель как в Android 16–17 (Material 3 Expressive): во всю ширину, у выбранной вкладки —
+ * «таблетка» за значком, которая плавно растягивается; подписи всегда видны.
+ */
 @Composable
 private fun TabBar(tab: PhoneTab, onTab: (PhoneTab) -> Unit, modifier: Modifier) {
-    BoxWithConstraints(
-        modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 14.dp, vertical = 8.dp).height(64.dp)
-            .glass(RoundedCornerShape(26.dp), 16.dp, strong = true),
+    Row(
+        modifier.fillMaxWidth()
+            .background(if (Brand.dark) Brand.Glass else Brand.Glass.copy(alpha = 0.96f))
+            .navigationBarsPadding()
+            .height(72.dp)
+            .padding(horizontal = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        val cell = maxWidth / PhoneTab.entries.size
-        val x by animateDpAsState(cell * tab.ordinal, spring(dampingRatio = 0.72f, stiffness = 480f), label = "tabX")
-        Box(Modifier.offset(x = x).width(cell).height(64.dp).padding(6.dp).clip(RoundedCornerShape(20.dp)).background(Brand.Accent.copy(alpha = 0.14f)))
-        Row(Modifier.fillMaxSize()) {
-            PhoneTab.entries.forEach { t ->
-                val sel = t == tab
-                val k by animateFloatAsState(if (sel) 1.12f else 1f, spring(dampingRatio = 0.4f, stiffness = 700f), label = "tabIcon")
-                val fg by animateColorAsState(if (sel) Brand.Accent else Brand.InkSoft, tween(200), label = "tabColor")
-                Column(
-                    Modifier.width(cell).fillMaxSize().clip(RoundedCornerShape(20.dp))
-                        .clickable(remember { MutableInteractionSource() }, indication = null) { onTab(t) }
-                        .semantics { contentDescription = t.title; selected = sel },
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center,
-                ) {
-                    Icon(painterResource(t.icon), contentDescription = null, tint = fg, modifier = Modifier.size(22.dp).graphicsLayer { scaleX = k; scaleY = k })
-                    Text(t.title, style = MaterialTheme.typography.labelSmall, color = fg, maxLines = 1)
+        PhoneTab.entries.forEach { t ->
+            val sel = t == tab
+            val pill by animateDpAsState(if (sel) 56.dp else 24.dp, Motion.spatial(), label = "pillW")
+            val pillAlpha by animateFloatAsState(if (sel) 1f else 0f, Motion.effects(), label = "pillA")
+            val fg by animateColorAsState(if (sel) MaterialTheme.colorScheme.onSurface else Brand.InkSoft, tween(200), label = "tabColor")
+            Column(
+                Modifier.weight(1f).fillMaxHeight()
+                    .clickable(remember { MutableInteractionSource() }, indication = null) { onTab(t) }
+                    .semantics { contentDescription = t.title; selected = sel },
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+            ) {
+                Box(Modifier.size(56.dp, 32.dp), contentAlignment = Alignment.Center) {
+                    Box(Modifier.size(pill, 32.dp).graphicsLayer { alpha = pillAlpha }.clip(RoundedCornerShape(16.dp)).background(Brand.Accent.copy(alpha = 0.18f)))
+                    Icon(painterResource(t.icon), contentDescription = null, tint = if (sel) Brand.Accent else fg, modifier = Modifier.size(22.dp))
                 }
+                Text(
+                    t.title, style = MaterialTheme.typography.labelMedium, color = fg, maxLines = 1,
+                    fontWeight = if (sel) androidx.compose.ui.text.font.FontWeight.SemiBold else androidx.compose.ui.text.font.FontWeight.Medium,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
             }
         }
     }
@@ -152,7 +162,7 @@ private fun TodayTab(resumeTick: Int, go: (String) -> Unit, onRoom: (String) -> 
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
-                Text(when (hour) { in 5..11 -> "Доброе утро"; in 12..17 -> "Добрый день"; in 18..22 -> "Добрый вечер"; else -> "Доброй ночи" }, style = MaterialTheme.typography.headlineSmall)
+                Text(when (hour) { in 5..11 -> "Доброе утро"; in 12..17 -> "Добрый день"; in 18..22 -> "Добрый вечер"; else -> "Доброй ночи" }, style = MaterialTheme.typography.headlineMedium)
                 Text(
                     SimpleDateFormat("EEEE, d MMMM", Locale.forLanguageTag("ru")).format(Date()).replaceFirstChar { it.uppercase() },
                     style = MaterialTheme.typography.bodyMedium, color = Brand.InkSoft,

@@ -114,12 +114,28 @@ fun Modifier.paperBackdrop(): Modifier = drawBehind {
     }
 }
 
+/**
+ * Движение по правилам Material 3: выразительные кривые без «пружинных прыжков». Появление — быстро
+ * разгоняется и мягко тормозит, уход — коротко и с ускорением. Пружины — с малым отскоком.
+ */
+object Motion {
+    val Emphasized = androidx.compose.animation.core.CubicBezierEasing(0.2f, 0f, 0f, 1f)
+    val Decelerate = androidx.compose.animation.core.CubicBezierEasing(0.05f, 0.7f, 0.1f, 1f)
+    val Accelerate = androidx.compose.animation.core.CubicBezierEasing(0.3f, 0f, 0.8f, 0.15f)
+    fun <T> enter(ms: Int = 400, delay: Int = 0) = androidx.compose.animation.core.tween<T>(ms, delay, Decelerate)
+    fun <T> exit(ms: Int = 180) = androidx.compose.animation.core.tween<T>(ms, easing = Accelerate)
+    /** Перемещение (индикатор вкладки, подложка дня): быстро и без раскачки. */
+    fun <T> spatial() = spring<T>(dampingRatio = 0.9f, stiffness = 500f)
+    /** Мелочи: цвет, прозрачность. */
+    fun <T> effects() = spring<T>(dampingRatio = 1f, stiffness = 1600f)
+}
+
 /** Счётчик появлений на экране: каждая следующая карточка появляется чуть позже — каскадом. */
 val LocalEnterOrder = androidx.compose.runtime.staticCompositionLocalOf<java.util.concurrent.atomic.AtomicInteger?> { null }
 
 /**
- * Появление: карточка проявляется и чуть «всплывает» снизу с пружинкой. На одном экране — каскадом
- * (по 45 мс друг за другом, не дольше 0,4 с), чтобы взгляд шёл сверху вниз. Только при первом показе.
+ * Появление: карточка проявляется и чуть поднимается (12 dp) по кривой Material 3. На одном экране — каскадом
+ * (по 30 мс, не дольше 0,2 с), чтобы взгляд шёл сверху вниз. Только при первом показе.
  */
 @Composable
 fun Modifier.enter(): Modifier {
@@ -127,15 +143,13 @@ fun Modifier.enter(): Modifier {
     val index = remember { order?.getAndIncrement() ?: 0 }
     val progress = remember { androidx.compose.animation.core.Animatable(0f) }
     androidx.compose.runtime.LaunchedEffect(Unit) {
-        kotlinx.coroutines.delay((index * 45L).coerceAtMost(400L))
-        progress.animateTo(1f, spring(dampingRatio = 0.82f, stiffness = 260f))
+        kotlinx.coroutines.delay((index * 30L).coerceAtMost(210L))
+        progress.animateTo(1f, Motion.enter(420))
     }
     return this.graphicsLayer {
         val p = progress.value
-        alpha = p.coerceIn(0f, 1f)
-        translationY = (1f - p) * 28.dp.toPx()
-        val k = 0.97f + 0.03f * p
-        scaleX = k; scaleY = k
+        alpha = p
+        translationY = (1f - p) * 12.dp.toPx()
     }
 }
 
@@ -143,7 +157,7 @@ fun Modifier.enter(): Modifier {
 @Composable
 fun Modifier.pressable(source: MutableInteractionSource): Modifier {
     val pressed by source.collectIsPressedAsState()
-    val k by animateFloatAsState(if (pressed) 0.95f else 1f, spring(dampingRatio = 0.55f, stiffness = 900f), label = "press")
+    val k by animateFloatAsState(if (pressed) 0.97f else 1f, spring(dampingRatio = 0.8f, stiffness = 1200f), label = "press")
     return this.graphicsLayer { scaleX = k; scaleY = k }
 }
 
