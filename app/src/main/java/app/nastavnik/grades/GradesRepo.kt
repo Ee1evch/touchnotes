@@ -37,6 +37,66 @@ class GradesRepo(private val context: Context, private val settings: SettingsRep
     val configured get() = settings.gradesConfigured || settings.lksConfigured
     val viaLks get() = settings.lksConfigured
 
+    private val journalFile get() = File(context.filesDir, "grades/lks_journal.json")
+    private val _journal = MutableStateFlow<LksJournal?>(null)
+    /** Журнал ЛКС: дисциплины, средний балл, рейтинг, пропуски, оценки по датам. */
+    val journal: StateFlow<LksJournal?> = _journal
+
+    private fun lksClient(): Pair<LksClient, SessionCookies> {
+        val jar = SessionCookies.parse(settings.lksCookies(), okhttp3.HttpUrl.Builder().scheme("https").host("lks.siriusuniversity.ru").build())
+        return LksClient(cookies = jar) to jar
+    }
+
+    /** Подключить ЛКС: войти и сразу забрать журнал. Пароль сохраняется, только если вход удался. */
+    suspend fun connectLks(email: String, password: String) {
+        val (client, jar) = lksClient()
+        jar.clear()
+        client.login(email, password)
+        settings.setLks(email, password)
+        settings.setLksCookies(jar.serialize())
+        refreshLksNow(client, jar)
+    }
+
+    private suspend fun refreshLksNow(client: LksClient, jar: SessionCookies) {
+        val j = try {
+            client.journal()
+        } catch (e: LksClient.LoginException) {
+            // Сессия закончилась — тихо входим заново тем же паролем.
+            client.login(settings.lksLogin(), settings.lksPassword())
+            client.journal()
+        }
+        settings.setLksCookies(jar.serialize())
+        withContext(Dispatchers.IO) {
+            journalFile.parentFile?.mkdirs()
+            val tmp = File(journalFile.path + ".tmp")
+            tmp.writeText(json.encodeToString(LksJournal.serializer(), j))
+            tmp.renameTo(journalFile)
+        }
+        _journal.value = j
+        saveLks(LksClient.toSnapshot(j))
+    }
+
+    suspend fun loadJournal() = withContext(Dispatchers.IO) {
+        if (_journal.value == null) _journal.value = runCatching { json.decodeFromString(LksJournal.serializer(), journalFile.readText()) }.getOrNull()
+    }
+
+    /** Обновить журнал ЛКС (не чаще раза в 10 минут без [force]). */
+    suspend fun refreshLks(force: Boolean = false) {
+        if (!settings.lksConfigured) return
+        loadJournal()
+        if (!force && System.currentTimeMillis() - (_journal.value?.loadedAt ?: 0) < 10 * 60_000L) return
+        _loading.value = true
+        try {
+            val (client, jar) = lksClient()
+            refreshLksNow(client, jar)
+            _error.value = null
+        } catch (e: Exception) {
+            _error.value = e.message ?: "Не удалось обновить оценки"
+        } finally {
+            _loading.value = false
+        }
+    }
+
     /** Ответы сайта ЛКС за последнее открытие (для отчёта). */
     val captured = java.util.concurrent.ConcurrentLinkedDeque<Pair<String, String>>()
 
@@ -69,7 +129,9 @@ class GradesRepo(private val context: Context, private val settings: SettingsRep
     fun disconnectLks() {
         settings.clearLks()
         file.delete()
+        journalFile.delete()
         _snapshot.value = null
+        _journal.value = null
     }
 
     suspend fun load() = withContext(Dispatchers.IO) {

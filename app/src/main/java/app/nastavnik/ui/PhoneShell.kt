@@ -85,11 +85,13 @@ fun PhoneShell(tab: PhoneTab, onTab: (PhoneTab) -> Unit, mapRoom: String?, onMap
         AnimatedContent(
             targetState = tab,
             transitionSpec = {
-                // Вкладки нижней панели — «сквозное проявление», как в Material 3.
-                (fadeIn(Motion.enter(260, delay = 50)) + scaleIn(Motion.enter(260, delay = 50), initialScale = 0.97f)).togetherWith(fadeOut(Motion.exit(80)))
+                // Вкладки — мягкий сдвиг в сторону перехода с пружинкой и проявление.
+                val dir = if (targetState.ordinal > initialState.ordinal) 1 else -1
+                (fadeIn(tween(240, delayMillis = 30)) + slideInHorizontally(spring(dampingRatio = 0.86f, stiffness = 420f)) { it / 12 * dir })
+                    .togetherWith(fadeOut(tween(140)) + slideOutHorizontally(tween(200)) { -it / 18 * dir })
             },
             label = "tab",
-            modifier = Modifier.fillMaxSize().padding(bottom = 72.dp),
+            modifier = Modifier.fillMaxSize().padding(bottom = 80.dp),
         ) { t ->
             when (t) {
                 PhoneTab.TODAY -> TodayTab(resumeTick, go, onRoom = onMapRoom, onTab = onTab)
@@ -103,40 +105,34 @@ fun PhoneShell(tab: PhoneTab, onTab: (PhoneTab) -> Unit, mapRoom: String?, onMap
 }
 
 /**
- * Нижняя панель как в Android 16–17 (Material 3 Expressive): во всю ширину, у выбранной вкладки —
- * «таблетка» за значком, которая плавно растягивается; подписи всегда видны.
+ * Нижняя панель: округлая стеклянная «пилюля», парящая над краем экрана. Подсветка выбранной вкладки
+ * переезжает с пружинкой, значок мягко подпрыгивает.
  */
 @Composable
 private fun TabBar(tab: PhoneTab, onTab: (PhoneTab) -> Unit, modifier: Modifier) {
-    Row(
-        modifier.fillMaxWidth()
-            .background(if (Brand.dark) Brand.Glass else Brand.Glass.copy(alpha = 0.96f))
-            .navigationBarsPadding()
-            .height(72.dp)
-            .padding(horizontal = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
+    BoxWithConstraints(
+        modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 14.dp, vertical = 10.dp).height(66.dp)
+            .glass(RoundedCornerShape(33.dp), 18.dp, strong = true),
     ) {
-        PhoneTab.entries.forEach { t ->
-            val sel = t == tab
-            val pill by animateDpAsState(if (sel) 56.dp else 24.dp, Motion.spatial(), label = "pillW")
-            val pillAlpha by animateFloatAsState(if (sel) 1f else 0f, Motion.effects(), label = "pillA")
-            val fg by animateColorAsState(if (sel) MaterialTheme.colorScheme.onSurface else Brand.InkSoft, tween(200), label = "tabColor")
-            Column(
-                Modifier.weight(1f).fillMaxHeight()
-                    .clickable(remember { MutableInteractionSource() }, indication = null) { onTab(t) }
-                    .semantics { contentDescription = t.title; selected = sel },
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
-            ) {
-                Box(Modifier.size(56.dp, 32.dp), contentAlignment = Alignment.Center) {
-                    Box(Modifier.size(pill, 32.dp).graphicsLayer { alpha = pillAlpha }.clip(RoundedCornerShape(16.dp)).background(Brand.Accent.copy(alpha = 0.18f)))
-                    Icon(painterResource(t.icon), contentDescription = null, tint = if (sel) Brand.Accent else fg, modifier = Modifier.size(22.dp))
+        val cell = maxWidth / PhoneTab.entries.size
+        val x by animateDpAsState(cell * tab.ordinal, spring(dampingRatio = 0.68f, stiffness = 420f), label = "tabX")
+        Box(Modifier.offset(x = x).width(cell).height(66.dp).padding(6.dp).clip(RoundedCornerShape(27.dp)).background(Brand.Accent.copy(alpha = 0.16f)))
+        Row(Modifier.fillMaxSize()) {
+            PhoneTab.entries.forEach { t ->
+                val sel = t == tab
+                val k by animateFloatAsState(if (sel) 1.14f else 1f, spring(dampingRatio = 0.42f, stiffness = 650f), label = "tabIcon")
+                val lift by animateDpAsState(if (sel) (-1).dp else 0.dp, spring(dampingRatio = 0.5f, stiffness = 600f), label = "tabLift")
+                val fg by animateColorAsState(if (sel) Brand.Accent else Brand.InkSoft, tween(220), label = "tabColor")
+                Column(
+                    Modifier.width(cell).fillMaxSize().clip(RoundedCornerShape(27.dp))
+                        .clickable(remember { MutableInteractionSource() }, indication = null) { onTab(t) }
+                        .semantics { contentDescription = t.title; selected = sel },
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    Icon(painterResource(t.icon), contentDescription = null, tint = fg, modifier = Modifier.offset(y = lift).size(22.dp).graphicsLayer { scaleX = k; scaleY = k })
+                    Text(t.title, style = MaterialTheme.typography.labelSmall, color = fg, maxLines = 1, modifier = Modifier.padding(top = 2.dp))
                 }
-                Text(
-                    t.title, style = MaterialTheme.typography.labelMedium, color = fg, maxLines = 1,
-                    fontWeight = if (sel) androidx.compose.ui.text.font.FontWeight.SemiBold else androidx.compose.ui.text.font.FontWeight.Medium,
-                    modifier = Modifier.padding(top = 4.dp),
-                )
             }
         }
     }
@@ -304,7 +300,7 @@ private fun StudyTab(resumeTick: Int, go: (String) -> Unit) {
             }
         }
         // Сгруппированный список, как в настройках Android 16–17.
-        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             val rows = listOf(
                 Triple(R.drawable.ic_chart, "Успеваемость", "Оценки из личного кабинета") to MainActivity.SCREEN_GRADES,
                 Triple(R.drawable.ic_flame, "Прогресс", "Серия и темы с ошибками") to MainActivity.SCREEN_PROGRESS,
@@ -313,9 +309,11 @@ private fun StudyTab(resumeTick: Int, go: (String) -> Unit) {
                 Triple(R.drawable.ic_history, "Чистовики", "PDF аккуратных конспектов") to MainActivity.SCREEN_HISTORY,
             )
             rows.forEachIndexed { i, (spec, screen) ->
+                // Плашка «проседает» под пальцем с пружинкой.
+                val src = remember(screen) { MutableInteractionSource() }
                 Row(
-                    Modifier.fillMaxWidth().enter().clip(groupShape(i, rows.size)).background(Brand.Glass.copy(alpha = if (Brand.dark) 1f else 0.85f))
-                        .clickable { go(screen) }.padding(horizontal = 16.dp, vertical = 14.dp),
+                    Modifier.fillMaxWidth().enter().pressable(src).glass(groupShape(i, rows.size), 8.dp)
+                        .clickable(src, indication = null) { go(screen) }.padding(horizontal = 16.dp, vertical = 14.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(14.dp),
                 ) {

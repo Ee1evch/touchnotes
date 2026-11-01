@@ -50,7 +50,7 @@ data class CourseGrades(
 @Serializable
 data class GradesSnapshot(val student: String, val courses: List<CourseGrades>, val loadedAt: Long)
 
-class GradesException(message: String, val badLogin: Boolean = false) : IOException(message)
+open class GradesException(message: String, val badLogin: Boolean = false) : IOException(message)
 
 /**
  * Успеваемость из учебной платформы на Moodle (как moodle.siriusuniversity.ru) — так же, как её получает

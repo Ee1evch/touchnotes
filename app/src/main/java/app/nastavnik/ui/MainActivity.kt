@@ -258,7 +258,7 @@ class MainActivity : ComponentActivity() {
         StudyWidget.refresh(this)
         app.sync.onForeground()
         // Оценки — не чаще раза в час; новые придут уведомлением.
-        app.appScope.launch { app.grades.refresh() }
+        app.appScope.launch { app.grades.refresh(); app.grades.refreshLks() }
     }
 
     override fun onStop() {

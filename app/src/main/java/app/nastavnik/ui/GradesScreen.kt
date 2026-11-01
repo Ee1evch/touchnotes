@@ -9,6 +9,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -76,12 +77,9 @@ fun GradesScreen(onBack: (() -> Unit)?, onSettings: () -> Unit, onLks: () -> Uni
     val snap by repo.snapshot.collectAsStateWithLifecycle()
     val error by repo.error.collectAsStateWithLifecycle()
     val loading by repo.loading.collectAsStateWithLifecycle()
-    LaunchedEffect(Unit) { repo.load(); repo.refresh() }
-    // ЛКС: страницу открывает сам телефон — невидимо, с автовходом; оценки снимаются с неё.
     val app = context.app
-    var lksBusy by remember { mutableStateOf(repo.viaLks && app.settings.lksPage().isNotEmpty() && System.currentTimeMillis() - (snap?.loadedAt ?: 0) > 10 * 60_000) }
-    var lksFailed by remember { mutableStateOf(false) }
-    if (lksBusy) LksSilentRefresh { ok -> lksBusy = false; lksFailed = !ok }
+    val journal by repo.journal.collectAsStateWithLifecycle()
+    LaunchedEffect(Unit) { repo.load(); repo.loadJournal(); repo.refresh(); repo.refreshLks() }
 
     ScreenScaffold(title = "", onBack = null) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -97,12 +95,12 @@ fun GradesScreen(onBack: (() -> Unit)?, onSettings: () -> Unit, onLks: () -> Uni
             }
             if (repo.configured) {
                 Box(
-                    Modifier.size(44.dp).glass(CircleShape, 6.dp, strong = true).clickable(enabled = !loading && !lksBusy) {
-                        if (repo.viaLks) { if (app.settings.lksPage().isEmpty()) onLks() else lksBusy = true } else scope.launch { repo.refresh(force = true) }
+                    Modifier.size(44.dp).glass(CircleShape, 6.dp, strong = true).clickable(enabled = !loading) {
+                        scope.launch { if (repo.viaLks) repo.refreshLks(force = true) else repo.refresh(force = true) }
                     },
                     contentAlignment = Alignment.Center,
                 ) {
-                    if (loading || lksBusy) CircularProgressIndicator(Modifier.size(20.dp), color = Brand.Accent, strokeWidth = 2.dp)
+                    if (loading) CircularProgressIndicator(Modifier.size(20.dp), color = Brand.Accent, strokeWidth = 2.dp)
                     else Icon(painterResource(R.drawable.ic_refresh), "Обновить", tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(22.dp))
                 }
             }
@@ -116,23 +114,16 @@ fun GradesScreen(onBack: (() -> Unit)?, onSettings: () -> Unit, onLks: () -> Uni
             return@ScreenScaffold
         }
         error?.let { StatusLine(it, Tone.ERROR) }
-        if (repo.viaLks && app.settings.lksPage().isEmpty()) {
-            Column(Modifier.fillMaxWidth().enter().glass(RoundedCornerShape(28.dp), 10.dp).padding(22.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Покажи, где оценки", style = MaterialTheme.typography.titleMedium)
-                Text("Открою ЛКС и войду сам. Перейди на страницу с успеваемостью и нажми «Это моя успеваемость» — один раз.", style = MaterialTheme.typography.bodyMedium, color = Brand.InkSoft)
-                InkButton("Открыть ЛКС", onClick = onLks)
+        if (repo.viaLks) {
+            val j = journal
+            if (j == null) {
+                Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Brand.Accent) }
+                return@ScreenScaffold
             }
+            LksJournalView(j)
+            LinkText("Открыть сайт ЛКС", onClick = onLks)
             return@ScreenScaffold
         }
-        if (repo.viaLks && lksFailed && snap == null) {
-            Column(Modifier.fillMaxWidth().enter().glass(RoundedCornerShape(28.dp), 10.dp).padding(22.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Не получилось прочитать оценки", style = MaterialTheme.typography.titleMedium)
-                Text("Открой ЛКС: оценки там, как на сайте. Кнопка «Отчёт» сохранит, как устроена страница, — пришли его, и я научу приложение её читать.", style = MaterialTheme.typography.bodyMedium, color = Brand.InkSoft)
-                InkButton("Открыть ЛКС", onClick = onLks)
-            }
-            return@ScreenScaffold
-        }
-        if (repo.viaLks) LinkText("Открыть ЛКС", onClick = onLks)
         val s = snap ?: run {
             Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Brand.Accent) }
             return@ScreenScaffold
@@ -140,7 +131,7 @@ fun GradesScreen(onBack: (() -> Unit)?, onSettings: () -> Unit, onLks: () -> Uni
         Summary(s)
         val courses = s.courses.sortedWith(compareBy({ it.total == null && it.items.none { i -> i.grade != "-" } }, { it.name }))
         // Сгруппированный список, как в настройках Android 16: общий контейнер, скруглённые края у первого и последнего.
-        Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             courses.forEachIndexed { i, c ->
                 val shape = groupShape(i, courses.size)
                 CourseRow(c, shape)
@@ -149,14 +140,9 @@ fun GradesScreen(onBack: (() -> Unit)?, onSettings: () -> Unit, onLks: () -> Uni
     }
 }
 
-/** Скругления элемента в группе: большие снаружи, маленькие между соседями (Material 3 Expressive). */
-fun groupShape(i: Int, n: Int): RoundedCornerShape {
-    val big = 24.dp; val small = 6.dp
-    return RoundedCornerShape(
-        topStart = if (i == 0) big else small, topEnd = if (i == 0) big else small,
-        bottomStart = if (i == n - 1) big else small, bottomEnd = if (i == n - 1) big else small,
-    )
-}
+/** Пункты списка — отдельные округлые плашки (как раньше), а не слитая группа. */
+@Suppress("UNUSED_PARAMETER")
+fun groupShape(i: Int, n: Int): RoundedCornerShape = RoundedCornerShape(22.dp)
 
 @Composable
 private fun Summary(s: GradesSnapshot) {
@@ -230,9 +216,7 @@ fun GradesCard(onOpen: () -> Unit) {
     val snap by repo.snapshot.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { repo.load(); repo.refresh() }
     if (!repo.configured) return
-    val app = context.app
-    var lksBusy by remember { mutableStateOf(repo.viaLks && app.settings.lksPage().isNotEmpty() && System.currentTimeMillis() - (snap?.loadedAt ?: 0) > 60 * 60_000) }
-    if (lksBusy) LksSilentRefresh { lksBusy = false }
+    LaunchedEffect(Unit) { repo.refreshLks() }
     val recent = snap?.courses.orEmpty().flatMap { c -> c.items.filter { it.gradedAt > 0 && it.grade != "-" }.map { c to it } }
         .sortedByDescending { it.second.gradedAt }.take(3)
     Column(
@@ -247,7 +231,7 @@ fun GradesCard(onOpen: () -> Unit) {
         recent.forEach { (c, i) ->
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Box(Modifier.size(8.dp).clip(CircleShape).background(gradeColor(i)))
-                Text("${c.name} · ${i.name}", style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                Text("${c.name} · ${if (Regex("""\d{4}-\d{2}-\d{2}""").matches(i.name)) fullDate(i.name) else i.name}", style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                 Text(i.grade, style = MaterialTheme.typography.titleSmall, color = gradeColor(i))
             }
         }
@@ -273,12 +257,9 @@ fun GradesSettingsSection(onLks: () -> Unit = {}) {
     SectionCard("Успеваемость (ЛКС)") {
         if (lks) {
             Text("ЛКС: ${app.settings.lksLogin()}", style = MaterialTheme.typography.titleSmall)
-            Text(
-                if (app.settings.lksPage().isEmpty()) "Осталось показать страницу с оценками" else "Оценки обновляются сами при открытии",
-                style = MaterialTheme.typography.bodySmall, color = Brand.InkSoft,
-            )
+            Text("Оценки обновляются сами при открытии", style = MaterialTheme.typography.bodySmall, color = Brand.InkSoft)
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                LinkText("Открыть ЛКС", onClick = onLks)
+                LinkText("Открыть сайт ЛКС", onClick = onLks)
                 LinkText("Отключить") { app.grades.disconnectLks(); lks = false }
             }
         } else {
@@ -289,11 +270,19 @@ fun GradesSettingsSection(onLks: () -> Unit = {}) {
                 visualTransformation = PasswordVisualTransformation(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
             )
-            InkButton("Подключить", enabled = login.isNotBlank() && password.isNotBlank()) {
-                app.settings.setLks(login, password)
-                password = ""
-                lks = true
-                onLks()
+            AnimatedVisibility(error != null && !showMoodle, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) { StatusLine(error.orEmpty(), Tone.ERROR) }
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                InkButton("Подключить", enabled = !busy && login.isNotBlank() && password.isNotBlank()) {
+                    busy = true; error = null
+                    scope.launch {
+                        // Вход прямо запросом к ЛКС — без окна сайта; пароль сохраняется, только если ЛКС его принял.
+                        runCatching { app.grades.connectLks(login, password) }
+                            .onSuccess { lks = true; password = "" }
+                            .onFailure { error = it.message ?: "Не удалось войти в ЛКС" }
+                        busy = false
+                    }
+                }
+                if (busy) CircularProgressIndicator(Modifier.size(22.dp), color = Brand.Accent, strokeWidth = 2.dp)
             }
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
@@ -329,3 +318,133 @@ fun GradesSettingsSection(onLks: () -> Unit = {}) {
         }
     }
 }
+
+/** Цвет оценки ЛКС по значению: 5 — зелёный, 4 — салатовый, 3 — янтарный, 2 — красный; зачёт — зелёный. */
+fun lksMarkColor(v: String): Color {
+    val t = v.lowercase()
+    return when {
+        t.startsWith("5") || t.startsWith("отл") || t.startsWith("зач") -> Color(0xFF1FA463)
+        t.startsWith("4") || t.startsWith("хор") -> Color(0xFF7CB82F)
+        t.startsWith("3") || t.startsWith("уд") -> Color(0xFFE0A21E)
+        t.startsWith("2") || t.startsWith("неуд") || t.startsWith("незач") -> Color(0xFFE5484D)
+        else -> Color(0xFF4C7DF0)
+    }
+}
+
+/** Журнал ЛКС в оформлении приложения: сводка и карточки дисциплин с лентой оценок. */
+@Composable
+fun LksJournalView(j: app.nastavnik.grades.LksJournal) {
+    val avg = j.lessons.mapNotNull { it.avgMark?.replace(',', '.')?.toDoubleOrNull() }.takeIf { it.isNotEmpty() }?.average()
+    val marks = j.lessons.sumOf { l -> l.entries.sumOf { it.marks.size } }
+    val absences = j.lessons.sumOf { it.absences }
+    val shown by animateFloatAsState((avg ?: 0.0).toFloat(), androidx.compose.animation.core.spring(dampingRatio = 0.75f, stiffness = 120f), label = "avg")
+    Row(
+        Modifier.fillMaxWidth().enter().glass(RoundedCornerShape(28.dp), 10.dp).padding(20.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(if (avg != null) "%.2f".format(shown) else "—", style = MaterialTheme.typography.displaySmall, color = avg?.let { lksMarkColor(it.toInt().toString()) } ?: MaterialTheme.colorScheme.onSurface)
+            Text("средний балл" + (j.period.takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""), style = MaterialTheme.typography.bodyMedium, color = Brand.InkSoft)
+        }
+        Column(horizontalAlignment = Alignment.End) {
+            Text("$marks", style = MaterialTheme.typography.titleLarge)
+            Text("оценок · пропусков $absences", style = MaterialTheme.typography.bodySmall, color = Brand.InkSoft)
+        }
+    }
+    val lessons = j.lessons.sortedWith(compareBy({ it.entries.none { e -> e.marks.isNotEmpty() } }, { it.title }))
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        lessons.forEach { l -> LksLessonCard(l) }
+    }
+}
+
+@Composable
+private fun LksLessonCard(l: app.nastavnik.grades.LksLesson) {
+    var open by remember { mutableStateOf(false) }
+    var picked by remember { mutableStateOf<app.nastavnik.grades.LksEntry?>(null) }
+    val turn by animateFloatAsState(if (open) 90f else 0f, androidx.compose.animation.core.spring(dampingRatio = 0.6f, stiffness = 500f), label = "lessonArrow")
+    val entries = l.entries.filter { it.marks.isNotEmpty() || it.absent }
+    Column(
+        Modifier.fillMaxWidth().enter().glass(RoundedCornerShape(24.dp), 8.dp)
+            .clickable { open = !open }
+            .animateContentSize(androidx.compose.animation.core.spring(dampingRatio = 0.8f, stiffness = 380f))
+            .padding(horizontal = 18.dp, vertical = 14.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(Modifier.weight(1f)) {
+                Text(l.title, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                val sub = listOfNotNull(
+                    l.rating?.let { "рейтинг $it" },
+                    l.absences.takeIf { it > 0 }?.let { "пропусков $it" },
+                    "оценок ${l.entries.sumOf { it.marks.size }}",
+                ).joinToString(" · ")
+                Text(sub, style = MaterialTheme.typography.bodySmall, color = Brand.InkSoft)
+            }
+            Box(
+                Modifier.clip(RoundedCornerShape(14.dp)).background((l.avgMark?.let { lksMarkColor(it) } ?: Brand.InkSoft).copy(alpha = 0.15f)).padding(horizontal = 12.dp, vertical = 6.dp),
+            ) {
+                Text(l.avgMark ?: "—", style = MaterialTheme.typography.titleMedium, color = l.avgMark?.let { lksMarkColor(it) } ?: Brand.InkSoft)
+            }
+            Icon(painterResource(R.drawable.ic_chevron), null, tint = Brand.InkSoft, modifier = Modifier.size(18.dp).graphicsLayer { rotationZ = turn })
+        }
+        // Лента оценок: последние — справа, прокрутка пальцем.
+        if (entries.isNotEmpty()) {
+            val scroll = androidx.compose.foundation.rememberScrollState()
+            androidx.compose.runtime.LaunchedEffect(entries.size) { scroll.scrollTo(scroll.maxValue) }
+            Row(Modifier.horizontalScroll(scroll), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                entries.forEach { e -> MarkPill(e, selected = picked == e) { picked = if (picked == e) null else e; open = true } }
+            }
+        }
+        if (open) {
+            val e = picked ?: entries.lastOrNull()
+            if (e != null) EntryDetails(e)
+            val hw = l.entries.lastOrNull { !it.hometask.isNullOrBlank() }
+            if (hw != null && hw != e) Text("Последнее задание (${shortDate(hw.date)}): ${hw.hometask}", style = MaterialTheme.typography.bodySmall, color = Brand.InkSoft)
+        }
+    }
+}
+
+@Composable
+private fun MarkPill(e: app.nastavnik.grades.LksEntry, selected: Boolean, onClick: () -> Unit) {
+    val k by animateFloatAsState(if (selected) 1.12f else 1f, androidx.compose.animation.core.spring(dampingRatio = 0.45f, stiffness = 700f), label = "pill")
+    val label = if (e.marks.isNotEmpty()) e.marks.joinToString(" ") { m -> m.value + (m.second?.let { "/$it" } ?: "") }
+        else if (e.absentValid == true) "НУ" else if (e.absentValid == false) "НН" else "Н"
+    val color = e.marks.firstOrNull()?.let { lksMarkColor(it.value) } ?: Color(0xFF8A8F98)
+    Column(
+        Modifier.graphicsLayer { scaleX = k; scaleY = k }.clip(RoundedCornerShape(14.dp))
+            .background(color.copy(alpha = if (selected) 0.32f else 0.16f)).clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(label, style = MaterialTheme.typography.titleSmall, color = color)
+        Text(shortDate(e.date), style = MaterialTheme.typography.labelSmall, color = Brand.InkSoft)
+    }
+}
+
+@Composable
+private fun EntryDetails(e: app.nastavnik.grades.LksEntry) {
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Brand.Accent.copy(alpha = 0.07f)).padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text(
+            listOfNotNull(
+                fullDate(e.date),
+                e.marks.takeIf { it.isNotEmpty() }?.joinToString(", ") { it.value + (it.second?.let { s -> " / $s" } ?: "") }?.let { "оценка $it" },
+                if (e.absent) (if (e.absentValid == true) "пропуск по уважительной" else "пропуск") else null,
+            ).joinToString(" · "),
+            style = MaterialTheme.typography.titleSmall,
+        )
+        e.comment?.let { Text("Комментарий: $it", style = MaterialTheme.typography.bodySmall) }
+        e.hometask?.let { Text("Задание: $it", style = MaterialTheme.typography.bodySmall) }
+    }
+}
+
+private fun shortDate(iso: String): String = runCatching {
+    java.time.LocalDate.parse(iso).format(java.time.format.DateTimeFormatter.ofPattern("d.MM"))
+}.getOrDefault(iso)
+
+private fun fullDate(iso: String): String = runCatching {
+    java.time.LocalDate.parse(iso).format(java.time.format.DateTimeFormatter.ofPattern("d MMMM", Locale.forLanguageTag("ru")))
+}.getOrDefault(iso)

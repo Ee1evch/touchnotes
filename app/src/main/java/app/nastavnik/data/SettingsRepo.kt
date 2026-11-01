@@ -305,9 +305,12 @@ class SettingsRepo(private val context: Context) {
         secure?.edit { putString(K_LKS_PASSWORD, password) }
     }
     fun setLksPage(url: String) = prefs.edit { putString(K_LKS_PAGE, url) }
+    /** Куки сессии ЛКС (зашифрованно) — чтобы не входить при каждом открытии. */
+    fun lksCookies(): String = secure?.getString(K_LKS_COOKIES, null).orEmpty()
+    fun setLksCookies(v: String) { secure?.edit { putString(K_LKS_COOKIES, v) } }
     fun clearLks() {
         prefs.edit { remove(K_LKS_LOGIN); remove(K_LKS_PAGE) }
-        secure?.edit { remove(K_LKS_PASSWORD) }
+        secure?.edit { remove(K_LKS_PASSWORD); remove(K_LKS_COOKIES) }
     }
     val lksConfigured: Boolean get() = lksLogin().isNotEmpty() && lksPassword().isNotEmpty()
 
@@ -379,6 +382,7 @@ class SettingsRepo(private val context: Context) {
         private const val K_LKS_LOGIN = "lks_login"
         private const val K_LKS_PASSWORD = "lks_password"
         private const val K_LKS_PAGE = "lks_page"
+        private const val K_LKS_COOKIES = "lks_cookies"
         private const val K_GRADES_LOGIN = "grades_login"
         private const val K_GRADES_PASSWORD = "grades_password"
         private const val K_GRADES_TOKEN = "grades_token"

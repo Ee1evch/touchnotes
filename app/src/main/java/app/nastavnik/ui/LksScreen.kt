@@ -100,19 +100,17 @@ class LksWeb(private val context: android.content.Context, private val onCapture
     }
 }
 
-/** Экран ЛКС: сайт как есть + «Это моя успеваемость» и «Отчёт». */
+/** Сайт ЛКС внутри приложения — уже со входом: куки сессии берутся у приложения, форму заполнять не нужно. */
 @Composable
 fun LksScreen(onBack: () -> Unit, onDone: () -> Unit) {
     val context = LocalContext.current
     val app = context.app
-    val scope = rememberCoroutineScope()
-    var message by remember { mutableStateOf<String?>(if (app.settings.lksPage().isEmpty()) "Открой страницу с оценками и нажми «Это моя успеваемость»" else null) }
-    var lastPage by remember { mutableStateOf<String?>(null) }
-    val web = remember {
-        LksWeb(context) { u, t -> app.grades.captured.add(u to t); while (app.grades.captured.size > 60) app.grades.captured.pollFirst() }
-    }
+    val web = remember { LksWeb(context) { _, _ -> } }
     DisposableEffect(Unit) {
-        web.load(app.settings.lksPage().ifEmpty { LKS_URL })
+        val cm = CookieManager.getInstance()
+        app.settings.lksCookies().lines().filter { it.isNotBlank() }.forEach { cm.setCookie(LKS_URL, it) }
+        cm.flush()
+        web.load("$LKS_URL/journal")
         onDispose { web.view.destroy() }
     }
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
@@ -123,79 +121,9 @@ fun LksScreen(onBack: () -> Unit, onDone: () -> Unit) {
         ) {
             RoundIconButton(R.drawable.ic_arrow_back, "Назад") { if (web.view.canGoBack()) web.view.goBack() else onBack() }
             Text("ЛКС", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
-            SoftButton("Отчёт") {
-                web.extract { page ->
-                    lastPage = page
-                    scope.launch {
-                        val f = app.grades.report(page)
-                        val uri = FileProvider.getUriForFile(context, "${context.packageName}.files", f)
-                        context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_STREAM, uri).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION), "Отчёт ЛКС"))
-                    }
-                }
-            }
         }
-        Box(Modifier.weight(1f)) {
+        Box(Modifier.weight(1f).navigationBarsPadding()) {
             AndroidView(factory = { web.view }, modifier = Modifier.fillMaxSize())
         }
-        Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            message?.let {
-                Text(it, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.fillMaxWidth().glass(RoundedCornerShape(16.dp), 6.dp, strong = true).padding(12.dp))
-            }
-            InkButton("Это моя успеваемость", icon = R.drawable.ic_check) {
-                val url = web.view.url.orEmpty()
-                if (url.isBlank() || url.contains("/login")) { message = "Сначала войди и открой страницу с оценками"; return@InkButton }
-                app.settings.setLksPage(url)
-                web.extract { page ->
-                    lastPage = page
-                    val snap = page?.let { LksExtract.parse(it) }
-                    if (snap != null) {
-                        scope.launch { app.grades.saveLks(snap) }
-                        message = "Готово: нашёл дисциплин — ${snap.courses.size}. Дальше оценки будут обновляться сами."
-                        scope.launch { delay(1200); onDone() }
-                    } else {
-                        message = "Страницу запомнил, но таблицу оценок не распознал — буду показывать её как есть. Нажми «Отчёт» и пришли файл разработчику."
-                    }
-                }
-            }
-        }
-    }
-}
-
-/**
- * Невидимое обновление: открывает запомненную страницу успеваемости (с автовходом), снимает таблицы,
- * сохраняет оценки. Показывается крошечным прозрачным окном — WebView работает только в разметке.
- */
-@Composable
-fun LksSilentRefresh(onResult: (Boolean) -> Unit) {
-    val context = LocalContext.current
-    val app = context.app
-    val scope = rememberCoroutineScope()
-    val web = remember { LksWeb(context) { u, t -> app.grades.captured.add(u to t); while (app.grades.captured.size > 60) app.grades.captured.pollFirst() } }
-    DisposableEffect(Unit) {
-        var done = false
-        web.onPage = { url ->
-            if (!done && !url.contains("/login")) {
-                // Страница могла дорисоваться скриптами — ждём и пробуем дважды.
-                web.view.postDelayed({
-                    web.extract { page ->
-                        val snap = page?.let { LksExtract.parse(it) }
-                        if (snap != null && !done) { done = true; scope.launch { app.grades.saveLks(snap) }; onResult(true) }
-                        else web.view.postDelayed({ web.extract { p2 ->
-                            val s2 = p2?.let { LksExtract.parse(it) }
-                            if (!done) { done = true; if (s2 != null) scope.launch { app.grades.saveLks(s2) }; onResult(s2 != null) }
-                        } }, 3000)
-                    }
-                }, 2000)
-            }
-        }
-        web.load(app.settings.lksPage())
-        onDispose { web.view.destroy() }
-    }
-    // Невидимое окно телефонного размера (страница сверстается как обычно) внутри области 1×1 dp.
-    Box(Modifier.size(1.dp).clipToBounds()) {
-        AndroidView(
-            factory = { web.view },
-            modifier = Modifier.wrapContentSize(Alignment.TopStart, unbounded = true).requiredSize(412.dp, 900.dp).alpha(0f),
-        )
     }
 }
