@@ -61,6 +61,7 @@ fun SettingsScreen(onBack: () -> Unit, onAppearance: () -> Unit = {}, onOnboardi
         SyncSection()
         GradesSettingsSection(onLks)
         DeviceSection(tablet)
+        WakeSection()
         LanguageSection()
         if (tablet) SectionCard("Нейросеть") {
             ProviderEditor(onChanged = {})

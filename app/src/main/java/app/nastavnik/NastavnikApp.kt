@@ -135,6 +135,20 @@ class NastavnikApp : Application() {
             },
         )
         nm.createNotificationChannel(
+            NotificationChannel(CHANNEL_WAKE, "Будильник", NotificationManager.IMPORTANCE_HIGH).apply {
+                description = "Будильник к первой паре и проверка «Ты встал?». Звук играет сам будильник"
+                setSound(null, null)
+                enableVibration(false)
+                lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
+                setBypassDnd(true)
+            },
+        )
+        nm.createNotificationChannel(
+            NotificationChannel(CHANNEL_SLEEP, "Сон", NotificationManager.IMPORTANCE_DEFAULT).apply {
+                description = "Вечером: когда лечь, чтобы проснуться в конце цикла сна"
+            },
+        )
+        nm.createNotificationChannel(
             NotificationChannel(CHANNEL_LESSONS, "Скоро пара", NotificationManager.IMPORTANCE_HIGH).apply {
                 description = "За несколько минут до пары: что и в какой аудитории, с маршрутом по карте"
             },
@@ -147,6 +161,8 @@ class NastavnikApp : Application() {
         const val CHANNEL_PERSONAL = "personal"
         const val CHANNEL_LESSONS = "lessons"
         const val CHANNEL_GRADES = "grades"
+        const val CHANNEL_WAKE = "wake"
+        const val CHANNEL_SLEEP = "sleep"
     }
 }
 

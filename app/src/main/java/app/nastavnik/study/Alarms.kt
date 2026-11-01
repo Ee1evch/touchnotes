@@ -41,6 +41,7 @@ object Alarms {
             runCatching { schedulePersonal(context) }
             runCatching { scheduleNextLesson(context) }
             runCatching { LessonQuiet.update(context) }
+            runCatching { WakeAlarm.reschedule(context) }
         }
     }
 
