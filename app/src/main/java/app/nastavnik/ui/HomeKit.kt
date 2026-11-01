@@ -48,7 +48,9 @@ import app.nastavnik.schedule.ScheduleNow
 import app.nastavnik.study.Exam
 import app.nastavnik.study.ExamPlan
 import app.nastavnik.study.DayPlan
+import app.nastavnik.study.SirenPrefs
 import app.nastavnik.study.StudyLock
+import app.nastavnik.study.StudyLockRules
 import app.nastavnik.study.WakeAlarm
 import app.nastavnik.study.WakePrefs
 import app.nastavnik.study.ruPlural
@@ -413,6 +415,32 @@ fun PlanCard(resumeTick: Int) {
         if (!usage) LinkText("Учитывать время в телефоне") {
             StudyLock.openSettings(context, DayPlan.usageIntent())
         }
+    }
+}
+
+/** «Задача дня» на главной: в день с парами, пока не решена, — можно решить заранее, до сирены в 22:00. */
+@Composable
+fun SirenCard(resumeTick: Int) {
+    val context = LocalContext.current
+    val show by produceState(false, resumeTick) {
+        val s = SirenPrefs.of(context)
+        val date = StudyLockRules.sessionDate(LocalDateTime.now())
+        value = s.on && s.solved(date) == 0 && StudyLockRules.disciplines(context.app.schedule.day(date)).isNotEmpty()
+    }
+    if (!show) return
+    Row(
+        Modifier.fillMaxWidth().enter().glass(RoundedCornerShape(24.dp), 10.dp)
+            .clickable { context.startActivity(android.content.Intent(context, SirenActivity::class.java)) }
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Icon(painterResource(R.drawable.ic_target), contentDescription = null, tint = Brand.Error, modifier = Modifier.size(22.dp))
+        Column(Modifier.weight(1f)) {
+            Text("Задача дня", style = MaterialTheme.typography.titleMedium)
+            Text("Реши до 22:00 — иначе сирена", style = MaterialTheme.typography.bodySmall, color = Brand.InkSoft)
+        }
+        InkButton("Решить") { context.startActivity(android.content.Intent(context, SirenActivity::class.java)) }
     }
 }
 

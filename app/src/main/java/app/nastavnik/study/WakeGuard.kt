@@ -7,11 +7,13 @@ import android.content.Intent
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
+import android.view.KeyEvent
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import app.nastavnik.R
 import app.nastavnik.app
 import app.nastavnik.ui.MainActivity
+import app.nastavnik.ui.SirenActivity
 import app.nastavnik.ui.WakeActivity
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -64,13 +66,13 @@ class WakeGuard : AccessibilityService() {
     /** Раз в 2 секунды — что на экране (приложение могло быть открыто до начала замка). */
     private val tick = object : Runnable {
         override fun run() {
-            if (LockPrefs.of(this@WakeGuard).configured || WakePrefs.of(this@WakeGuard).guarding) {
+            if (LockPrefs.of(this@WakeGuard).configured || WakePrefs.of(this@WakeGuard).guarding || SirenPrefs.of(this@WakeGuard).guarding()) {
                 val root = runCatching { rootInActiveWindow }.getOrNull()
                 val pkg = root?.packageName?.toString()
                 if (pkg != null) evaluate(pkg, "", "", root)
             }
             // Пока звонит будильник — чаще: меню выключения закрываем, не дав нажать.
-            main.postDelayed(this, if (WakePrefs.of(this@WakeGuard).guarding) 500L else 2_000L)
+            main.postDelayed(this, if (WakePrefs.of(this@WakeGuard).guarding || SirenService.ringing) 500L else 2_000L)
         }
     }
 
@@ -95,6 +97,11 @@ class WakeGuard : AccessibilityService() {
         if (wake.guardOn && wake.guarding) {
             if (isPowerMenu(pkg, cls, text, root)) { pressBack { bringAlarmBack() }; return }
             if (system) { cover(home = true) { bringAlarmBack() }; return }
+        }
+        // 1а. Учебная сирена (с 22:00, пока не решена задача дня) — так же, но вернуть экран сирены.
+        if (SirenPrefs.of(this).guarding()) {
+            if (isPowerMenu(pkg, cls, text, root)) { pressBack { openSiren() }; return }
+            if (system) { cover(home = true) { openSiren() }; return }
         }
         if (!lock.configured) return
 
@@ -204,6 +211,16 @@ class WakeGuard : AccessibilityService() {
                 Intent(this, MainActivity::class.java).putExtra(MainActivity.EXTRA_SCREEN, MainActivity.SCREEN_EVENING)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP),
             )
+        }
+    }
+
+    /** Пока звучит сирена — кнопки громкости не работают (громкость и так держится на максимуме). */
+    override fun onKeyEvent(event: KeyEvent): Boolean =
+        SirenService.ringing && event.keyCode in setOf(KeyEvent.KEYCODE_VOLUME_DOWN, KeyEvent.KEYCODE_VOLUME_UP, KeyEvent.KEYCODE_VOLUME_MUTE)
+
+    private fun openSiren() {
+        runCatching {
+            startActivity(Intent(this, SirenActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
         }
     }
 

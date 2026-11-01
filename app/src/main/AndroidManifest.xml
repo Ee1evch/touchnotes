@@ -201,6 +201,26 @@
             android:directBootAware="true"
             android:exported="false"
             android:foregroundServiceType="mediaPlayback" />
+        <!-- Учебная сирена: в 22:00 дня с парами, пока не решена задача дня. Работает и до разблокировки. -->
+        <receiver
+            android:name=".study.SirenReceiver"
+            android:directBootAware="true"
+            android:exported="false" />
+        <service
+            android:name=".study.SirenService"
+            android:directBootAware="true"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
+        <activity
+            android:name=".ui.SirenActivity"
+            android:directBootAware="true"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:launchMode="singleTask"
+            android:showWhenLocked="true"
+            android:taskAffinity="app.nastavnik.siren"
+            android:turnScreenOn="true"
+            android:windowSoftInputMode="adjustResize" />
         <!-- Учебный замок: предупреждение за 30 минут и начало вечером. -->
         <receiver
             android:name=".study.StudyLockReceiver"

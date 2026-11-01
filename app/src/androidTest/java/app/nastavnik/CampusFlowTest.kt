@@ -23,7 +23,12 @@ import app.nastavnik.sync.AppSyncSource
 import app.nastavnik.sync.LocalItem
 import app.nastavnik.sync.SyncRecord
 import app.nastavnik.sync.SyncEngine
+import app.nastavnik.study.Learning
 import app.nastavnik.study.LockPrefs
+import app.nastavnik.study.Siren
+import app.nastavnik.study.SirenPrefs
+import app.nastavnik.study.SirenService
+import app.nastavnik.study.SleepPlan
 import app.nastavnik.study.StudyLock
 import app.nastavnik.study.StudyLockRules
 import app.nastavnik.study.WakeGuard
@@ -31,6 +36,7 @@ import app.nastavnik.study.WakeAlarm
 import app.nastavnik.study.WakePrefs
 import app.nastavnik.ui.Brand
 import app.nastavnik.ui.MainActivity
+import app.nastavnik.ui.SirenActivity
 import app.nastavnik.ui.WakeActivity
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -382,6 +388,54 @@ class CampusFlowTest {
             device.findObject(By.text("Выключить проверку"))?.click()
             device.executeShellCommand("settings delete secure enabled_accessibility_services")
             Configurator.getInstance().uiAutomationFlags = 0
+        }
+    }
+
+    /**
+     * Сирена: звучит, громкость не убавить (возвращается сама), мини-задача снимает звук на 5 минут,
+     * основная задача — ответ вводится и проверяется — даёт тишину до завтра.
+     */
+    @Test
+    fun sirenMiniTaskThenMainTask() {
+        val s = SirenPrefs.of(ctx)
+        val audio = ctx.getSystemService(android.media.AudioManager::class.java)
+        val alarm = android.media.AudioManager.STREAM_ALARM
+        runBlocking {
+            ctx.app.db.cards().insertAll(
+                listOf(CardEntity(noteId = null, subject = "Сирена", topic = "Сирена", front = Learning.PROBLEM_PREFIX + "Сколько будет 7 + 5?", back = "\$12\$", dueAt = Long.MAX_VALUE / 2, createdAt = 0)),
+            )
+        }
+        var sc: ActivityScenario<SirenActivity>? = null
+        try {
+            Siren.forced = true
+            Siren.start(ctx)
+            repeat(20) { if (!SirenService.ringing) SystemClock.sleep(250) }
+            assertTrue("сирена не зазвучала", SirenService.ringing)
+            // Громкость не убавить: ставим минимум — через пару секунд снова не ниже 70 %.
+            audio.setStreamVolume(alarm, 1, 0)
+            SystemClock.sleep(2500)
+            val max = audio.getStreamMaxVolume(alarm)
+            assertTrue("громкость убавилась: ${audio.getStreamVolume(alarm)} из $max", audio.getStreamVolume(alarm) >= (max * 0.7f).toInt())
+
+            sc = ActivityScenario.launch(Intent(ctx, SirenActivity::class.java))
+            assertNotNull(device.wait(Until.findObject(By.text("Мини-задача — 5 минут тишины на основную")), 10000))
+            SystemClock.sleep(600)
+            screenshot("siren_mini")
+            device.findObject(By.clazz("android.widget.EditText")).text = SleepPlan.task(s.miniSeed).second.toString()
+            assertNotNull("мини-задача не сняла звук", device.wait(Until.findObject(By.text("Основная задача")), 8000))
+            assertTrue(!SirenService.ringing)
+            assertNotNull(device.wait(Until.findObject(By.textContains("7 + 5")), 10000))
+            SystemClock.sleep(600)
+            screenshot("siren_main")
+            device.findObject(By.clazz("android.widget.EditText")).text = "12"
+            device.findObject(By.text("Проверить")).click()
+            assertNotNull("основная задача не засчитана", device.wait(Until.findObject(By.text("Решено. Свободен до завтра")), 8000))
+            screenshot("siren_solved")
+            assertTrue(s.solved(StudyLockRules.sessionDate(java.time.LocalDateTime.now())) >= 1)
+        } finally {
+            Siren.forced = false
+            ctx.stopService(Intent(ctx, SirenService::class.java))
+            sc?.close()
         }
     }
 

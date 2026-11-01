@@ -43,6 +43,7 @@ object Alarms {
             runCatching { LessonQuiet.update(context) }
             runCatching { WakeAlarm.reschedule(context) }
             runCatching { StudyLock.schedule(context) }
+            runCatching { Siren.check(context) }
         }
     }
 

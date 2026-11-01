@@ -160,6 +160,7 @@ private fun TodayTab(resumeTick: Int, go: (String) -> Unit, onRoom: (String) -> 
             RoundIconButton(R.drawable.ic_tune, "Настройки") { go(MainActivity.SCREEN_SETTINGS) }
         }
         EveningCard(resumeTick, go)
+        SirenCard(resumeTick)
         DayCard(lessons, tomorrow, now, hasGroup, onRoom = onRoom, onSchedule = { onTab(PhoneTab.SCHEDULE) })
         PlanCard(resumeTick)
         val today = Streaks.day(nowMs)

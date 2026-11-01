@@ -397,7 +397,10 @@ class WakeBootReceiver : BroadcastReceiver() {
         }
         val pending = goAsync()
         CoroutineScope(Dispatchers.IO).launch {
-            try { runCatching { WakeAlarm.reschedule(context) } } finally { pending.finish() }
+            try {
+                runCatching { WakeAlarm.reschedule(context) }
+                runCatching { Siren.check(context) }
+            } finally { pending.finish() }
         }
     }
 }
