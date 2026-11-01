@@ -43,7 +43,11 @@ class CampusTest {
         assertNull(RoomSearch.forClassroom(sites, "Дистанционно"))
         val found = RoomSearch.search(sites, "альфа 5")
         assertTrue(found.size >= 5 && found.all { it.second.title.startsWith("Альфа 5") })
-        assertTrue(RoomSearch.search(sites, "буран").isNotEmpty())
+        val buran = RoomSearch.search(sites, "буран")
+        assertTrue(buran.isNotEmpty())
+        // Музей входит в участок «территория вокруг здания» — в результатах показываем совпавшее имя.
+        assertTrue(RoomSearch.label(buran.first().second, "буран").contains("Буран"))
+        assertEquals("Альфа 5.8", RoomSearch.label(RoomSearch.search(sites, "альфа 5.8").first().second, "альфа 5.8"))
     }
 
     @Test fun routesOnOneFloorAndAcrossFloors() {

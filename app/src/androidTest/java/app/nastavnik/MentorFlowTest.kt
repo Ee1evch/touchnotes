@@ -481,7 +481,9 @@ class MentorFlowTest {
         screenshot("training_exams")
         sc.close()
         sc = launch(MainActivity.SCREEN_HOME)
-        assertNotNull("нет обратного отсчёта на главном", findScrolling(By.textStartsWith("Математический анализ: экзамен через"), 20000))
+        // Плитка экзамена на главной: крупно — сколько дней, подпись — предмет.
+        assertNotNull("нет обратного отсчёта на главном", findScrolling(By.text("Математический анализ"), 20000))
+        assertNotNull("нет числа дней до экзамена", device.findObject(By.textEndsWith("дней")) ?: device.findObject(By.textEndsWith("дня")))
         SystemClock.sleep(800)
         screenshot("home_exam")
         sc.close()

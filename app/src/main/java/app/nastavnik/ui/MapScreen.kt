@@ -346,7 +346,7 @@ fun MapScreen(initialRoom: String?, onBack: (() -> Unit)?) {
                             ) {
                                 IconBadge(R.drawable.ic_location, 36)
                                 Column(Modifier.weight(1f)) {
-                                    Text(r.title, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Text(RoomSearch.label(r, query), style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                     Text(
                                         listOfNotNull(s.floor(r.floor)?.short, shortSite(s).takeIf { sites.size > 1 }, r.subtitle.takeIf { it.isNotBlank() }).joinToString(" · "),
                                         style = MaterialTheme.typography.bodySmall, color = Brand.InkSoft, maxLines = 1, overflow = TextOverflow.Ellipsis,

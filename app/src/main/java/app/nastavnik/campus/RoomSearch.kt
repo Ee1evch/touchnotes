@@ -46,6 +46,31 @@ object RoomSearch {
             .map { it.first to it.second }
     }
 
+    /**
+     * Что показать в результатах: название помещения, а если запрос совпал с другим его именем — это имя.
+     * На плане ГМЦ, например, музей «Буран» входит в большой участок «территория вокруг здания»:
+     * без этого поиск «буран» показывал бы «территория вокруг здания».
+     */
+    fun label(r: Room, query: String): String {
+        val q = normalize(query)
+        if (q.isEmpty()) return r.title
+        val words = q.split(' ')
+        fun hit(k: String): Int? {
+            val n = normalize(k)
+            return when {
+                n == q -> 0
+                n.startsWith(q) -> 1
+                words.all { w -> n.split(' ', '·', '«', '»', '(', ')').any { it.startsWith(w) } } -> 2
+                words.all { n.contains(it) } -> 3
+                else -> null
+            }
+        }
+        hit(r.title)?.let { return r.title }
+        return (r.names + r.nums + r.func).distinct()
+            .mapNotNull { k -> hit(k)?.let { k to it } }
+            .minWithOrNull(compareBy({ it.second }, { it.first.length }))?.first ?: r.title
+    }
+
     /** Помещение для аудитории из расписания или null, если на карте такой нет. */
     fun forClassroom(sites: List<Site>, classroom: String?): Pair<Site, Room>? {
         val text = undouble(classroom?.trim().orEmpty().removeSuffix("(Основной)").trim()).takeIf { it.isNotEmpty() } ?: return null
