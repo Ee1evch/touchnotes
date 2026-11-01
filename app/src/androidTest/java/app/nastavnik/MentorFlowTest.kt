@@ -464,9 +464,10 @@ class MentorFlowTest {
         findScrolling(By.text("Дальше"), 15000)!!.click()
         findScrolling(By.text("Матрица"), 15000)!!.click()
         findScrolling(By.text("Итог"), 15000)!!.click()
-        assertNotNull("нет итога теста", findScrolling(By.text("1 из 2"), 6000))
+        // Итог появляется с анимацией — на медленном эмуляторе бывает дольше 6 секунд.
+        assertNotNull("нет итога теста", findScrolling(By.text("1 из 2"), 15000))
         val before = runBlocking { ctx.app.db.cards().observeCount().first() }
-        findScrolling(By.text("Ошибки в карточки (1)"), 6000)!!.click()
+        findScrolling(By.text("Ошибки в карточки (1)"), 10000)!!.click()
         assertNotNull(findScrolling(By.text("Повторить карточки"), 6000))
         assertEquals(before + 1, runBlocking { ctx.app.db.cards().observeCount().first() })
         screenshot("quiz_result")
