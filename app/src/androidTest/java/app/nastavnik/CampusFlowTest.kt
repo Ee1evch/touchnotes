@@ -291,8 +291,15 @@ class CampusFlowTest {
         try {
             assertTrue("замок не закрыт", runBlocking { StudyLock.status(ctx).locked })
             SystemClock.sleep(3000)
+            // Рабочий стол — настоящий лаунчер, а не запасной «рабочий стол» системных настроек.
+            assertTrue("настройки считаются рабочим столом", StudyLock.homePackages(ctx).none { "settings" in it })
             ctx.startActivity(Intent(android.provider.Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-            assertNotNull("настройки не закрылись", device.wait(Until.findObject(By.text("Карточки на сегодня")), 15000))
+            val blocked = device.wait(Until.findObject(By.text("Карточки на сегодня")), 15000)
+            if (blocked == null) {
+                println("LOCKDIAG pkg=${device.currentPackageName} guard=${WakeGuard.enabled(ctx)} locked=${StudyLock.locked}")
+                screenshot("lock_not_blocked")
+            }
+            assertNotNull("настройки не закрылись", blocked)
             screenshot("lock_blocked")
             // Без мигания: «Наставник» остаётся на экране.
             repeat(6) {

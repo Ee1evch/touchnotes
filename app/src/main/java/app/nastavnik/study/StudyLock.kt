@@ -284,7 +284,11 @@ object StudyLock {
         return out
     }
 
-    /** Рабочие столы (лаунчеры): все установленные и тот, что по умолчанию. */
+    /**
+     * Рабочие столы (лаунчеры): все установленные и тот, что по умолчанию. Без запасного «рабочего стола»
+     * системных настроек (FallbackHome, приоритет ниже нуля) — иначе настройки считались бы рабочим столом
+     * и замок их не закрывал.
+     */
     fun homePackages(context: Context): Set<String> {
         val out = mutableSetOf<String>()
         val pm = context.packageManager
@@ -292,12 +296,12 @@ object StudyLock {
         runCatching {
             val list = if (Build.VERSION.SDK_INT >= 33) pm.queryIntentActivities(home, PackageManager.ResolveInfoFlags.of(0L))
             else @Suppress("DEPRECATION") pm.queryIntentActivities(home, 0)
-            list.forEach { out += it.activityInfo.packageName }
+            list.filter { it.priority >= 0 && "settings" !in it.activityInfo.packageName }.forEach { out += it.activityInfo.packageName }
         }
         runCatching {
             val def = if (Build.VERSION.SDK_INT >= 33) pm.resolveActivity(home, PackageManager.ResolveInfoFlags.of(PackageManager.MATCH_DEFAULT_ONLY.toLong()))
             else @Suppress("DEPRECATION") pm.resolveActivity(home, PackageManager.MATCH_DEFAULT_ONLY)
-            def?.activityInfo?.packageName?.takeIf { it != "android" }?.let(out::add)
+            def?.activityInfo?.packageName?.takeIf { it != "android" && "settings" !in it }?.let(out::add)
         }
         return out
     }
