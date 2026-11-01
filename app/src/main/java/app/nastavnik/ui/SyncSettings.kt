@@ -177,3 +177,40 @@ fun DeviceSection(tablet: Boolean) {
         }
     }
 }
+
+/**
+ * Группа английского: у группы несколько пар иностранного в одно время — у разных преподавателей.
+ * Выбранная остаётся в расписании, на «Сегодня», в уведомлениях и маршрутах; «Все» — без фильтра.
+ */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+fun LanguageSection() {
+    val context = LocalContext.current
+    val app = context.app
+    var chosen by remember { mutableStateOf(app.settings.languageTeacher()) }
+    val options by androidx.compose.runtime.produceState(emptyList<String>()) {
+        value = app.schedule.languageTeachers(app.nastavnik.schedule.ScheduleText.monday(java.time.LocalDate.now()))
+    }
+    SectionCard("Английский") {
+        FieldLabel(
+            "Твоя группа",
+            if (options.isEmpty()) "Варианты появятся, когда загрузится расписание с парами иностранного."
+            else "Оставлю в расписании и уведомлениях пары только твоего преподавателя.",
+        )
+        if (options.isNotEmpty()) androidx.compose.foundation.layout.FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            fun pick(t: String) {
+                app.settings.setLanguageTeacher(t)
+                chosen = t
+                app.schedule.changed()
+                Alarms.rescheduleAll(context)
+            }
+            ChipButton("Все", selected = chosen.isBlank() || chosen == "*") { pick("*") }
+            options.forEachIndexed { i, t ->
+                ChipButton("Группа ${i + 1} · ${app.nastavnik.schedule.Lesson.shortName(t)}", selected = t == chosen) { pick(t) }
+            }
+        }
+    }
+}
