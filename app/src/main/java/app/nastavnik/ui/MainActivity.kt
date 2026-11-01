@@ -42,6 +42,7 @@ import androidx.core.content.IntentCompat
 import androidx.lifecycle.lifecycleScope
 import app.nastavnik.app
 import app.nastavnik.study.StudyWidget
+import app.nastavnik.study.LessonQuiet
 import kotlinx.coroutines.launch
 import app.nastavnik.overlay.BubbleService
 
@@ -261,6 +262,8 @@ class MainActivity : ComponentActivity() {
         app.sync.onForeground()
         // Оценки — не чаще раза в час; новые придут уведомлением.
         app.appScope.launch { app.grades.refresh(); app.grades.refreshLks() }
+        // Доступ к «Не беспокоить» могли только что выдать в настройках системы.
+        app.appScope.launch { runCatching { LessonQuiet.update(this@MainActivity) } }
     }
 
     override fun onStop() {

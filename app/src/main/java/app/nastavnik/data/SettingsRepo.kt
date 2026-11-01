@@ -277,6 +277,11 @@ class SettingsRepo(private val context: Context) {
     /** За сколько минут до пары напомнить (0 — не напоминать). */
     fun lessonAlertMin(): Int = prefs.getInt(K_LESSON_ALERT, 10)
     fun setLessonAlertMin(m: Int) = prefs.edit { putInt(K_LESSON_ALERT, m.coerceIn(0, 60)) }
+    /** «Тихо на парах» — на этом устройстве (не синхронизируется: на планшете может быть не нужно). */
+    fun quietLessons(): Boolean = prefs.getBoolean(K_QUIET, false)
+    fun setQuietLessons(on: Boolean) = prefs.edit { putBoolean(K_QUIET, on) }
+    fun quietRuleId(): String = prefs.getString(K_QUIET_RULE, "").orEmpty()
+    fun setQuietRuleId(id: String) = prefs.edit { putString(K_QUIET_RULE, id) }
 
     // ---------- успеваемость (ЛКС) ----------
     fun gradesUrl(): String = prefs.getString(K_GRADES_URL, "").orEmpty()
@@ -392,6 +397,8 @@ class SettingsRepo(private val context: Context) {
         private const val K_GRADES_TOKEN = "grades_token"
         private const val K_LANG_TEACHER = "language_teacher"
         private const val K_LESSON_ALERT = "lesson_alert_min"
+        private const val K_QUIET = "quiet_lessons"
+        private const val K_QUIET_RULE = "quiet_rule_id"
         private const val K_ROLE = "device_role"
         private const val K_DEVICE_ID = "device_id"
         private const val K_SYNC_URL = "sync_url"

@@ -40,6 +40,7 @@ object Alarms {
         app.appScope.launch(Dispatchers.IO) {
             runCatching { schedulePersonal(context) }
             runCatching { scheduleNextLesson(context) }
+            runCatching { LessonQuiet.update(context) }
         }
     }
 
@@ -160,6 +161,7 @@ class AlarmReceiver : BroadcastReceiver() {
                     Alarms.ACTION_DONE -> if (uid != null) runCatching { Alarms.markDone(context, uid) }
                     Alarms.ACTION_LESSON -> runCatching { Alarms.onLesson(context) }
                     LiveNotifications.ACTION_LIVE -> runCatching { LiveNotifications.updateLesson(context) }
+                    LessonQuiet.ACTION -> runCatching { LessonQuiet.update(context) }
                 }
             } finally {
                 pending.finish()

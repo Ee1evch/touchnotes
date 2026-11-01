@@ -34,6 +34,8 @@ import app.nastavnik.app
 import app.nastavnik.schedule.Lesson
 import app.nastavnik.schedule.ScheduleText
 import app.nastavnik.study.Alarms
+import app.nastavnik.study.LessonQuiet
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import app.nastavnik.sync.WebDavStore
 import app.nastavnik.sync.YandexDiskStore
 import kotlinx.coroutines.launch
@@ -176,6 +178,33 @@ fun DeviceSection(tablet: Boolean) {
             alert = it
             repo.setLessonAlertMin(it)
             Alarms.rescheduleAll(context)
+        }
+        HorizontalDivider(Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant)
+        var quiet by remember { mutableStateOf(repo.quietLessons()) }
+        var access by remember { mutableStateOf(LessonQuiet.hasAccess(context)) }
+        LifecycleResumeEffect(Unit) {
+            access = LessonQuiet.hasAccess(context)
+            onPauseOrDispose { }
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                FieldLabel("Тихо на парах", "На время пары — «Не беспокоить», после — как было. Будильники и повторные звонки проходят.")
+            }
+            AppSwitch(quiet) {
+                quiet = it
+                repo.setQuietLessons(it)
+                if (it && !access) runCatching { context.startActivity(LessonQuiet.accessIntent().addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                Alarms.rescheduleAll(context)
+            }
+        }
+        AnimatedVisibility(quiet && !access, enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    "Нужно разрешить «Наставнику» доступ к режиму «Не беспокоить».",
+                    style = MaterialTheme.typography.bodySmall, color = Brand.InkSoft, modifier = Modifier.weight(1f),
+                )
+                LinkText("Разрешить") { runCatching { context.startActivity(LessonQuiet.accessIntent().addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } }
+            }
         }
     }
 }
