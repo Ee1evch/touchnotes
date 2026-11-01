@@ -146,16 +146,6 @@ fun HomeScreen(resumeTick: Int, go: (String) -> Unit, openNotebook: (Long) -> Un
                     sections()
                 }
 
-                Text(
-                    "Как это работает",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier
-                        .align(Alignment.CenterHorizontally)
-                        .clip(CircleShape)
-                        .clickable { go(MainActivity.SCREEN_ONBOARDING) }
-                        .padding(horizontal = 16.dp, vertical = 10.dp),
-                )
             }
         }
     }
@@ -187,8 +177,6 @@ private fun Header(now: Long, go: (String) -> Unit) {
             Text(greeting, style = MaterialTheme.typography.headlineSmall)
             Text(date, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        RoundIconButton(R.drawable.ic_palette_dot, "Оформление") { go(MainActivity.SCREEN_APPEARANCE) }
-        Spacer(Modifier.width(10.dp))
         RoundIconButton(R.drawable.ic_search, "Поиск") { go(MainActivity.SCREEN_SEARCH) }
         Spacer(Modifier.width(10.dp))
         RoundIconButton(R.drawable.ic_tune, "Настройки") { go(MainActivity.SCREEN_SETTINGS) }

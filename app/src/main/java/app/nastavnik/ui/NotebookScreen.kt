@@ -39,6 +39,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -161,7 +162,7 @@ fun NotebookScreen(notebookId: Long, onBack: () -> Unit, onCleanReady: () -> Uni
         Row(Modifier.fillMaxSize()) {
             Column(Modifier.weight(1f).fillMaxHeight()) {
                 NotebookTopBar(ctl, panel, onBack = close, onTogglePanel = { panel = !panel }, onPages = { pagesOpen = true }, importers = importers)
-                Box(
+                BoxWithConstraints(
                     Modifier
                         .weight(1f)
                         .fillMaxWidth()
@@ -171,28 +172,25 @@ fun NotebookScreen(notebookId: Long, onBack: () -> Unit, onCleanReady: () -> Uni
                     AndroidView(factory = { ctl.ink }, modifier = Modifier.fillMaxSize())
                     SelectionMenu(ctl)
                     EditorHint(ctl, Modifier.align(Alignment.TopCenter).padding(top = 14.dp))
-                    Column(
-                        Modifier.align(Alignment.BottomCenter).padding(bottom = 14.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    // Лист увеличен — маленькая плашка с масштабом; нажатие возвращает по ширине.
+                    AnimatedVisibility(
+                        visible = abs(ctl.zoom - 1f) > 0.04f,
+                        modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 14.dp),
+                        enter = fadeIn() + scaleIn(initialScale = 0.8f),
+                        exit = fadeOut() + scaleOut(targetScale = 0.8f),
                     ) {
-                        // Лист увеличен — видно насколько; нажатие возвращает по ширине.
-                        AnimatedVisibility(
-                            visible = abs(ctl.zoom - 1f) > 0.04f,
-                            enter = fadeIn() + scaleIn(initialScale = 0.8f),
-                            exit = fadeOut() + scaleOut(targetScale = 0.8f),
-                        ) {
-                            Text(
-                                "${(ctl.zoom * 100).roundToInt()} %  ·  по ширине",
-                                style = MaterialTheme.typography.labelMedium,
-                                modifier = Modifier
-                                    .glass(CircleShape, 6.dp, strong = true)
-                                    .clickable { ctl.fitWidth() }
-                                    .padding(horizontal = 14.dp, vertical = 8.dp),
-                            )
-                        }
-                        EditorToolbar(ctl)
+                        Text(
+                            "${(ctl.zoom * 100).roundToInt()} %",
+                            style = MaterialTheme.typography.labelMedium,
+                            modifier = Modifier
+                                .glass(CircleShape, 6.dp, strong = true)
+                                .clickable { ctl.fitWidth() }
+                                .semantics { contentDescription = "По ширине листа" }
+                                .padding(horizontal = 14.dp, vertical = 8.dp),
+                        )
                     }
+                    // Инструменты — плашкой сбоку, цвета открываются по касанию.
+                    EditorRail(ctl, maxHeight)
                     androidx.compose.animation.AnimatedVisibility(
                         visible = !ctl.loaded,
                         modifier = Modifier.align(Alignment.Center),
@@ -243,7 +241,9 @@ private fun NotebookTopBar(
     var addMenu by remember { mutableStateOf(false) }
     var moreMenu by remember { mutableStateOf(false) }
     var paperDialog by remember { mutableStateOf(false) }
+    var examDialog by remember { mutableStateOf(false) }
     if (paperDialog) PaperDialog(ctl) { paperDialog = false }
+    if (examDialog) ExamDialog(onStart = { m -> examDialog = false; ctl.startExam(m) }, onDismiss = { examDialog = false })
     val meta = ctl.meta
     Row(
         Modifier
@@ -290,26 +290,27 @@ private fun NotebookTopBar(
             }
             BarIcon(R.drawable.ic_chevron, "Следующая страница", enabled = ctl.index < ctl.pages.lastIndex) { ctl.showPage(ctl.index + 1) }
         }
-        Box {
-            BarButton(R.drawable.ic_plus, "Добавить страницу") { addMenu = true }
-            DropdownMenu(expanded = addMenu, onDismissRequest = { addMenu = false }, containerColor = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(18.dp)) {
-                MenuItem("Пустая страница", R.drawable.ic_notebook) { addMenu = false; ctl.addPage(ctl.page?.paper ?: Paper.GRID) }
-                MenuItem("Копия этой страницы", R.drawable.ic_duplicate) { addMenu = false; ctl.duplicatePage() }
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                MenuItem("Сфотографировать", R.drawable.ic_camera) { addMenu = false; importers.camera() }
-                MenuItem("Фото из галереи", R.drawable.ic_image) { addMenu = false; importers.gallery() }
-                MenuItem("Страницы из PDF", R.drawable.ic_pdf) { addMenu = false; importers.pdf() }
-            }
-        }
         BarButton(R.drawable.ic_undo, "Отменить", enabled = ctl.canUndo) { ctl.undo() }
         BarButton(R.drawable.ic_redo, "Вернуть", enabled = ctl.canRedo) { ctl.redo() }
+        // Всё остальное — в одном меню: страницы, бумага, контрольная, проверка.
         Box {
             BarButton(R.drawable.ic_more, "Ещё") { moreMenu = true }
             DropdownMenu(expanded = moreMenu, onDismissRequest = { moreMenu = false }, containerColor = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(18.dp)) {
+                MenuItem("Новая страница", R.drawable.ic_plus) { moreMenu = false; ctl.addPage(ctl.page?.paper ?: Paper.GRID) }
+                MenuItem("Фото или PDF как страница", R.drawable.ic_camera) { moreMenu = false; addMenu = true }
                 MenuItem("Все страницы", R.drawable.ic_pages) { moreMenu = false; onPages() }
                 MenuItem("Бумага…", R.drawable.ic_notebook) { moreMenu = false; paperDialog = true }
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                MenuItem("Контрольная на время…", R.drawable.ic_timer) { moreMenu = false; examDialog = true }
+                MenuItem((if (ctl.autoCheck) "✓ " else "") + "Проверять, когда остановлюсь", R.drawable.ic_eye) { moreMenu = false; ctl.toggleAutoCheck() }
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 MenuItem("Переименовать", R.drawable.ic_pen) { moreMenu = false; renaming = true }
                 MenuItem("Очистить страницу", R.drawable.ic_eraser) { moreMenu = false; ctl.clearPage() }
+            }
+            DropdownMenu(expanded = addMenu, onDismissRequest = { addMenu = false }, containerColor = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(18.dp)) {
+                MenuItem("Сфотографировать", R.drawable.ic_camera) { addMenu = false; importers.camera() }
+                MenuItem("Фото из галереи", R.drawable.ic_image) { addMenu = false; importers.gallery() }
+                MenuItem("Страницы из PDF", R.drawable.ic_pdf) { addMenu = false; importers.pdf() }
             }
         }
         BarButton(R.drawable.ic_sparkle, if (panel) "Скрыть наставника" else "Показать наставника", active = panel, onClick = onTogglePanel)
@@ -551,10 +552,6 @@ private fun AskView(
     var question by remember { mutableStateOf("") }
     var listening by remember { mutableStateOf(false) }
     var speechProblem by remember { mutableStateOf<String?>(null) }
-    var examDialog by remember { mutableStateOf(false) }
-    if (examDialog) {
-        ExamDialog(onStart = { m -> examDialog = false; ctl.startExam(m) }, onDismiss = { examDialog = false })
-    }
     val speech = remember {
         SpeechInput(context, object : SpeechInput.Callback {
             override fun onListening(active: Boolean) { listening = active }
@@ -574,15 +571,8 @@ private fun AskView(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            IconBadge(R.drawable.ic_sparkle, 36)
-            Column(Modifier.weight(1f)) {
-                Text("Наставник", style = MaterialTheme.typography.titleMedium)
-                Text(
-                    "Видит всю тетрадь: ${ctl.pages.size} ${ruPlural(ctl.pages.size, "страницу", "страницы", "страниц")}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+            IconBadge(R.drawable.ic_sparkle, 32)
+            Text("Наставник", style = MaterialTheme.typography.titleMedium)
         }
         if (ctl.examActive) {
             ExamCard(ctl)
@@ -635,7 +625,6 @@ private fun AskView(
                 row.forEach { a -> AskTile(a, enabled = !busy, modifier = Modifier.weight(1f)) { ask(a.action.prompt, AskKind.QUICK) } }
             }
         }
-        AskTile(Ask(QuickAction.NEXT_STEP, R.drawable.ic_timer, "Контрольная", "по таймеру, без подсказок"), enabled = !busy, modifier = Modifier.fillMaxWidth()) { examDialog = true }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Box(Modifier.weight(1f)) {
                 AppTextField(
@@ -650,21 +639,6 @@ private fun AskView(
                 question = ""
             }
         }
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(14.dp))
-                .clickable { ctl.toggleAutoCheck() }
-                .padding(vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text("Проверять, когда остановлюсь", style = MaterialTheme.typography.labelLarge)
-                Text("Перестал писать на 7 с — наставник тихо проверит страницу.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            AppSwitch(ctl.autoCheck) { ctl.toggleAutoCheck() }
-        }
-        if (answer == null) EmptyMentor()
     }
 }
 

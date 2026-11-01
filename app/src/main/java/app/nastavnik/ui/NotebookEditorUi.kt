@@ -1,6 +1,13 @@
 package app.nastavnik.ui
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.snap
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.unit.Dp
+import kotlin.math.abs
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -79,7 +86,7 @@ import app.nastavnik.ink.ShapeKind
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 
-// ---------------- панель инструментов ----------------
+// ---------------- плашка инструментов ----------------
 
 private class ToolSpec(val tool: EditTool, val icon: Int, val label: String)
 
@@ -94,66 +101,254 @@ private val TOOLS = listOf(
 
 private val TOOL_SIZE = 44.dp
 private val TOOL_GAP = 4.dp
+private val RAIL_W = 56.dp
 
 /**
- * Инструменты: ряд значков с «пилюлей», которая перетекает к выбранному; над ним — настройки
- * выбранного инструмента (цвет, толщина, вид фигуры…). Пока пишешь, панель становится полупрозрачной.
+ * Инструменты — узкая плашка у края листа: сами инструменты, под ними кружок с цветом (или настройкой)
+ * выбранного инструмента и «писать пальцем». Цвета и толщина открываются по касанию кружка
+ * (или выбранного инструмента ещё раз) и закрываются касанием мимо. Плашку можно перетащить за ручку
+ * вверх-вниз и к другому краю; пока пишешь, она становится почти прозрачной.
  */
 @Composable
-fun EditorToolbar(ctl: NotebookController, modifier: Modifier = Modifier) {
-    val alpha by animateFloatAsState(if (ctl.writing) 0.32f else 1f, tween(if (ctl.writing) 160 else 420), label = "toolbarAlpha")
-    // Перо задержали — подсвечиваем ластик, пока его не отпустят.
+fun EditorRail(ctl: NotebookController, maxHeight: Dp) {
+    val density = LocalDensity.current
+    var open by remember { mutableStateOf(false) }
+    val alpha by animateFloatAsState(if (ctl.writing && !open) 0.28f else 1f, tween(if (ctl.writing) 160 else 420), label = "railAlpha")
     val shown = if (ctl.tempEraser) EditTool.ERASER else ctl.editTool
     val index = TOOLS.indexOfFirst { it.tool == shown }.coerceAtLeast(0)
-    val indicator by animateDpAsState(
-        (TOOL_SIZE + TOOL_GAP) * index,
-        spring(dampingRatio = 0.72f, stiffness = 520f),
-        label = "toolIndicator",
+    val indicator by animateDpAsState((TOOL_SIZE + TOOL_GAP) * index, spring(dampingRatio = 0.72f, stiffness = 520f), label = "toolIndicator")
+    val railHeight = (TOOL_SIZE + TOOL_GAP) * TOOLS.size + 150.dp
+    val freeY = (maxHeight - railHeight - 24.dp).coerceAtLeast(0.dp)
+    // Перетаскивание: пока тянут — за пальцем, отпустили — прилипает к ближайшему краю.
+    var dragY by remember { mutableStateOf(0f) }
+    var dragging by remember { mutableStateOf(false) }
+    val y by animateDpAsState(
+        if (dragging) with(density) { dragY.toDp() } else freeY * ctl.railY,
+        if (dragging) snap() else spring(dampingRatio = 0.8f, stiffness = 380f),
+        label = "railY",
     )
-    Column(
-        modifier.graphicsLayer { this.alpha = alpha },
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        ToolOptions(ctl)
+    val right = ctl.railRight
+
+    Box(Modifier.fillMaxSize()) {
+        // Касание мимо закрывает окно настроек.
+        if (open) Box(Modifier.fillMaxSize().clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { open = false })
         Row(
             Modifier
-                .glass(CircleShape, 14.dp, strong = true)
-                .padding(horizontal = 8.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
+                .align(if (right) Alignment.TopEnd else Alignment.TopStart)
+                .padding(horizontal = 12.dp)
+                .offset(y = 12.dp + y),
+            verticalAlignment = Alignment.Top,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Box {
-                // Скользящая «пилюля» под выбранным инструментом.
+            if (right) ToolPopover(ctl, open, fromRight = true) { open = false }
+            Column(
+                Modifier
+                    .graphicsLayer { this.alpha = alpha }
+                    .width(RAIL_W)
+                    .glass(RoundedCornerShape(28.dp), 14.dp, strong = true)
+                    .padding(vertical = 8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                // Ручка: потянуть — переставить плашку.
                 Box(
                     Modifier
-                        .offset(x = indicator)
-                        .size(TOOL_SIZE)
-                        .clip(CircleShape)
-                        .background(Brand.Accent),
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(TOOL_GAP)) {
-                    TOOLS.forEach { t ->
-                        val active = t.tool == shown
-                        val tint by animateColorAsState(if (active) Brand.OnInk else Brand.Ink, tween(220), label = "tint")
-                        val bounce by animateFloatAsState(if (active) 1f else 0.9f, spring(dampingRatio = 0.45f, stiffness = 700f), label = "bounce")
-                        Box(
-                            Modifier
-                                .size(TOOL_SIZE)
-                                .clip(CircleShape)
-                                .clickable { ctl.pickTool(t.tool) }
-                                .semantics { contentDescription = t.label },
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(
-                                painterResource(t.icon), contentDescription = null, tint = tint,
-                                modifier = Modifier.size(21.dp).graphicsLayer { scaleX = bounce; scaleY = bounce },
-                            )
+                        .size(width = 40.dp, height = 18.dp)
+                        .pointerInput(freeY) {
+                            detectDragGestures(
+                                onDragStart = {
+                                    dragging = true
+                                    dragY = with(density) { (freeY * ctl.railY).toPx() }
+                                    open = false
+                                },
+                                onDragEnd = {
+                                    dragging = false
+                                    val free = with(density) { freeY.toPx() }.coerceAtLeast(1f)
+                                    ctl.moveRail(ctl.railRight, (dragY / free).coerceIn(0f, 1f))
+                                },
+                                onDragCancel = { dragging = false },
+                            ) { change, d ->
+                                change.consume()
+                                dragY = (dragY + d.y).coerceIn(0f, with(density) { freeY.toPx() })
+                                // Утащили к другому краю — плашка переезжает туда.
+                                if (abs(d.x) > 0f) {
+                                    val px = change.position.x
+                                    if (!ctl.railRight && px > with(density) { 260.dp.toPx() }) ctl.moveRail(true, ctl.railY)
+                                    if (ctl.railRight && px < -with(density) { 220.dp.toPx() }) ctl.moveRail(false, ctl.railY)
+                                }
+                            }
+                        }
+                        .semantics { contentDescription = "Переставить панель" },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Box(Modifier.size(width = 22.dp, height = 4.dp).clip(CircleShape).background(Brand.Ink.copy(alpha = 0.25f)))
+                }
+                Box {
+                    Box(
+                        Modifier
+                            .offset(y = indicator)
+                            .size(TOOL_SIZE)
+                            .clip(CircleShape)
+                            .background(Brand.Accent),
+                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(TOOL_GAP)) {
+                        TOOLS.forEach { t ->
+                            val active = t.tool == shown
+                            val tint by animateColorAsState(if (active) Brand.OnAccent else Brand.Ink, tween(220), label = "tint")
+                            val bounce by animateFloatAsState(if (active) 1f else 0.88f, spring(dampingRatio = 0.45f, stiffness = 700f), label = "bounce")
+                            Box(
+                                Modifier
+                                    .size(TOOL_SIZE)
+                                    .clip(CircleShape)
+                                    .clickable {
+                                        // Второе касание выбранного инструмента — его настройки.
+                                        if (ctl.editTool == t.tool) open = !open else { ctl.pickTool(t.tool); open = false }
+                                    }
+                                    .semantics { contentDescription = t.label },
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(
+                                    painterResource(t.icon), contentDescription = null, tint = tint,
+                                    modifier = Modifier.size(21.dp).graphicsLayer { scaleX = bounce; scaleY = bounce },
+                                )
+                            }
                         }
                     }
                 }
+                Box(Modifier.padding(vertical = 8.dp).width(26.dp).height(1.dp).background(Brand.Line))
+                OptionsButton(ctl, open) { open = !open }
+                Spacer(Modifier.height(4.dp))
+                ToggleIcon(R.drawable.ic_hand, if (ctl.fingerDraws) "Пальцем пишу" else "Пальцем двигаю лист", ctl.fingerDraws) { ctl.toggleFinger() }
             }
-            Box(Modifier.padding(horizontal = 8.dp).width(1.dp).height(24.dp).background(Brand.Line))
-            ToggleIcon(R.drawable.ic_hand, if (ctl.fingerDraws) "Пальцем пишу" else "Пальцем двигаю лист", ctl.fingerDraws) { ctl.toggleFinger() }
+            if (!right) ToolPopover(ctl, open, fromRight = false) { open = false }
+        }
+    }
+}
+
+/** Кружок настроек: цвет и толщина ручки или маркера, вид фигуры, размер текста, режим ластика. */
+@Composable
+private fun OptionsButton(ctl: NotebookController, open: Boolean, onClick: () -> Unit) {
+    val ring by animateFloatAsState(if (open) 1f else 0f, tween(200), label = "optRing")
+    Box(
+        Modifier
+            .size(TOOL_SIZE)
+            .clip(CircleShape)
+            .clickable(onClick = onClick)
+            .semantics { contentDescription = "Настройки инструмента" },
+        contentAlignment = Alignment.Center,
+    ) {
+        if (ring > 0f) Box(Modifier.size(TOOL_SIZE).graphicsLayer { alpha = ring }.border(2.dp, Brand.Accent, CircleShape))
+        when (ctl.editTool) {
+            EditTool.PEN, EditTool.TEXT -> {
+                val d = if (ctl.editTool == EditTool.TEXT) 22.dp else (10 + (ctl.penWidth - 1.2f) / 6.8f * 16).dp
+                AnimatedSwatch(Color(ctl.penColor), d, CircleShape)
+            }
+            EditTool.HIGHLIGHTER -> AnimatedSwatch(Color(ctl.markerColor), 22.dp, RoundedCornerShape(6.dp))
+            EditTool.SHAPE -> Icon(painterResource(SHAPES.first { it.first == ctl.shapeKind }.second), contentDescription = null, tint = Color(ctl.penColor), modifier = Modifier.size(22.dp))
+            EditTool.ERASER -> Text(if (ctl.partialEraser) "½" else "1", style = MaterialTheme.typography.titleMedium)
+            EditTool.LASSO -> Icon(painterResource(R.drawable.ic_paste), contentDescription = null, tint = if (ctl.canPaste) Brand.Ink else Brand.Ink.copy(alpha = 0.3f), modifier = Modifier.size(20.dp))
+        }
+    }
+}
+
+@Composable
+private fun AnimatedSwatch(color: Color, size: Dp, shape: androidx.compose.ui.graphics.Shape) {
+    val c by animateColorAsState(color, tween(220), label = "swatchColor")
+    val d by animateDpAsState(size, spring(dampingRatio = 0.55f, stiffness = 600f), label = "swatchSize")
+    Box(Modifier.size(d).clip(shape).background(c).border(1.dp, Brand.Line, shape))
+}
+
+/** Окно настроек выбранного инструмента — раскрывается от плашки с пружинкой. */
+@Composable
+private fun ToolPopover(ctl: NotebookController, open: Boolean, fromRight: Boolean, onClose: () -> Unit) {
+    AnimatedVisibility(
+        visible = open,
+        enter = fadeIn(tween(160)) + scaleIn(spring(dampingRatio = 0.7f, stiffness = 520f), initialScale = 0.85f, transformOrigin = TransformOrigin(if (fromRight) 1f else 0f, 0.6f)),
+        exit = fadeOut(tween(120)) + scaleOut(tween(140), targetScale = 0.9f, transformOrigin = TransformOrigin(if (fromRight) 1f else 0f, 0.6f)),
+    ) {
+        Column(
+            Modifier
+                .padding(top = 120.dp)
+                .width(244.dp)
+                .softCard(RoundedCornerShape(24.dp), 18.dp, MaterialTheme.colorScheme.surface)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            when (ctl.editTool) {
+                EditTool.PEN -> {
+                    PopTitle("Ручка")
+                    ColorGrid(NotebookController.PENS, ctl.penColor) { ctl.pickPen(it); onClose() }
+                    PopTitle("Толщина")
+                    WidthSlider(ctl.penWidth, 1.2f..8f, Color(ctl.penColor)) { ctl.changePenWidth(it) }
+                }
+                EditTool.HIGHLIGHTER -> {
+                    PopTitle("Маркер")
+                    ColorGrid(NotebookController.MARKERS, ctl.markerColor, marker = true) { ctl.pickMarker(it); onClose() }
+                    PopTitle("Толщина")
+                    WidthSlider(ctl.markerWidth, 10f..36f, Color(ctl.markerColor).copy(alpha = 0.6f)) { ctl.changeMarkerWidth(it) }
+                }
+                EditTool.ERASER -> {
+                    PopTitle("Ластик стирает")
+                    RadioRow(!ctl.partialEraser, "Линию целиком") { ctl.choosePartialEraser(false); onClose() }
+                    RadioRow(ctl.partialEraser, "Часть линии") { ctl.choosePartialEraser(true); onClose() }
+                    SoftButton("Очистить страницу", Modifier.fillMaxWidth(), icon = R.drawable.ic_trash) { ctl.clearPage(); onClose() }
+                }
+                EditTool.LASSO -> {
+                    PopTitle("Лассо")
+                    Text("Обведи записи пером — их можно двигать, копировать, перекрашивать.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (ctl.canPaste) InkButton("Вставить", Modifier.fillMaxWidth(), icon = R.drawable.ic_paste) { ctl.paste(); onClose() }
+                }
+                EditTool.SHAPE -> {
+                    PopTitle("Фигура")
+                    SHAPES.chunked(3).forEach { row ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            row.forEach { (k, icon) ->
+                                val on = ctl.shapeKind == k
+                                val bg by animateColorAsState(if (on) Brand.Accent else Brand.Line, tween(200), label = "shapeBg")
+                                val tint by animateColorAsState(if (on) Brand.OnAccent else Brand.Ink, tween(200), label = "shapeTint")
+                                Box(
+                                    Modifier
+                                        .size(width = 66.dp, height = 44.dp)
+                                        .clip(RoundedCornerShape(14.dp))
+                                        .background(bg)
+                                        .clickable { ctl.pickShape(k); onClose() }
+                                        .semantics { contentDescription = k.label },
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Icon(painterResource(icon), contentDescription = null, tint = tint, modifier = Modifier.size(22.dp))
+                                }
+                            }
+                        }
+                    }
+                    PopTitle("Цвет")
+                    ColorGrid(NotebookController.PENS, ctl.penColor) { ctl.pickPen(it) }
+                }
+                EditTool.TEXT -> {
+                    PopTitle("Размер")
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        NotebookController.TEXT_SIZES.forEachIndexed { i, size ->
+                            Pill(listOf("Мелкий", "Обычный", "Крупный")[i], ctl.textSize == size) { ctl.pickTextSize(size) }
+                        }
+                    }
+                    PopTitle("Цвет")
+                    ColorGrid(NotebookController.PENS, ctl.penColor) { ctl.pickPen(it); onClose() }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PopTitle(text: String) {
+    Text(text.uppercase(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+}
+
+@Composable
+private fun ColorGrid(colors: List<Int>, selected: Int, marker: Boolean = false, onPick: (Int) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        colors.chunked(4).forEach { row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                row.forEach { c -> Swatch(Color(c), c == selected, if (marker) "Маркер" else colorName(c), marker = marker) { onPick(c) } }
+            }
         }
     }
 }
@@ -161,7 +356,7 @@ fun EditorToolbar(ctl: NotebookController, modifier: Modifier = Modifier) {
 @Composable
 private fun ToggleIcon(icon: Int, description: String, active: Boolean, onClick: () -> Unit) {
     val bg by animateColorAsState(if (active) Brand.Accent else Color.Transparent, tween(220), label = "toggleBg")
-    val tint by animateColorAsState(if (active) Brand.OnInk else Brand.Ink, tween(220), label = "toggleTint")
+    val tint by animateColorAsState(if (active) Brand.OnAccent else Brand.Ink, tween(220), label = "toggleTint")
     Box(
         Modifier
             .size(TOOL_SIZE)
@@ -172,83 +367,6 @@ private fun ToggleIcon(icon: Int, description: String, active: Boolean, onClick:
         contentAlignment = Alignment.Center,
     ) {
         Icon(painterResource(icon), contentDescription = null, tint = tint, modifier = Modifier.size(20.dp))
-    }
-}
-
-/** Настройки выбранного инструмента — сменяются с лёгким «перетеканием». */
-@Composable
-private fun ToolOptions(ctl: NotebookController) {
-    AnimatedContent(
-        targetState = ctl.editTool,
-        transitionSpec = {
-            (fadeIn(tween(220, delayMillis = 60)) + slideInVertically(tween(260, easing = FastOutSlowInEasing)) { it / 3 } + scaleIn(initialScale = 0.96f))
-                .togetherWith(fadeOut(tween(140)) + scaleOut(targetScale = 0.96f))
-        },
-        label = "toolOptions",
-    ) { tool ->
-        Row(
-            Modifier
-                .glass(CircleShape, 10.dp, strong = true)
-                .heightIn(min = 48.dp)
-                .padding(horizontal = 12.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            when (tool) {
-                EditTool.PEN -> {
-                    NotebookController.PENS.forEach { c -> Swatch(Color(c), ctl.penColor == c, colorName(c)) { ctl.pickPen(c) } }
-                    OptionDivider()
-                    WidthSlider(ctl.penWidth, 1.2f..8f, Color(ctl.penColor)) { ctl.changePenWidth(it) }
-                }
-                EditTool.HIGHLIGHTER -> {
-                    NotebookController.MARKERS.forEach { c -> Swatch(Color(c), ctl.markerColor == c, "Маркер", marker = true) { ctl.pickMarker(c) } }
-                    OptionDivider()
-                    WidthSlider(ctl.markerWidth, 10f..36f, Color(ctl.markerColor).copy(alpha = 0.6f)) { ctl.changeMarkerWidth(it) }
-                }
-                EditTool.ERASER -> {
-                    Pill("Линию целиком", !ctl.partialEraser) { ctl.choosePartialEraser(false) }
-                    Pill("Часть линии", ctl.partialEraser) { ctl.choosePartialEraser(true) }
-                    OptionDivider()
-                    Pill("Очистить страницу", false) { ctl.clearPage() }
-                }
-                EditTool.LASSO -> {
-                    Text(
-                        "Обведи записи пером — потом их можно двигать",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 6.dp),
-                    )
-                    if (ctl.canPaste) Pill("Вставить", false, R.drawable.ic_paste) { ctl.paste() }
-                }
-                EditTool.SHAPE -> {
-                    SHAPES.forEach { (k, icon) ->
-                        val on = ctl.shapeKind == k
-                        val bg by animateColorAsState(if (on) Brand.Accent else Color.Transparent, tween(200), label = "shapeBg")
-                        val tint by animateColorAsState(if (on) Brand.OnInk else Brand.Ink, tween(200), label = "shapeTint")
-                        Box(
-                            Modifier
-                                .size(38.dp)
-                                .clip(CircleShape)
-                                .background(bg)
-                                .clickable { ctl.pickShape(k) }
-                                .semantics { contentDescription = k.label },
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(painterResource(icon), contentDescription = null, tint = tint, modifier = Modifier.size(20.dp))
-                        }
-                    }
-                    OptionDivider()
-                    NotebookController.PENS.take(4).forEach { c -> Swatch(Color(c), ctl.penColor == c, colorName(c), small = true) { ctl.pickPen(c) } }
-                }
-                EditTool.TEXT -> {
-                    NotebookController.TEXT_SIZES.forEachIndexed { i, size ->
-                        Pill(listOf("Мелкий", "Обычный", "Заголовок")[i], ctl.textSize == size) { ctl.pickTextSize(size) }
-                    }
-                    OptionDivider()
-                    NotebookController.PENS.take(4).forEach { c -> Swatch(Color(c), ctl.penColor == c, colorName(c), small = true) { ctl.pickPen(c) } }
-                }
-            }
-        }
     }
 }
 
@@ -327,7 +445,7 @@ fun Swatch(color: Color, selected: Boolean, description: String, marker: Boolean
 private fun WidthSlider(value: Float, range: ClosedFloatingPointRange<Float>, color: Color, onChange: (Float) -> Unit) {
     var v by remember(value) { mutableStateOf(value) }
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Box(Modifier.width(150.dp)) {
+        Box(Modifier.width(170.dp)) {
             AppSlider(v, { v = it }, { onChange(v) }, range)
         }
         val dot = (4 + (v - range.start) / (range.endInclusive - range.start) * 18).dp

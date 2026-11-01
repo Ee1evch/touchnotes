@@ -577,6 +577,9 @@ class MentorFlowTest {
             SystemClock.sleep(800)
             screenshot("settings_usage_dark")
             // Подписи разделов — обычный текст: их UiAutomator находит надёжнее, чем кнопки со значком.
+            scrollToText("Дополнительно")
+            device.findObject(androidx.test.uiautomator.UiSelector().textContains("Дополнительно")).click()
+            SystemClock.sleep(600)
             scrollToText("Все записи в одном файле")
             scrollToText("Новые сборки выходят на GitHub")
             SystemClock.sleep(800)
@@ -714,13 +717,18 @@ class MentorFlowTest {
 
         // 5. Фигуры: овал.
         device.findObject(By.desc("Фигуры"))!!.click()
+        SystemClock.sleep(300)
+        // Вид фигуры и цвет — во всплывающем окне у плашки, по кружку «Настройки инструмента».
+        device.findObject(By.desc("Настройки инструмента"))!!.click()
         var oval = device.wait(Until.findObject(By.desc("Овал")), 6000)
         if (oval == null) {
             screenshot("no_oval")
-            device.findObject(By.desc("Фигуры"))?.click()
+            device.findObject(By.desc("Настройки инструмента"))?.click()
             oval = device.wait(Until.findObject(By.desc("Овал")), 6000)
         }
+        screenshot("editor_popover")
         oval!!.click()
+        SystemClock.sleep(400)
         penStroke((0..20).map { k -> (x0 + k * 12f) to (y0 + 120f + k * 8f) })
         assertEquals(app.nastavnik.ink.Tool.SHAPE, page().strokes.single().tool)
         screenshot("editor_shapes")
@@ -740,7 +748,10 @@ class MentorFlowTest {
         device.findObject(By.desc("Ручка"))!!.click()
         penStroke((0..40).map { k -> (x0 + k * 10f) to (y0 + 560f) })
         device.findObject(By.desc("Ластик"))!!.click()
-        device.wait(Until.findObject(By.text("Часть линии")), 3000)!!.click()
+        SystemClock.sleep(300)
+        device.findObject(By.desc("Настройки инструмента"))!!.click()
+        device.wait(Until.findObject(By.text("Часть линии")), 5000)!!.click()
+        SystemClock.sleep(400)
         penStroke((0..10).map { k -> (x0 + 200f) to (y0 + 520f + k * 8f) })
         assertEquals("частичный ластик не разрезал линию", 3, page().strokes.size)
 

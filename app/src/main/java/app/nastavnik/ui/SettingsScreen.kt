@@ -1,5 +1,17 @@
 package app.nastavnik.ui
 
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.res.painterResource
+import androidx.compose.material3.Icon
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -37,7 +49,7 @@ import app.nastavnik.study.Reminders
 import kotlin.math.roundToInt
 
 @Composable
-fun SettingsScreen(onBack: () -> Unit, onAppearance: () -> Unit = {}) {
+fun SettingsScreen(onBack: () -> Unit, onAppearance: () -> Unit = {}, onOnboarding: () -> Unit = {}) {
     val context = LocalContext.current
     val repo = context.app.settings
     val s by remember { repo.flow() }.collectAsStateWithLifecycle(initialValue = repo.load())
@@ -58,16 +70,6 @@ fun SettingsScreen(onBack: () -> Unit, onAppearance: () -> Unit = {}) {
         }
 
         UsageSection(s.model)
-
-        SectionCard("Весь конспект") {
-            FieldLabel(
-                "Что видит наставник",
-                "«Весь конспект» — страница, где ты спрашиваешь, и всё, что ты спокойно пролистал в этой тетради, " +
-                    "уходят вместе с вопросом: наставник видит условие, определения и прошлые шаги. " +
-                    "Пролистать всё сразу — долгое нажатие на кнопку → «Пролистать весь конспект». Страницы хранятся только на планшете, 12 часов.",
-            )
-            Segmented(listOf(true to "Весь конспект", false to "Только экран"), s.seeNotebook) { repo.setSeeNotebook(it) }
-        }
 
         SectionCard("Наставник") {
             FieldLabel(
@@ -93,23 +95,6 @@ fun SettingsScreen(onBack: () -> Unit, onAppearance: () -> Unit = {}) {
             }
         }
 
-        SectionCard("Голос") {
-            var speak by remember { mutableStateOf(repo.speakHints()) }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    FieldLabel(
-                        "Читать подсказки вслух",
-                        "Наставник сам прочитает короткую подсказку, когда ответит: удобно, когда в руке стилус. " +
-                            "У каждой заметки есть и кнопка «прочитать».",
-                    )
-                }
-                AppSwitch(speak) {
-                    speak = it
-                    repo.setSpeakHints(it)
-                }
-            }
-        }
-
         SectionCard("Повторение") {
             FieldLabel(
                 "Напоминать о карточках",
@@ -119,45 +104,6 @@ fun SettingsScreen(onBack: () -> Unit, onAppearance: () -> Unit = {}) {
                 repo.setReminderHour(it)
                 Reminders.schedule(context)
             }
-        }
-
-        SectionCard("Заметки на экране") {
-            var fa by remember(s.noteFadeAlpha) { mutableFloatStateOf(s.noteFadeAlpha) }
-            FieldLabel(
-                "Прозрачность у стилуса: ${(fa * 100).roundToInt()}%",
-                "Поднесёшь стилус к заметке — она станет прозрачной и пропустит штрих. Перетащить заметку можно за заголовок, пальцем или стилусом.",
-            )
-            AppSlider(
-                value = fa,
-                onValueChange = { fa = it },
-                onValueChangeFinished = { repo.setNoteFadeAlpha(fa) },
-                valueRange = 0.15f..0.8f,
-            )
-        }
-
-        SectionCard("Плавающая кнопка") {
-            var alpha by remember(s.bubbleAlpha) { mutableFloatStateOf(s.bubbleAlpha) }
-            FieldLabel(
-                "Непрозрачность: ${(alpha * 100).roundToInt()}%",
-                "Больше 80% нельзя: иначе Android 12+ перестаёт пропускать касания стилуса сквозь кнопку.",
-            )
-            AppSlider(
-                value = alpha,
-                onValueChange = { alpha = it },
-                onValueChangeFinished = { repo.setBubbleAlpha(alpha) },
-                valueRange = SettingsRepo.MIN_ALPHA..SettingsRepo.MAX_ALPHA,
-            )
-            var size by remember(s.bubbleSizeDp) { mutableFloatStateOf(s.bubbleSizeDp.toFloat()) }
-            FieldLabel("Размер: ${size.roundToInt()} dp")
-            AppSlider(
-                value = size,
-                onValueChange = { size = it },
-                onValueChangeFinished = { repo.setBubbleSize(size.roundToInt()) },
-                valueRange = 40f..72f,
-                steps = 7,
-            )
-            FieldLabel("Сторона экрана")
-            Segmented(listOf(BubbleSide.LEFT to "Слева", BubbleSide.RIGHT to "Справа"), s.bubbleSide) { repo.setBubbleSide(it) }
         }
 
         SectionCard("Приложение для записей") {
@@ -190,26 +136,122 @@ fun SettingsScreen(onBack: () -> Unit, onAppearance: () -> Unit = {}) {
             }
         }
 
-        SectionCard("Куда отправлять чистовик") {
-            val targets = remember { NoteApps.pdfTargets(context) }
-            val notes = remember(s) { NoteApps.chosen(context) }
-            RadioRow(
-                s.sendTarget == SettingsRepo.TARGET_AUTO,
-                "В приложение для записей",
-                notes?.let { "Сейчас: ${it.label}" } ?: "Приложение для записей не выбрано — будет системный выбор",
-            ) { repo.setSendTarget(SettingsRepo.TARGET_AUTO) }
-            RadioRow(s.sendTarget == SettingsRepo.TARGET_CHOOSER, "Каждый раз спрашивать") {
-                repo.setSendTarget(SettingsRepo.TARGET_CHOOSER)
+        // Редко нужное — свёрнуто, чтобы не мешало.
+        MoreSettings {
+            SectionCard("Весь конспект") {
+                FieldLabel(
+                    "Что видит наставник",
+                    "«Весь конспект» — страница, где ты спрашиваешь, и всё, что ты спокойно пролистал в этой тетради, " +
+                        "уходят вместе с вопросом: наставник видит условие, определения и прошлые шаги. " +
+                        "Пролистать всё сразу — долгое нажатие на кнопку → «Пролистать весь конспект». Страницы хранятся только на планшете, 12 часов.",
+                )
+                Segmented(listOf(true to "Весь конспект", false to "Только экран"), s.seeNotebook) { repo.setSeeNotebook(it) }
             }
-            targets.forEach { t ->
-                RadioRow(s.sendTarget == t.encode(), t.label, if (t.action.endsWith("VIEW")) "открыть PDF" else "поделиться PDF") {
-                    repo.setSendTarget(t.encode())
+
+            SectionCard("Голос") {
+                var speak by remember { mutableStateOf(repo.speakHints()) }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        FieldLabel(
+                            "Читать подсказки вслух",
+                            "Наставник сам прочитает короткую подсказку, когда ответит: удобно, когда в руке стилус. " +
+                                "У каждой заметки есть и кнопка «прочитать».",
+                        )
+                    }
+                    AppSwitch(speak) {
+                        speak = it
+                        repo.setSpeakHints(it)
+                    }
                 }
             }
-        }
 
-        BackupSection()
-        UpdateSection()
+            SectionCard("Заметки на экране") {
+                var fa by remember(s.noteFadeAlpha) { mutableFloatStateOf(s.noteFadeAlpha) }
+                FieldLabel(
+                    "Прозрачность у стилуса: ${(fa * 100).roundToInt()}%",
+                    "Поднесёшь стилус к заметке — она станет прозрачной и пропустит штрих. Перетащить заметку можно за заголовок, пальцем или стилусом.",
+                )
+                AppSlider(
+                    value = fa,
+                    onValueChange = { fa = it },
+                    onValueChangeFinished = { repo.setNoteFadeAlpha(fa) },
+                    valueRange = 0.15f..0.8f,
+                )
+            }
+
+            SectionCard("Плавающая кнопка") {
+                var alpha by remember(s.bubbleAlpha) { mutableFloatStateOf(s.bubbleAlpha) }
+                FieldLabel(
+                    "Непрозрачность: ${(alpha * 100).roundToInt()}%",
+                    "Больше 80% нельзя: иначе Android 12+ перестаёт пропускать касания стилуса сквозь кнопку.",
+                )
+                AppSlider(
+                    value = alpha,
+                    onValueChange = { alpha = it },
+                    onValueChangeFinished = { repo.setBubbleAlpha(alpha) },
+                    valueRange = SettingsRepo.MIN_ALPHA..SettingsRepo.MAX_ALPHA,
+                )
+                var size by remember(s.bubbleSizeDp) { mutableFloatStateOf(s.bubbleSizeDp.toFloat()) }
+                FieldLabel("Размер: ${size.roundToInt()} dp")
+                AppSlider(
+                    value = size,
+                    onValueChange = { size = it },
+                    onValueChangeFinished = { repo.setBubbleSize(size.roundToInt()) },
+                    valueRange = 40f..72f,
+                    steps = 7,
+                )
+                FieldLabel("Сторона экрана")
+                Segmented(listOf(BubbleSide.LEFT to "Слева", BubbleSide.RIGHT to "Справа"), s.bubbleSide) { repo.setBubbleSide(it) }
+            }
+
+            SectionCard("Куда отправлять чистовик") {
+                val targets = remember { NoteApps.pdfTargets(context) }
+                val notes = remember(s) { NoteApps.chosen(context) }
+                RadioRow(
+                    s.sendTarget == SettingsRepo.TARGET_AUTO,
+                    "В приложение для записей",
+                    notes?.let { "Сейчас: ${it.label}" } ?: "Приложение для записей не выбрано — будет системный выбор",
+                ) { repo.setSendTarget(SettingsRepo.TARGET_AUTO) }
+                RadioRow(s.sendTarget == SettingsRepo.TARGET_CHOOSER, "Каждый раз спрашивать") {
+                    repo.setSendTarget(SettingsRepo.TARGET_CHOOSER)
+                }
+                targets.forEach { t ->
+                    RadioRow(s.sendTarget == t.encode(), t.label, if (t.action.endsWith("VIEW")) "открыть PDF" else "поделиться PDF") {
+                        repo.setSendTarget(t.encode())
+                    }
+                }
+            }
+
+            BackupSection()
+            UpdateSection()
+            SectionCard("Обучение") {
+                LinkText("Пройти первую настройку заново") { onOnboarding() }
+            }
+        }
+    }
+}
+
+/** «Дополнительно»: раскрывается плавно по нажатию. */
+@Composable
+private fun MoreSettings(content: @Composable () -> Unit) {
+    var open by rememberSaveable { mutableStateOf(false) }
+    val turn by animateFloatAsState(if (open) 90f else 0f, tween(260), label = "moreArrow")
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .glass()
+            .clickable { open = !open }
+            .padding(horizontal = 20.dp, vertical = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text("Дополнительно", style = MaterialTheme.typography.titleMedium)
+            Text("Кнопка поверх записей, заметки, голос, отправка, копия, обновления", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Icon(painterResource(R.drawable.ic_chevron), contentDescription = null, tint = Brand.InkSoft, modifier = Modifier.size(18.dp).graphicsLayer { rotationZ = turn })
+    }
+    AnimatedVisibility(visible = open, enter = expandVertically(tween(320)) + fadeIn(tween(240, delayMillis = 60)), exit = shrinkVertically(tween(260)) + fadeOut(tween(160))) {
+        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) { content() }
     }
 }
 

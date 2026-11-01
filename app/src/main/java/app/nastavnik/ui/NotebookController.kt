@@ -86,6 +86,18 @@ class NotebookController(val app: NastavnikApp, val notebookId: Long, private va
     var fingerDraws by mutableStateOf(app.settings.fingerDraws())
         private set
 
+    /** Где плашка инструментов: у правого края или у левого, и на какой высоте (0 — сверху, 1 — снизу). */
+    var railRight by mutableStateOf(app.settings.railRight())
+        private set
+    var railY by mutableStateOf(app.settings.railY())
+        private set
+
+    fun moveRail(right: Boolean, y: Float) {
+        railRight = right
+        railY = y
+        app.settings.setRail(right, y)
+    }
+
     /** Перо задержали — сейчас работает временный ластик (подсвечиваем его в палитре). */
     var tempEraser by mutableStateOf(false)
         private set

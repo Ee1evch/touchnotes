@@ -118,6 +118,11 @@ class SettingsRepo(private val context: Context) {
     fun setBackdrop(name: String) = prefs.edit { putString(K_BACKDROP, name) }
     fun setTextScale(k: Float) = prefs.edit { putFloat(K_TEXT_SCALE, k.coerceIn(0.9f, 1.25f)) }
 
+    /** Плашка инструментов в тетради: у какого края и на какой высоте. */
+    fun railRight(): Boolean = prefs.getBoolean(K_RAIL_RIGHT, false)
+    fun railY(): Float = prefs.getFloat(K_RAIL_Y, 0.15f)
+    fun setRail(right: Boolean, y: Float) = prefs.edit { putBoolean(K_RAIL_RIGHT, right); putFloat(K_RAIL_Y, y.coerceIn(0f, 1f)) }
+
     /** Подсказки по жестам листа показаны (один раз). */
     fun editorTipsShown(): Boolean = prefs.getBoolean(K_TIPS, false)
     fun setEditorTipsShown() = prefs.edit { putBoolean(K_TIPS, true) }
@@ -295,6 +300,8 @@ class SettingsRepo(private val context: Context) {
         private const val K_THEME = "theme_mode"
         private const val K_FAST = "fast_answers"
         private const val K_TIPS = "editor_tips_shown"
+        private const val K_RAIL_RIGHT = "rail_right"
+        private const val K_RAIL_Y = "rail_y"
         private const val K_LIGHT = "theme_light"
         private const val K_DARK = "theme_dark"
         private const val K_ACCENT = "theme_accent"

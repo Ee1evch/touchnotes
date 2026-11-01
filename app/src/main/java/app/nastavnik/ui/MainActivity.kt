@@ -142,7 +142,7 @@ class MainActivity : ComponentActivity() {
                             onSettings = { go(SCREEN_SETTINGS) },
                         )
                         SCREEN_ONBOARDING -> OnboardingScreen(resumeTick, onDone = { screen = SCREEN_HOME; moveTaskToBack(true) }, onSkip = { screen = SCREEN_HOME })
-                        SCREEN_SETTINGS -> SettingsScreen(onBack = home, onAppearance = { go(SCREEN_APPEARANCE) })
+                        SCREEN_SETTINGS -> SettingsScreen(onBack = home, onAppearance = { go(SCREEN_APPEARANCE) }, onOnboarding = { go(SCREEN_ONBOARDING) })
                         SCREEN_APPEARANCE -> AppearanceScreen(onBack = { go(SCREEN_SETTINGS) })
                         SCREEN_HISTORY -> HistoryScreen(onBack = home, onCleanReady = { go(SCREEN_CLEAN) })
                         SCREEN_SEARCH -> SearchScreen(
