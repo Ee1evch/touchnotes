@@ -21,7 +21,10 @@ import app.nastavnik.sync.AppSyncSource
 import app.nastavnik.sync.LocalItem
 import app.nastavnik.sync.SyncRecord
 import app.nastavnik.sync.SyncEngine
+import app.nastavnik.study.LockPrefs
 import app.nastavnik.study.StudyLock
+import app.nastavnik.study.StudyLockRules
+import app.nastavnik.study.WakeGuard
 import app.nastavnik.study.WakeAlarm
 import app.nastavnik.study.WakePrefs
 import app.nastavnik.ui.MainActivity
@@ -268,6 +271,47 @@ class CampusFlowTest {
             }
         } finally {
             sc.close()
+        }
+    }
+
+    /**
+     * Учебный замок по-настоящему: включаем службу защиты, замок закрывает системные настройки и открывает
+     * вечернюю учёбу; «Наставник» не мигает (6 секунд остаётся на экране); рабочий стол открыт.
+     */
+    @Test
+    fun studyLockClosesAppsWithoutFlicker() {
+        val lp = LockPrefs.of(ctx)
+        // Без пар замок начинается в выбранное время — 00:00, то есть уже идёт. Одна карточка ждёт повторения.
+        ctx.app.settings.setScheduleGroup("")
+        runBlocking { ctx.app.db.cards().insertAll(listOf(CardEntity(noteId = null, subject = "Замок", topic = "Замок", front = "2 + 2", back = "4", dueAt = 0, createdAt = 0))) }
+        lp.configureOnce(0, emptySet(), LocalDate.now())
+        val guard = "${ctx.packageName}/${WakeGuard::class.java.name}"
+        device.executeShellCommand("settings put secure enabled_accessibility_services $guard")
+        device.executeShellCommand("settings put secure accessibility_enabled 1")
+        try {
+            assertTrue("замок не закрыт", runBlocking { StudyLock.status(ctx).locked })
+            SystemClock.sleep(3000)
+            ctx.startActivity(Intent(android.provider.Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            assertNotNull("настройки не закрылись", device.wait(Until.findObject(By.text("Карточки на сегодня")), 15000))
+            screenshot("lock_blocked")
+            // Без мигания: «Наставник» остаётся на экране.
+            repeat(6) {
+                SystemClock.sleep(1000)
+                assertEquals("мигает: на экране ${device.currentPackageName}", ctx.packageName, device.currentPackageName)
+            }
+            // Рабочий стол открыт: после «Домой» на нём и остаёмся.
+            device.pressHome()
+            SystemClock.sleep(4000)
+            val home = device.currentPackageName
+            assertTrue("рабочий стол закрыт: $home", home != ctx.packageName && home != "com.android.settings")
+            screenshot("lock_home")
+        } finally {
+            device.executeShellCommand("settings delete secure enabled_accessibility_services")
+            lp.markDone(StudyLockRules.sessionDate(java.time.LocalDateTime.now()))
+            runBlocking {
+                ctx.app.db.cards().all().filter { it.subject == "Замок" }.forEach { ctx.app.db.cards().update(it.copy(dueAt = Long.MAX_VALUE / 2)) }
+                StudyLock.status(ctx)
+            }
         }
     }
 

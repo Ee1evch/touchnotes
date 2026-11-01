@@ -92,14 +92,15 @@ class WakeGuard : AccessibilityService() {
         // 1. Будильник: меню питания — «Назад»; настройки и установщик — экран будильника поверх.
         if (wake.guardOn && wake.guarding) {
             if (isPowerMenu(pkg, cls, text, root)) { pressBack { bringAlarmBack() }; return }
-            if (system) { cover { bringAlarmBack() }; return }
+            if (system) { cover(home = true) { bringAlarmBack() }; return }
         }
         if (!lock.configured) return
 
-        // 2. Учебный замок: чужое приложение — вечерняя учёба поверх него (без «Назад»/«Домой» — без мигания).
+        // 2. Учебный замок: чужое приложение — «Домой» (оно уходит в фон, видео и звук не идут) и вечерняя учёба.
+        // Рабочий стол разрешён, поэтому «Домой» не зацикливается.
         val lockedNow = StudyLock.locked && !lock.emergencyActive
         if (lockedNow && (system || !StudyLockRules.allowed(pkg, lock.allowed, alwaysAllowed()))) {
-            cover { openEvening() }
+            cover(home = true) { openEvening() }
             return
         }
 
@@ -115,12 +116,17 @@ class WakeGuard : AccessibilityService() {
         return homeSet
     }
 
-    /** Открыть наш экран поверх — не чаще раза в 1,5 секунды. */
-    private fun cover(action: () -> Unit) {
+    /** Убрать чужое окно «Домой» и открыть наш экран — не чаще раза в 1,5 секунды. */
+    private fun cover(home: Boolean, action: () -> Unit) {
         val now = System.currentTimeMillis()
         if (now - lastBlock < 1500) return
         lastBlock = now
-        action()
+        if (home) {
+            performGlobalAction(GLOBAL_ACTION_HOME)
+            main.postDelayed(action, 250)
+        } else {
+            action()
+        }
     }
 
     /** Закрыть системное окно (меню питания, диалог удаления) кнопкой «Назад», потом [then]. */

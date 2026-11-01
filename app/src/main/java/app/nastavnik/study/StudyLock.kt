@@ -74,11 +74,6 @@ class LockPrefs private constructor(private val p: SharedPreferences) {
         get() = p.getLong("emergency_at", 0L)
         set(v) = p.edit { putLong("emergency_at", v) }
     val emergencyActive: Boolean get() = System.currentTimeMillis() - emergencyAt < StudyLockRules.EMERGENCY_MINUTES * 60_000L
-
-    /** Последний расчёт «заблокировано» — для службы защиты (работает в том же процессе). */
-    var lockedCache: Boolean
-        get() = p.getBoolean("locked_cache", false)
-        set(v) = p.edit { putBoolean("locked_cache", v) }
 }
 
 /** Что сделано за вечер: конспекты пар и подготовка к завтрашним. Лежит в files/evening/<дата>.json. */
@@ -184,7 +179,6 @@ object StudyLock {
         val stillPending = if (lp.configured) StudyLockRules.pending(now, startFn, lp.since, lp.done) else emptyList()
         s = s.copy(locked = stillPending.isNotEmpty() && !lp.emergencyActive)
         locked = s.locked
-        lp.lockedCache = s.locked
         if (!s.locked) context.getSystemService(NotificationManager::class.java)?.cancel(NOTIFY)
         s
     }
@@ -265,16 +259,21 @@ object StudyLock {
         if (!StudyLockRules.emergencyAvailable(lp.emergencyAt, System.currentTimeMillis())) return false
         lp.emergencyAt = System.currentTimeMillis()
         locked = false
-        lp.lockedCache = false
         return true
     }
 
-    /** Приложения, которые открыты всегда: телефон, экстренные вызовы, клавиатура, рабочий стол, система. */
+    /**
+     * Приложения, которые открыты всегда: телефон, экстренные вызовы, клавиатура, рабочий стол, система —
+     * и системные помощники, без которых не работают разрешённые приложения: «Поделиться», выбор файла и фото,
+     * вход через Google.
+     */
     fun alwaysAllowed(context: Context): Set<String> {
         val out = mutableSetOf(
             context.packageName, "android", "com.android.systemui", "com.android.phone", "com.android.server.telecom",
             "com.android.emergency", "com.google.android.apps.safetyhub", "com.android.permissioncontroller",
             "com.google.android.permissioncontroller", "com.android.incallui", "com.google.android.dialer", "com.android.dialer",
+            "com.android.intentresolver", "com.android.documentsui", "com.google.android.documentsui",
+            "com.google.android.providers.media.module", "com.android.providers.media.module", "com.google.android.gms",
         )
         runCatching { context.getSystemService(TelecomManager::class.java)?.defaultDialerPackage }.getOrNull()?.let(out::add)
         runCatching { Telephony.Sms.getDefaultSmsPackage(context) }.getOrNull()?.let(out::add)
