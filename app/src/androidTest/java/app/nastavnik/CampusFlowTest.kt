@@ -21,7 +21,9 @@ import app.nastavnik.sync.AppSyncSource
 import app.nastavnik.sync.LocalItem
 import app.nastavnik.sync.SyncRecord
 import app.nastavnik.sync.SyncEngine
+import app.nastavnik.study.WakeAlarm
 import app.nastavnik.ui.MainActivity
+import app.nastavnik.ui.WakeActivity
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -181,6 +183,43 @@ class CampusFlowTest {
             screenshot("tablet_map_floor3")
         } finally {
             sc.close()
+        }
+    }
+
+    /** Будильник: время от первой пары завтра (10:15 − 45 сборы − 15 дорога), «Ложусь» — к концу цикла, экран звонка. */
+    @Test
+    fun wakeAlarmPlansAndRings() {
+        seedSchedule()
+        val st = ctx.app.settings
+        val tomorrow = LocalDate.now().plusDays(1)
+        try {
+            st.setWakeOn(true)
+            st.setWakeBedAt(0)
+            val plan = runBlocking { WakeAlarm.plan(ctx) }
+            assertNotNull("нет будильника", plan)
+            assertEquals(tomorrow.atTime(9, 15), plan!!.wake)
+            assertEquals(tomorrow.atTime(10, 15), plan.lessonAt)
+            assertEquals(tomorrow.minusDays(1).atTime(23, 30), plan.bedtime)
+            // Лёг в 23:30 → уснул 23:45 → конец 6-го цикла 8:45 — в пределах 30 минут до 9:15.
+            st.setWakeBedAt(WakeAlarm.ms(tomorrow.minusDays(1).atTime(23, 30)))
+            assertEquals(tomorrow.atTime(8, 45), runBlocking { WakeAlarm.plan(ctx) }!!.wake)
+            st.setWakeBedAt(0)
+
+            val sc = ActivityScenario.launch<WakeActivity>(Intent(ctx, WakeActivity::class.java).putExtra(WakeAlarm.EXTRA_TEST, true))
+            try {
+                assertNotNull(device.wait(Until.findObject(By.text("Проверка будильника")), 10000))
+                assertNotNull(device.wait(Until.findObject(By.textContains("Первая пара в 10:15")), 5000))
+                assertNotNull(device.findObject(By.text("Реши, чтобы выключить")))
+                SystemClock.sleep(800)
+                screenshot("wake_ring")
+                device.findObject(By.text("Выключить проверку")).click()
+                SystemClock.sleep(800)
+            } finally {
+                sc.close()
+            }
+        } finally {
+            st.setWakeOn(false)
+            st.setWakeBedAt(0)
         }
     }
 
