@@ -184,7 +184,7 @@ private fun MainPanel(s: SirenPrefs, onDone: () -> Unit) {
             // Нет ни задач, ни карточек «заполни пропуск», нейросеть не настроена — повторить 5 карточек
             // (а если карточек нет совсем — три примера подряд).
             t == null -> CardsFallback { solved = true; Siren.mainSolved(context) }
-            t != null -> {
+            else -> {
                 MathText(t.text, 17)
                 if (shown) MathText("Ответ: ${t.answer}", 15)
                 AppTextField(

@@ -418,7 +418,7 @@ class CampusFlowTest {
         val alarm = android.media.AudioManager.STREAM_ALARM
         runBlocking {
             ctx.app.db.cards().insertAll(
-                listOf(CardEntity(noteId = null, subject = "Сирена", topic = "Сирена", front = Learning.PROBLEM_PREFIX + "Сколько будет 7 + 5?", back = "\$12\$", dueAt = Long.MAX_VALUE / 2, createdAt = 0)),
+                listOf(CardEntity(noteId = null, subject = "Физика", topic = "Сирена", front = Learning.PROBLEM_PREFIX + "Сколько будет 7 + 5?", back = "\$12\$", dueAt = Long.MAX_VALUE / 2, createdAt = 0)),
             )
         }
         var sc: ActivityScenario<SirenActivity>? = null
