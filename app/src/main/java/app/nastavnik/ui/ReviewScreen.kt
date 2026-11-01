@@ -1,6 +1,13 @@
 package app.nastavnik.ui
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.key
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.expandVertically
 import androidx.compose.foundation.background
@@ -101,7 +108,7 @@ fun ReviewScreen(onBack: () -> Unit, onExample: () -> Unit) {
             ) {
                 Box(
                     Modifier
-                        .fillMaxWidth(if (total == 0) 0f else done.toFloat() / total)
+                        .fillMaxWidth(animateFloatAsState(if (total == 0) 0f else done.toFloat() / total, spring(dampingRatio = 0.8f, stiffness = 200f), label = "reviewProgress").value)
                         .height(6.dp)
                         .clip(CircleShape)
                         .background(Brand.Accent),
@@ -110,37 +117,57 @@ fun ReviewScreen(onBack: () -> Unit, onExample: () -> Unit) {
             Text("$done из $total", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
 
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .glass(RoundedCornerShape(28.dp))
-                .padding(horizontal = 28.dp, vertical = 24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(18.dp),
-        ) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    card.topic,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    modifier = Modifier.weight(1f),
-                )
-                BoxDots(card.box)
-            }
-            // Вопрос (и ответ) — по центру карточки, а не прижаты к теме сверху.
+        // Карточка переворачивается, когда открываешь ответ; новая карточка влетает справа.
+        val flip by animateFloatAsState(if (revealed) 1f else 0f, spring(dampingRatio = 0.78f, stiffness = 170f), label = "flip")
+        key(card.uid) {
+            val arrive = remember { Animatable(0f) }
+            LaunchedEffect(Unit) { arrive.animateTo(1f, spring(dampingRatio = 0.8f, stiffness = 260f)) }
             Column(
                 Modifier
                     .fillMaxWidth()
-                    .heightIn(min = 220.dp),
+                    .graphicsLayer {
+                        rotationY = flip * 180f
+                        cameraDistance = 14f * density
+                        alpha = arrive.value.coerceIn(0f, 1f)
+                        translationX = (1f - arrive.value) * 60.dp.toPx()
+                    }
+                    .glass(RoundedCornerShape(28.dp))
+                    .animateContentSize(spring(dampingRatio = 0.85f, stiffness = 300f))
+                    .padding(horizontal = 28.dp, vertical = 24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
+                verticalArrangement = Arrangement.spacedBy(18.dp),
             ) {
-                RichText(card.front, sizePx = 24, center = true)
-                AnimatedVisibility(revealed, enter = fadeIn() + expandVertically()) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                        HorizontalDivider(Modifier.widthIn(max = 240.dp), color = MaterialTheme.colorScheme.outlineVariant)
-                        RichText(card.back, sizePx = 19, center = true)
+                // Обратная сторона не должна быть зеркальной.
+                Column(
+                    Modifier.fillMaxWidth().graphicsLayer { rotationY = if (flip > 0.5f) 180f else 0f },
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(18.dp),
+                ) {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            card.topic,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            modifier = Modifier.weight(1f),
+                        )
+                        BoxDots(card.box)
+                    }
+                    // Вопрос (и ответ) — по центру карточки, а не прижаты к теме сверху.
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 220.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
+                    ) {
+                        RichText(card.front, sizePx = 24, center = true)
+                        if (flip > 0.5f) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                                HorizontalDivider(Modifier.widthIn(max = 240.dp), color = MaterialTheme.colorScheme.outlineVariant)
+                                RichText(card.back, sizePx = 19, center = true)
+                            }
+                        }
                     }
                 }
             }

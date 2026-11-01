@@ -95,6 +95,8 @@ fun HomeScreen(resumeTick: Int, go: (String) -> Unit, openNotebook: (Long) -> Un
     val week = remember(perDay, today) { Streaks.lastDays(perDay, today, 7) }
     val exam = remember(resumeTick) { context.app.study.nextExam() }
 
+    val enterOrder = remember { java.util.concurrent.atomic.AtomicInteger(0) }
+    androidx.compose.runtime.CompositionLocalProvider(LocalEnterOrder provides enterOrder) {
     Box(
         Modifier
             .fillMaxSize()
@@ -152,6 +154,7 @@ fun HomeScreen(resumeTick: Int, go: (String) -> Unit, openNotebook: (Long) -> Un
 
             }
         }
+    }
     }
 }
 
@@ -329,7 +332,7 @@ private fun RecentNotebook(m: NotebookMeta, onOpen: () -> Unit) {
             Modifier
                 .fillMaxWidth()
                 .aspectRatio(1f / 1.25f)
-                .glass(RoundedCornerShape(20.dp), 8.dp, strong = true)
+                .enter().glass(RoundedCornerShape(20.dp), 8.dp, strong = true)
                 .padding(6.dp)
                 .clip(RoundedCornerShape(15.dp))
                 .background(Color(PageDrawer.PAPER))
@@ -383,7 +386,7 @@ private fun MentorStrip(resumeTick: Int, tick: Int, canStart: Boolean, changed: 
     Column(
         Modifier
             .fillMaxWidth()
-            .glass(RoundedCornerShape(26.dp), 10.dp)
+            .enter().glass(RoundedCornerShape(26.dp), 10.dp)
             .padding(18.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -458,7 +461,7 @@ private fun TodayPanel(due: Int, streak: Int, week: List<Int>, exam: Exam?, go: 
     Column(
         Modifier
             .fillMaxWidth()
-            .glass(RoundedCornerShape(26.dp), 12.dp)
+            .enter().glass(RoundedCornerShape(26.dp), 12.dp)
             .padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
@@ -553,7 +556,7 @@ private fun SectionsList(go: (String) -> Unit) {
     Column(
         Modifier
             .fillMaxWidth()
-            .glass(RoundedCornerShape(26.dp), 8.dp)
+            .enter().glass(RoundedCornerShape(26.dp), 8.dp)
             .padding(vertical = 6.dp),
     ) {
         val rows = listOf(

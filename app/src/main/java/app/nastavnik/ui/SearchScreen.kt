@@ -130,7 +130,7 @@ private fun HitRow(h: Hit, expanded: Boolean, onClick: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
-            .glass(RoundedCornerShape(20.dp), 6.dp)
+            .enter().glass(RoundedCornerShape(20.dp), 6.dp)
             .clip(RoundedCornerShape(20.dp))
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 14.dp),

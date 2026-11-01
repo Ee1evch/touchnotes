@@ -114,6 +114,31 @@ fun Modifier.paperBackdrop(): Modifier = drawBehind {
     }
 }
 
+/** Счётчик появлений на экране: каждая следующая карточка появляется чуть позже — каскадом. */
+val LocalEnterOrder = androidx.compose.runtime.staticCompositionLocalOf<java.util.concurrent.atomic.AtomicInteger?> { null }
+
+/**
+ * Появление: карточка проявляется и чуть «всплывает» снизу с пружинкой. На одном экране — каскадом
+ * (по 45 мс друг за другом, не дольше 0,4 с), чтобы взгляд шёл сверху вниз. Только при первом показе.
+ */
+@Composable
+fun Modifier.enter(): Modifier {
+    val order = LocalEnterOrder.current
+    val index = remember { order?.getAndIncrement() ?: 0 }
+    val progress = remember { androidx.compose.animation.core.Animatable(0f) }
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay((index * 45L).coerceAtMost(400L))
+        progress.animateTo(1f, spring(dampingRatio = 0.82f, stiffness = 260f))
+    }
+    return this.graphicsLayer {
+        val p = progress.value
+        alpha = p.coerceIn(0f, 1f)
+        translationY = (1f - p) * 28.dp.toPx()
+        val k = 0.97f + 0.03f * p
+        scaleX = k; scaleY = k
+    }
+}
+
 /** Кнопка «проседает» под пальцем — мягко, с пружинкой. */
 @Composable
 fun Modifier.pressable(source: MutableInteractionSource): Modifier {
@@ -129,6 +154,8 @@ fun ScreenScaffold(
     scrollable: Boolean = true,
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    val order = remember { java.util.concurrent.atomic.AtomicInteger(0) }
+    androidx.compose.runtime.CompositionLocalProvider(LocalEnterOrder provides order) {
     Scaffold(modifier = Modifier.paperBackdrop(), containerColor = Color.Transparent, contentColor = MaterialTheme.colorScheme.onSurface) { inner ->
         val base = Modifier
             .fillMaxSize()
@@ -151,6 +178,7 @@ fun ScreenScaffold(
                 content()
             }
         }
+    }
     }
 }
 
@@ -176,6 +204,7 @@ fun SectionCard(title: String?, content: @Composable ColumnScope.() -> Unit) {
         Column(
             Modifier
                 .fillMaxWidth()
+                .enter()
                 .glass()
                 .padding(horizontal = 20.dp, vertical = 18.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),

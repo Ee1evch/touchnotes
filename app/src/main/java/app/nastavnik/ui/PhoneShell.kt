@@ -187,7 +187,7 @@ private fun TodayTab(resumeTick: Int, go: (String) -> Unit, onRoom: (String) -> 
         val perDay = remember(events) { events.groupingBy { Streaks.day(it.at) }.eachCount() }
         val streak = remember(perDay, today) { Streaks.current(perDay.keys, today) }
         Row(
-            Modifier.fillMaxWidth().glass(RoundedCornerShape(24.dp), 10.dp).clickable { go(MainActivity.SCREEN_REVIEW) }.padding(18.dp),
+            Modifier.fillMaxWidth().enter().glass(RoundedCornerShape(24.dp), 10.dp).clickable { go(MainActivity.SCREEN_REVIEW) }.padding(18.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
@@ -235,7 +235,7 @@ private fun SyncDot(running: Boolean, ok: Boolean, onClick: () -> Unit) {
 @Composable
 internal fun NowCard(lessons: List<Lesson>?, tomorrow: List<Lesson>, now: LocalDateTime, hasGroup: Boolean, onRoom: (String) -> Unit, onSchedule: () -> Unit) {
     Column(
-        Modifier.fillMaxWidth().glass(RoundedCornerShape(26.dp), 12.dp).padding(18.dp),
+        Modifier.fillMaxWidth().enter().glass(RoundedCornerShape(26.dp), 12.dp).padding(18.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         if (!hasGroup) {
@@ -279,7 +279,7 @@ private fun StudyTab(resumeTick: Int, go: (String) -> Unit) {
     val total by remember { context.app.db.cards().observeCount() }.collectAsStateWithLifecycle(initialValue = 0)
     ScreenScaffold(title = "Учёба", onBack = null) {
         Column(
-            Modifier.fillMaxWidth().glass(RoundedCornerShape(26.dp), 12.dp).padding(20.dp),
+            Modifier.fillMaxWidth().enter().glass(RoundedCornerShape(26.dp), 12.dp).padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Text("Карточки", style = MaterialTheme.typography.titleMedium)
@@ -291,7 +291,7 @@ private fun StudyTab(resumeTick: Int, go: (String) -> Unit) {
                 InkButton(if (due > 0) "Повторить" else "Открыть", icon = R.drawable.ic_cards) { go(MainActivity.SCREEN_REVIEW) }
             }
         }
-        Column(Modifier.fillMaxWidth().glass(RoundedCornerShape(26.dp), 8.dp).padding(vertical = 6.dp)) {
+        Column(Modifier.fillMaxWidth().enter().glass(RoundedCornerShape(26.dp), 8.dp).padding(vertical = 6.dp)) {
             val rows = listOf(
                 Triple(R.drawable.ic_chart, "Прогресс", "Серия и темы с ошибками") to MainActivity.SCREEN_PROGRESS,
                 Triple(R.drawable.ic_bell, "Напоминания", "Дедлайны и дела на всех устройствах") to MainActivity.SCREEN_REMINDERS,

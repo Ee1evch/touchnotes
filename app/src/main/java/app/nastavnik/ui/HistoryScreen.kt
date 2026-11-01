@@ -119,7 +119,7 @@ private fun ConversationList(onOpen: (Long) -> Unit) {
         Column(
             Modifier
                 .fillMaxWidth()
-                .glass(),
+                .enter().glass(),
         ) {
             group.forEachIndexed { i, c: ConversationSummary ->
                 val current = c.id == active
@@ -169,7 +169,7 @@ private fun Empty(icon: Int, title: String, text: String) {
     Column(
         Modifier
             .fillMaxWidth()
-            .glass()
+            .enter().glass()
             .padding(horizontal = 28.dp, vertical = 36.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -245,7 +245,7 @@ private fun ConversationDetail(id: Long, onBack: () -> Unit) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
-                    .glass(),
+                    .enter().glass(),
                 factory = { ctx ->
                     WebView(ctx).apply {
                         WebViews.setupLocal(this)
@@ -303,7 +303,7 @@ private fun CleanNoteList(onCleanReady: () -> Unit) {
         Column(
             Modifier
                 .fillMaxWidth()
-                .glass()
+                .enter().glass()
                 .padding(18.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {

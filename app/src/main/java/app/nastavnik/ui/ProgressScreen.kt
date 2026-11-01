@@ -63,7 +63,7 @@ fun ProgressScreen(onBack: () -> Unit, onReview: () -> Unit) {
             Column(
                 Modifier
                     .fillMaxWidth()
-                    .glass()
+                    .enter().glass()
                     .padding(28.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
@@ -95,7 +95,7 @@ private fun StreakCard(s: ProgressSummary, todayActive: Boolean) {
     Row(
         Modifier
             .fillMaxWidth()
-            .glass(RoundedCornerShape(28.dp), 14.dp)
+            .enter().glass(RoundedCornerShape(28.dp), 14.dp)
             .padding(26.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(20.dp),
@@ -138,7 +138,7 @@ private fun ActivityChart(days: List<Int>, now: Long) {
     Column(
         Modifier
             .fillMaxWidth()
-            .glass()
+            .enter().glass()
             .padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
@@ -152,6 +152,9 @@ private fun ActivityChart(days: List<Int>, now: Long) {
                 color = MaterialTheme.colorScheme.onSurface,
             )
         }
+        // Столбики вырастают по очереди слева направо.
+        val grow = remember { androidx.compose.animation.core.Animatable(0f) }
+        androidx.compose.runtime.LaunchedEffect(Unit) { grow.animateTo(1f, androidx.compose.animation.core.tween(900, easing = androidx.compose.animation.core.FastOutSlowInEasing)) }
         Canvas(
             Modifier
                 .fillMaxWidth()
@@ -174,7 +177,8 @@ private fun ActivityChart(days: List<Int>, now: Long) {
                     // Пустой день — тонкая серая чёрточка у основания.
                     drawRoundRect(track, Offset(x, size.height - 3.dp.toPx()), Size(w, 3.dp.toPx()), CornerRadius(r, r))
                 } else {
-                    val h = (size.height * v / max).coerceAtLeast(6.dp.toPx())
+                    val t = ((grow.value * 1.5f) - i * 0.5f / days.size).coerceIn(0f, 1f)
+                    val h = ((size.height * v / max).coerceAtLeast(6.dp.toPx())) * t
                     val color = if (i == selected) accent else accent.copy(alpha = 0.45f)
                     // Скругление только сверху: нижний край ровно на основании.
                     drawRoundRect(color, Offset(x, size.height - h), Size(w, h), CornerRadius(r, r))
@@ -202,7 +206,7 @@ private fun ActivityChart(days: List<Int>, now: Long) {
 private fun Stat(value: String, label: String, icon: Int, modifier: Modifier, onClick: (() -> Unit)? = null) {
     Column(
         modifier
-            .glass()
+            .enter().glass()
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
             .padding(18.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),

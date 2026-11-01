@@ -202,7 +202,7 @@ private fun VariantTab(topic: String, noteId: Long?, onOpenNotebook: (Long) -> U
             Modifier
                 .fillMaxWidth()
                 .bringIntoViewRequester(bring)
-                .glass(RoundedCornerShape(28.dp))
+                .enter().glass(RoundedCornerShape(28.dp))
                 .padding(horizontal = 22.dp, vertical = 20.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
@@ -309,7 +309,7 @@ private fun QuizTab(topic: String, noteId: Long?, onReview: () -> Unit, onSettin
         Column(
             Modifier
                 .fillMaxWidth()
-                .glass(RoundedCornerShape(28.dp))
+                .enter().glass(RoundedCornerShape(28.dp))
                 .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -365,7 +365,7 @@ private fun QuizTab(topic: String, noteId: Long?, onReview: () -> Unit, onSettin
     Column(
         Modifier
             .fillMaxWidth()
-            .glass(RoundedCornerShape(28.dp))
+            .enter().glass(RoundedCornerShape(28.dp))
             .padding(horizontal = 22.dp, vertical = 22.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -516,7 +516,7 @@ private fun ExamsTab(onPrepare: (String) -> Unit) {
         Row(
             Modifier
                 .fillMaxWidth()
-                .glass()
+                .enter().glass()
                 .padding(horizontal = 18.dp, vertical = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(14.dp),
@@ -612,7 +612,7 @@ private fun Hint(title: String, text: String) {
     Column(
         Modifier
             .fillMaxWidth()
-            .glass()
+            .enter().glass()
             .padding(horizontal = 20.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
