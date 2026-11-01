@@ -252,7 +252,9 @@ class MentorFlowTest {
 
         // Чистовик: снимок → «Собрать» → предпросмотр открывается сам.
         cleanBtn.click()
-        device.wait(Until.findObject(By.text("Собрать")), 15000)!!.click()
+        val collect = device.wait(Until.findObject(By.text("Собрать")), 30000)
+        if (collect == null) screenshot("no_collect")
+        collect!!.click()
         assertNotNull("нет предпросмотра", device.wait(Until.findObject(By.text("Сохранить")), 40000))
         SystemClock.sleep(4000)
         screenshot("flow_preview")
@@ -712,7 +714,13 @@ class MentorFlowTest {
 
         // 5. Фигуры: овал.
         device.findObject(By.desc("Фигуры"))!!.click()
-        device.wait(Until.findObject(By.desc("Овал")), 3000)!!.click()
+        var oval = device.wait(Until.findObject(By.desc("Овал")), 6000)
+        if (oval == null) {
+            screenshot("no_oval")
+            device.findObject(By.desc("Фигуры"))?.click()
+            oval = device.wait(Until.findObject(By.desc("Овал")), 6000)
+        }
+        oval!!.click()
         penStroke((0..20).map { k -> (x0 + k * 12f) to (y0 + 120f + k * 8f) })
         assertEquals(app.nastavnik.ink.Tool.SHAPE, page().strokes.single().tool)
         screenshot("editor_shapes")

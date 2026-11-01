@@ -309,7 +309,8 @@ fun Swatch(color: Color, selected: Boolean, description: String, marker: Boolean
             .semantics { contentDescription = description },
         contentAlignment = Alignment.Center,
     ) {
-        Box(Modifier.size(size).clip(shape).background(color).border(1.dp, Brand.Line, shape))
+        // На тёмной панели тёмные цвета обведены светлее — чтобы чёрная ручка не терялась.
+        Box(Modifier.size(size).clip(shape).background(color).border(1.dp, if (Brand.dark) Brand.Ink.copy(alpha = 0.35f) else Brand.Line, shape))
         if (ring > 0f) {
             Box(
                 Modifier
