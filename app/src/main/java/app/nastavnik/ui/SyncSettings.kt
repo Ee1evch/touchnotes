@@ -31,6 +31,8 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.nastavnik.app
+import app.nastavnik.schedule.Lesson
+import app.nastavnik.schedule.ScheduleText
 import app.nastavnik.study.Alarms
 import app.nastavnik.sync.WebDavStore
 import app.nastavnik.sync.YandexDiskStore
@@ -189,7 +191,7 @@ fun LanguageSection() {
     val app = context.app
     var chosen by remember { mutableStateOf(app.settings.languageTeacher()) }
     val options by androidx.compose.runtime.produceState(emptyList<String>()) {
-        value = app.schedule.languageTeachers(app.nastavnik.schedule.ScheduleText.monday(java.time.LocalDate.now()))
+        value = app.schedule.languageTeachers(ScheduleText.monday(java.time.LocalDate.now()))
     }
     SectionCard("Английский") {
         FieldLabel(
@@ -209,7 +211,7 @@ fun LanguageSection() {
             }
             ChipButton("Все", selected = chosen.isBlank() || chosen == "*") { pick("*") }
             options.forEachIndexed { i, t ->
-                ChipButton("Группа ${i + 1} · ${app.nastavnik.schedule.Lesson.shortName(t)}", selected = t == chosen) { pick(t) }
+                ChipButton("Группа ${i + 1} · ${Lesson.shortName(t)}", selected = t == chosen) { pick(t) }
             }
         }
     }
