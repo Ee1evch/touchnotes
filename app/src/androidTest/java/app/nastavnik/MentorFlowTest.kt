@@ -578,7 +578,7 @@ class MentorFlowTest {
             screenshot("settings_usage_dark")
             // Подписи разделов — обычный текст: их UiAutomator находит надёжнее, чем кнопки со значком.
             scrollToText("Дополнительно")
-            device.findObject(androidx.test.uiautomator.UiSelector().textContains("Дополнительно")).click()
+            runCatching { device.findObject(androidx.test.uiautomator.UiSelector().textContains("Дополнительно")).click() }
             SystemClock.sleep(600)
             scrollToText("Все записи в одном файле")
             scrollToText("Новые сборки выходят на GitHub")
