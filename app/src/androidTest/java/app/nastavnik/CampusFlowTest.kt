@@ -155,9 +155,18 @@ class CampusFlowTest {
             SystemClock.sleep(500)
 
             // Напоминание через «Учёба» → «Напоминания».
-            device.findObject(By.desc("Учёба")).click()
-            // «Напоминания» есть и на «Сегодня» — жмём строку вкладки «Учёба» по её подписи.
-            device.wait(Until.findObject(By.text("Дедлайны и дела на всех устройствах")), 8000)!!.click()
+            // «Напоминания» есть и на «Сегодня» — жмём строку вкладки «Учёба» по её подписи. Сразу после шторки
+            // нажатие на вкладку иногда теряется — нажимаем ещё раз, пока вкладка не откроется.
+            var row: androidx.test.uiautomator.UiObject2? = null
+            repeat(3) {
+                if (row == null) {
+                    device.findObject(By.desc("Учёба"))?.click()
+                    row = device.wait(Until.findObject(By.text("Дедлайны и дела на всех устройствах")), 5000)
+                }
+            }
+            if (row == null) screenshot("study_tab_missing")
+            assertNotNull("вкладка «Учёба» не открылась", row)
+            row!!.click()
             device.wait(Until.findObject(By.text("Новое")), 8000)!!.click()
             val field = device.wait(Until.findObject(By.clazz("android.widget.EditText")), 8000)
             field.text = "Сдать лабу по физике"

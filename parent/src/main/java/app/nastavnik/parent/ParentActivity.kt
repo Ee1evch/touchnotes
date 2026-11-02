@@ -284,7 +284,7 @@ private fun DayTitle(date: LocalDate, lessons: List<Lesson>, journal: app.nastav
     }.joinToString(" · ")
     Column(Modifier.padding(top = 8.dp, start = 4.dp)) {
         Text(name, style = MaterialTheme.typography.titleLarge)
-        if (sub.isNotBlank()) Text(sub, style = MaterialTheme.typography.bodySmall, color = if (missed > 0) Tone.Bad else MaterialTheme.colorScheme.onSurfaceVariant)
+        if (sub.isNotBlank()) Text(sub, style = MaterialTheme.typography.bodySmall, color = when { unexcused > 0 -> Tone.Bad; missed > 0 -> Tone.Warn; else -> MaterialTheme.colorScheme.onSurfaceVariant })
     }
 }
 
@@ -395,7 +395,7 @@ private fun GradesSummary(j: app.nastavnik.grades.LksJournal) {
     Card {
         Row(Modifier.padding(20.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             Stat(avg?.let { "%.2f".format(ru, it) } ?: "—", "средний балл", avg?.let { Tone.mark("%.1f".format(Locale.US, it)) } ?: MaterialTheme.colorScheme.onSurface, Modifier.weight(1f))
-            Stat("$missed", if (valid > 0) "пропусков, $valid уваж." else plural(missed, "пропуск", "пропуска", "пропусков"), if (missed - valid > 0) Tone.Bad else Tone.Ok, Modifier.weight(1f))
+            Stat("$missed", plural(missed, "пропуск", "пропуска", "пропусков") + if (valid > 0) ", $valid по уваж." else "", if (missed - valid > 0) Tone.Bad else Tone.Ok, Modifier.weight(1f))
             Stat("${j.lessons.size}", plural(j.lessons.size, "предмет", "предмета", "предметов"), MaterialTheme.colorScheme.onSurface, Modifier.weight(1f))
         }
     }
@@ -415,6 +415,8 @@ private fun SubjectCard(s: LksLesson) {
     var open by rememberSaveable(s.title) { mutableStateOf(false) }
     val marks = s.entries.flatMap { e -> e.marks.map { e.date to it.value } }
     val missed = s.entries.count { it.absent }
+    // Красным — только пропуски без уважительной причины.
+    val unexcused = s.entries.count { it.absent && it.absentValid != true }
     Card(Modifier.animateContentSize().clickable { open = !open }) {
         Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -425,7 +427,7 @@ private fun SubjectCard(s: LksLesson) {
                         missed.takeIf { it > 0 }?.let { "$it ${plural(it, "пропуск", "пропуска", "пропусков")}" },
                         s.rating?.takeIf { it.isNotBlank() }?.let { "рейтинг $it" },
                     ).joinToString(" · ")
-                    Text(sub, style = MaterialTheme.typography.bodySmall, color = if (missed > 0) Tone.Bad else MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(sub, style = MaterialTheme.typography.bodySmall, color = when { unexcused > 0 -> Tone.Bad; missed > 0 -> Tone.Warn; else -> MaterialTheme.colorScheme.onSurfaceVariant })
                 }
                 val avg = s.avgMark?.takeIf { it.isNotBlank() }
                 if (avg != null) Text(avg, style = MaterialTheme.typography.headlineMedium.copy(fontSize = 28.sp), color = Tone.mark(avg))
