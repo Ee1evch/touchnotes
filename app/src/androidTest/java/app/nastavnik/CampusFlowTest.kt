@@ -444,9 +444,19 @@ class CampusFlowTest {
         val nm = ctx.getSystemService(android.app.NotificationManager::class.java)
         fun live() = nm.activeNotifications.firstOrNull { it.id == LiveNotifications.LESSON_ID }?.notification
         fun shot(name: String, title: String) {
-            device.openNotification()
-            assertNotNull("нет «$title» в шторке", device.wait(Until.findObject(By.text(title)), 8000))
-            SystemClock.sleep(1000)
+            // Шторка после обновления уведомления иногда закрывается сама — открываем, пока заголовок не виден.
+            var seen = false
+            repeat(3) {
+                if (!seen) {
+                    device.openNotification()
+                    SystemClock.sleep(1000)
+                    seen = device.wait(Until.findObject(By.text(title)), 4000) != null
+                }
+            }
+            assertTrue("нет «$title» в шторке", seen)
+            // Развернуть уведомление, чтобы на снимке были все строки.
+            device.findObject(By.text(title))?.parent?.parent?.findObject(By.res("android:id/expand_button"))?.click()
+            SystemClock.sleep(800)
             screenshot(name)
             device.executeShellCommand("cmd statusbar collapse")
             SystemClock.sleep(600)
