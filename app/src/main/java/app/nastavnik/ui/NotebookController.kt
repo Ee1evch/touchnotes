@@ -46,13 +46,17 @@ import kotlin.math.abs
  * Всё, что происходит в открытой тетради: страницы, сохранение, инструменты и наставник, который видит
  * текущую страницу (с номерами строк) и остальные страницы тетради как контекст.
  */
-/** На какой странице открыть тетрадь (одноразово): тетрадь → страница. */
+/**
+ * На какой странице открыть тетрадь: тетрадь → страница. Действует 15 секунд после [set] — экран тетради при переходе
+ * может собраться дважды, и оба раза должен открыться на этой странице.
+ */
 object NotebookStart {
-    @Volatile private var target: Pair<Long, Long>? = null
+    @Volatile private var target: Triple<Long, Long, Long>? = null
 
-    fun set(notebookId: Long, pageId: Long) { target = notebookId to pageId }
+    fun set(notebookId: Long, pageId: Long) { target = Triple(notebookId, pageId, System.currentTimeMillis()) }
 
-    fun take(notebookId: Long): Long? = target?.takeIf { it.first == notebookId }?.second?.also { target = null }
+    fun take(notebookId: Long): Long? =
+        target?.takeIf { it.first == notebookId && System.currentTimeMillis() - it.third < 15_000L }?.second
 }
 
 class NotebookController(val app: NastavnikApp, val notebookId: Long, private val scope: CoroutineScope) : InkView.Listener {

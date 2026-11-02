@@ -537,6 +537,7 @@ class CampusFlowTest {
         val before = runBlocking { StudyLock.status(ctx) }
         assertTrue("ДЗ не в вечерней учёбе", before.homework.any { it.first.startsWith("Математический анализ") && !it.second })
 
+        ctx.app.settings.setEditorTipsShown()
         val sc = ActivityScenario.launch<MainActivity>(Intent(ctx, MainActivity::class.java).putExtra(MainActivity.EXTRA_SCREEN, MainActivity.SCREEN_HOMEWORK))
         try {
             assertNotNull("нет экрана «Домашка»", device.wait(Until.findObject(By.text("Домашка")), 10000))
@@ -544,7 +545,13 @@ class CampusFlowTest {
             SystemClock.sleep(800)
             screenshot("homework_list")
             device.findObject(By.text("Решать")).click()
-            assertNotNull("нет плашки ДЗ в тетради", device.wait(Until.findObject(By.textStartsWith("ДЗ · Математический анализ · № 245")), 15000))
+            val bar = device.wait(Until.findObject(By.textStartsWith("ДЗ · Математический анализ · № 245")), 15000)
+            if (bar == null) {
+                val t = Homeworks.get(ctx, hw.id)!!.tasks.first()
+                println("HWDIAG task nb=${t.notebookId} page=${t.pageId} pages=${ctx.app.notebooks.store.meta(t.notebookId)?.pages}")
+                screenshot("homework_page_missing")
+            }
+            assertNotNull("нет плашки ДЗ в тетради", bar)
             assertNotNull("нет кнопки проверки", device.findObject(By.text("Готово — проверь")))
             SystemClock.sleep(1200)
             screenshot("homework_page")
