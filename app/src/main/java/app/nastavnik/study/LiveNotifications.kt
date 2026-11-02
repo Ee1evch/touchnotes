@@ -37,6 +37,7 @@ import java.time.ZoneId
 /**
  * Живое уведомление учебного дня — несколько видов и способов обновления на выбор (Настройки → Живое уведомление):
  *  - «Минимум»: одна строка и отсчёт;
+ *  - «Большие цифры»: только время крупно, полоса одной пары и аудитория (свой макет — на Android 16 не «живое»);
  *  - «Полоса дня»: весь день полосой (пары цветом по типу, перемены серые), что дальше, «пара N из M»;
  *  - «Своя карточка»: свой макет — полоса цвета пары, крупный отсчёт, аудитория в «таблетке» (на Android 16 не
  *    «живое»: свои макеты система не продвигает);
@@ -58,6 +59,7 @@ object LiveNotifications {
 
     enum class Design(val id: String, val label: String, val hint: String) {
         MINIMAL("minimal", "Минимум", "Одна строка: пара, аудитория и отсчёт"),
+        BIG("big", "Большие цифры", "Только время крупно, полоса пары и аудитория — на Android 16 не «живое»"),
         TIMELINE("timeline", "Полоса дня", "Весь день полосой, что дальше, «пара 2 из 4»"),
         CARD("card", "Своя карточка", "Цвет пары, крупный отсчёт, аудитория — красивее, но на Android 16 не «живое»"),
         MOMENTS("moments", "Только моменты", "Без постоянного уведомления: «скоро пара» и «перемена»"),
@@ -170,6 +172,20 @@ object LiveNotifications {
         }
         when (design) {
             Design.MINIMAL -> b.setContentTitle(title)
+            Design.BIG -> {
+                // Свёрнутое — цифры поменьше (по высоте свёрнутого уведомления), развёрнутое — крупно.
+                fun big(sp: Float) = RemoteViews(context.packageName, R.layout.live_big).apply {
+                    setChronometer(R.id.live_big_clock, SystemClock.elapsedRealtime() + (ms(target) - System.currentTimeMillis()), null, true)
+                    setChronometerCountDown(R.id.live_big_clock, true)
+                    setTextViewTextSize(R.id.live_big_clock, android.util.TypedValue.COMPLEX_UNIT_SP, sp)
+                    if (focus.classroom.isNullOrBlank()) setViewVisibility(R.id.live_big_room, View.GONE) else setTextViewText(R.id.live_big_room, focus.classroom)
+                    // Полоса одной пары: сколько прошло; до пары и на перемене — пустая.
+                    val total = Duration.between(start, end).toMinutes().toInt().coerceAtLeast(1)
+                    val passed = if (s.phase == DayTimeline.Phase.LESSON) Duration.between(start, LocalDateTime.now()).toMinutes().toInt().coerceIn(0, total) else 0
+                    setProgressBar(R.id.live_big_progress, total, passed, false)
+                }
+                b.setStyle(Notification.DecoratedCustomViewStyle()).setCustomContentView(big(30f)).setCustomBigContentView(big(52f))
+            }
             Design.CARD -> {
                 val rv = RemoteViews(context.packageName, R.layout.live_card)
                 rv.setInt(R.id.live_stripe, "setColorFilter", color(focus.type))
@@ -192,8 +208,8 @@ object LiveNotifications {
                 b.addAction(Notification.Action.Builder(null, "Расписание", open(context)).build())
             }
         }
-        // Просьба показать как «живое» (Android 16+) — кроме своего макета.
-        if (design != Design.CARD) b.extras.putBoolean("android.requestPromotedOngoing", true)
+        // Просьба показать как «живое» (Android 16+) — кроме своих макетов.
+        if (design != Design.CARD && design != Design.BIG) b.extras.putBoolean("android.requestPromotedOngoing", true)
         // «Компаньон» на перемене: карточка по следующей паре — ответ и «Помню / Не помню» прямо здесь.
         if (design == Design.COMPANION && companion != null) {
             val c = companion.card
