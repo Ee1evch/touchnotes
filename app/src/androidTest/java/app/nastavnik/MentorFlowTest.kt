@@ -472,7 +472,11 @@ class MentorFlowTest {
         // Итог появляется с анимацией — на медленном эмуляторе бывает дольше 6 секунд.
         assertNotNull("нет итога теста", findScrolling(By.text("1 из 2"), 15000))
         val before = runBlocking { ctx.app.db.cards().observeCount().first() }
-        findScrolling(By.text("Ошибки в карточки (1)"), 10000)!!.click()
+        // Кнопка на экране сразу под итогом — ждём на месте (листание тут ни к чему), потом уже листаем.
+        val toCards = device.wait(Until.findObject(By.textStartsWith("Ошибки в карточки")), 8000) ?: findScrolling(By.textStartsWith("Ошибки в карточки"), 10000)
+        assertNotNull("нет кнопки «Ошибки в карточки»", toCards)
+        assertEquals("Ошибки в карточки (1)", toCards!!.text)
+        toCards.click()
         assertNotNull(findScrolling(By.text("Повторить карточки"), 6000))
         assertEquals(before + 1, runBlocking { ctx.app.db.cards().observeCount().first() })
         screenshot("quiz_result")
