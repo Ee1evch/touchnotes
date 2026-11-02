@@ -121,7 +121,12 @@ private fun ParentRoot() {
         SettingsScreen(
             repo = repo,
             first = !configured,
-            onDone = { configured = true; settings = false; scope.launch { repo.refresh() } },
+            onDone = {
+                // Первое подключение обновит LaunchedEffect(configured); правка настроек — обновляем сами.
+                val was = configured
+                configured = true; settings = false
+                if (was) scope.launch { repo.refresh() }
+            },
             onBack = if (configured) ({ settings = false }) else null,
             onDisconnect = { repo.disconnect(); configured = false; settings = false },
         )

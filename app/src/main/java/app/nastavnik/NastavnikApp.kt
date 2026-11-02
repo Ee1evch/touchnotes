@@ -23,6 +23,7 @@ import app.nastavnik.study.WakePrefs
 import app.nastavnik.ui.Palettes
 import app.nastavnik.schedule.ScheduleRepo
 import app.nastavnik.sync.SyncManager
+import app.nastavnik.grades.GradesJob
 import app.nastavnik.grades.GradesRepo
 import app.nastavnik.study.Speaker
 import app.nastavnik.study.StudyRepo
@@ -125,6 +126,7 @@ class NastavnikApp : Application() {
         Palettes.installWallpaper(this)
         Reminders.schedule(this)
         Alarms.rescheduleAll(this)
+        GradesJob.schedule(this)
     }
 
     private fun createChannels() {

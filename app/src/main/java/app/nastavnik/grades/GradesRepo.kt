@@ -110,6 +110,8 @@ class GradesRepo(private val context: Context, private val settings: SettingsRep
         }
         _journal.value = j
         saveLks(LksClient.toSnapshot(j))
+        // Свежий журнал — сразу в облако: планшет и родитель увидят оценки, не дожидаясь следующего открытия.
+        (context.applicationContext as? NastavnikApp)?.sync?.soon()
     }
 
     suspend fun loadJournal() = withContext(Dispatchers.IO) {

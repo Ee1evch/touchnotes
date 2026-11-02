@@ -116,6 +116,12 @@
             android:taskAffinity="app.nastavnik.toggle"
             android:theme="@style/Theme.Nastavnik.Invisible" />
 
+        <!-- Раз в 3 часа: журнал ЛКС и синхронизация (оценки — на планшет и родителю). -->
+        <service
+            android:name=".grades.GradesJob"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
+
         <service
             android:name=".overlay.MentorTileService"
             android:exported="true"
