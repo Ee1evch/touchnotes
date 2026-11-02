@@ -86,10 +86,21 @@ class StudentFlowTest {
             SystemClock.sleep(600)
             screenshot("student_grades")
             device.findObject(By.desc("Настройки")).click()
-            assertNotNull("нет «Тихо на парах»", device.wait(Until.findObject(By.text("Тихо на парах")), 8000))
-            assertNotNull(device.findObject(By.text("Открыть оформление")))
+            assertNotNull("нет оформления", device.wait(Until.findObject(By.text("Открыть оформление")), 8000))
             SystemClock.sleep(600)
             screenshot("student_settings")
+            // «Тихо на парах» — ниже, листаем.
+            var quiet = device.findObject(By.text("Тихо на парах"))
+            repeat(6) {
+                if (quiet == null) {
+                    device.swipe(device.displayWidth / 2, (device.displayHeight * 0.75).toInt(), device.displayWidth / 2, (device.displayHeight * 0.3).toInt(), 40)
+                    quiet = device.wait(Until.findObject(By.text("Тихо на парах")), 1500)
+                }
+            }
+            assertNotNull("нет «Тихо на парах»", quiet)
+            assertNull("в лёгкой версии нет выбора «Телефон / Планшет»", device.findObject(By.text("Планшет")))
+            SystemClock.sleep(600)
+            screenshot("student_settings_more")
         } finally {
             sc.close()
         }

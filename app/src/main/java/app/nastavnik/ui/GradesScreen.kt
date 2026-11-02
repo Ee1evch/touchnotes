@@ -47,6 +47,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import app.nastavnik.BuildConfig
 import app.nastavnik.R
 import app.nastavnik.app
 import app.nastavnik.grades.CourseGrades
@@ -115,7 +116,7 @@ fun GradesScreen(onBack: (() -> Unit)?, onSettings: () -> Unit, onLks: () -> Uni
             Column(Modifier.fillMaxWidth().enter().glass(RoundedCornerShape(28.dp), 10.dp).padding(22.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("Подключи личный кабинет", style = MaterialTheme.typography.titleMedium)
                 Text("Войди в ЛКС один раз (почта, пароль и капча) — оценки появятся здесь и будут обновляться сами, о новых придёт уведомление.", style = MaterialTheme.typography.bodyMedium, color = Brand.InkSoft)
-                Text("Вход нужен только на одном устройстве: с облаком (Настройки → Синхронизация) оценки придут на остальные сами.", style = MaterialTheme.typography.bodySmall, color = Brand.InkSoft)
+                if (!BuildConfig.STUDENT) Text("Вход нужен только на одном устройстве: с облаком (Настройки → Синхронизация) оценки придут на остальные сами.", style = MaterialTheme.typography.bodySmall, color = Brand.InkSoft)
                 InkButton("Войти в ЛКС", onClick = onLks)
             }
             return@ScreenScaffold
