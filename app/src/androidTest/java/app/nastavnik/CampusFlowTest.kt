@@ -168,7 +168,17 @@ class CampusFlowTest {
                     row = device.wait(Until.findObject(By.text("Дедлайны и дела на всех устройствах")), 5000)
                 }
             }
-            if (row == null) screenshot("study_tab_missing")
+            if (row == null) row = device.findObject(By.textContains("Дедлайны"))
+            if (row == null) {
+                screenshot("study_tab_missing")
+                runCatching {
+                    val out = java.io.ByteArrayOutputStream()
+                    device.dumpWindowHierarchy(out)
+                    val xml = out.toString()
+                    println("TREEDIAG study: ${Regex("text=\"([^\"]+)\"").findAll(xml).map { it.groupValues[1] }.toList().take(80)}")
+                    println("TREEDIAG windows: ${Regex("<hierarchy|package=\"([^\"]+)\"").findAll(xml).map { it.groupValues[1] }.distinct().toList()}")
+                }
+            }
             assertNotNull("вкладка «Учёба» не открылась", row)
             row!!.click()
             device.wait(Until.findObject(By.text("Новое")), 8000)!!.click()
