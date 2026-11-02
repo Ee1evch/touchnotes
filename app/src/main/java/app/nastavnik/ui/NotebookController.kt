@@ -46,6 +46,15 @@ import kotlin.math.abs
  * Всё, что происходит в открытой тетради: страницы, сохранение, инструменты и наставник, который видит
  * текущую страницу (с номерами строк) и остальные страницы тетради как контекст.
  */
+/** На какой странице открыть тетрадь (одноразово): тетрадь → страница. */
+object NotebookStart {
+    @Volatile private var target: Pair<Long, Long>? = null
+
+    fun set(notebookId: Long, pageId: Long) { target = notebookId to pageId }
+
+    fun take(notebookId: Long): Long? = target?.takeIf { it.first == notebookId }?.second?.also { target = null }
+}
+
 class NotebookController(val app: NastavnikApp, val notebookId: Long, private val scope: CoroutineScope) : InkView.Listener {
     private val nbs = app.notebooks
     val ink = InkView(app).also {
@@ -154,7 +163,9 @@ class NotebookController(val app: NastavnikApp, val notebookId: Long, private va
         mentor.useConversation(m.conversationId)
         mentor.extraSystem = PracticePrompts.variantForMentor(m.tasks)
         applyTool()
-        showPage(0)
+        // Открыли ради конкретной страницы (задача ДЗ) — сразу на ней.
+        val start = NotebookStart.take(notebookId)?.let { id -> ps.indexOfFirst { it.id == id } }?.takeIf { it >= 0 } ?: 0
+        showPage(start)
         loaded = true
     }
 

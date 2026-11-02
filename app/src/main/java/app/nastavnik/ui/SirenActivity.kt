@@ -36,8 +36,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import app.nastavnik.R
 import app.nastavnik.app
 import app.nastavnik.data.CardEntity
+import app.nastavnik.study.HomeworkRules
+import app.nastavnik.study.Homeworks
 import app.nastavnik.study.Learning
 import app.nastavnik.study.Material
 import app.nastavnik.study.Progress
@@ -165,6 +168,29 @@ private fun MainPanel(s: SirenPrefs, onDone: () -> Unit) {
     var solved by remember { mutableStateOf(false) }
     val left by produceState(0L) {
         while (true) { value = ((s.quietUntil - System.currentTimeMillis()) / 1000).coerceAtLeast(0); delay(1000) }
+    }
+    // Основная задача уже решена, а ДЗ на завтра не на 100% — день не сделан: ДЗ.
+    val date = StudyLockRules.sessionDate(java.time.LocalDateTime.now())
+    if (s.solved(date) > 0 && s.homeworkOpen(date) && !solved) {
+        val open by produceState(emptyList<String>()) {
+            value = if (WakePrefs.unlocked(context)) Homeworks.openFor(context, date).map { "${it.subject}: ${HomeworkRules.done(it.statuses)} из ${it.tasks.size}" } else emptyList()
+        }
+        Column(
+            Modifier.fillMaxWidth().glass(RoundedCornerShape(28.dp), 10.dp, strong = true).padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text("Задача дня решена, но ДЗ к завтра не готово", style = MaterialTheme.typography.titleMedium)
+            open.forEach { Text(it, style = MaterialTheme.typography.bodyMedium) }
+            Text("Сирена утихнет, когда ДЗ будет засчитано на 100%." + if (left > 0) " Тишина ещё ${left / 60}:${"%02d".format(left % 60)}." else "", style = MaterialTheme.typography.bodySmall, color = Brand.InkSoft)
+            InkButton("Решать ДЗ", icon = R.drawable.ic_pen, modifier = Modifier.fillMaxWidth()) {
+                context.startActivity(
+                    android.content.Intent(context, MainActivity::class.java).putExtra(MainActivity.EXTRA_SCREEN, MainActivity.SCREEN_HOMEWORK)
+                        .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP),
+                )
+                onDone()
+            }
+        }
+        return
     }
     if (solved) {
         Text("Решено. Свободен до завтра", style = MaterialTheme.typography.titleLarge, color = Brand.Ok, textAlign = TextAlign.Center)

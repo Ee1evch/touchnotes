@@ -96,11 +96,11 @@ fun EveningScreen(resumeTick: Int, onBack: () -> Unit, go: (String) -> Unit) {
                 },
                 style = MaterialTheme.typography.titleLarge,
             )
-            val p by animateFloatAsState(s.steps / 3f, label = "steps")
+            val p by animateFloatAsState(s.steps / 4f, label = "steps")
             Box(Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)).background(Brand.Line)) {
                 Box(Modifier.fillMaxHeight().fillMaxWidth(p).clip(RoundedCornerShape(4.dp)).background(if (s.allDone) Brand.Ok else Brand.Accent))
             }
-            Text("${s.steps} из 3", style = MaterialTheme.typography.labelMedium, color = Brand.InkSoft)
+            Text("${s.steps} из 4", style = MaterialTheme.typography.labelMedium, color = Brand.InkSoft)
             if (s.locked) EmergencyLink { version++ }
         }
 
@@ -129,6 +129,18 @@ fun EveningScreen(resumeTick: Int, onBack: () -> Unit, go: (String) -> Unit) {
             s.prep.forEach { (subject, done) ->
                 PrepRow(s.date, subject, done) { scope.launch { StudyLock.markPrepared(context, s.date, subject); version++ } }
             }
+        }
+
+        // 4. ДЗ к завтра — на 100%: каждая задача проверена.
+        Step(4, "ДЗ к ${if (s.nextDate == s.date.plusDays(1)) "завтра" else dayName(s.nextDate)}", s.homeworkDone) {
+            if (s.homework.isEmpty()) Text("Домашки к этому дню нет", style = MaterialTheme.typography.bodyMedium, color = Brand.InkSoft)
+            s.homework.forEach { (label, done) ->
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(label, style = MaterialTheme.typography.bodyMedium, color = if (done) Brand.Ok else MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
+                    if (done) Icon(painterResource(R.drawable.ic_check), contentDescription = "Сделано", tint = Brand.Ok, modifier = Modifier.size(18.dp))
+                }
+            }
+            if (!s.homeworkDone) InkButton("Решать ДЗ", icon = R.drawable.ic_pen) { go(MainActivity.SCREEN_HOMEWORK) }
         }
     }
 }

@@ -45,6 +45,7 @@ object Alarms {
             runCatching { WakeAlarm.reschedule(context) }
             runCatching { StudyLock.schedule(context) }
             runCatching { Siren.check(context) }
+            runCatching { HomeworkReminder.schedule(context) }
         }
     }
 
@@ -164,6 +165,7 @@ class AlarmReceiver : BroadcastReceiver() {
                     Alarms.ACTION_PERSONAL -> if (uid != null) runCatching { Alarms.onPersonal(context, uid) }
                     Alarms.ACTION_DONE -> if (uid != null) runCatching { Alarms.markDone(context, uid) }
                     Alarms.ACTION_LESSON -> runCatching { Alarms.onLesson(context) }
+                    HomeworkReminder.ACTION -> runCatching { HomeworkReminder.onFire(context) }
                     LiveNotifications.ACTION_LIVE -> runCatching { LiveNotifications.updateLesson(context) }
                     LessonQuiet.ACTION -> runCatching { LessonQuiet.update(context) }
                 }

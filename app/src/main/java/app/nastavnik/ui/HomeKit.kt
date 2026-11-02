@@ -316,6 +316,7 @@ fun SectionsGrid(go: (String) -> Unit, columns: Int, items: List<Triple<Int, Str
 
 /** Разделы планшета для сетки. */
 val TABLET_SECTIONS = listOf(
+    Triple(R.drawable.ic_pen, "Домашка", MainActivity.SCREEN_HOMEWORK),
     Triple(R.drawable.ic_calendar, "Расписание", MainActivity.SCREEN_SCHEDULE),
     Triple(R.drawable.ic_chart, "Оценки", MainActivity.SCREEN_GRADES),
     Triple(R.drawable.ic_target, "Тренировка", MainActivity.SCREEN_TRAINING),
@@ -354,7 +355,7 @@ fun EveningCard(resumeTick: Int, go: (String) -> Unit) {
         Column(Modifier.weight(1f)) {
             Text(if (s.locked) "Приложения закрыты" else "Вечерняя учёба", style = MaterialTheme.typography.titleMedium)
             Text(
-                "${s.steps} из 3 · карточки, что было сегодня, подготовка к завтра",
+                "${s.steps} из 4 · карточки, что было сегодня, подготовка и ДЗ к завтра",
                 style = MaterialTheme.typography.bodySmall, color = Brand.InkSoft, maxLines = 2, overflow = TextOverflow.Ellipsis,
             )
         }

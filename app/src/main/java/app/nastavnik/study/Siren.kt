@@ -59,6 +59,13 @@ class SirenPrefs private constructor(private val p: SharedPreferences) {
 
     fun solved(date: LocalDate): Int = if (solvedDay == date.toString()) solvedCount else 0
 
+    /** Учебный день, к вечеру которого ДЗ на завтра не сделано на 100% (до разблокировки — запомненное). */
+    var homeworkDay: String
+        get() = p.getString("homework_day", "").orEmpty()
+        set(v) = p.edit { putString("homework_day", v) }
+
+    fun homeworkOpen(date: LocalDate): Boolean = homeworkDay == date.toString()
+
     /**
      * Сирена «держит» телефон: с 20:00 учебного дня, пока не решена основная задача, — служба защиты закрывает
      * меню выключения, настройки и удаление (в том числе в 5 минут тишины).
@@ -66,7 +73,7 @@ class SirenPrefs private constructor(private val p: SharedPreferences) {
     fun guarding(now: LocalDateTime = LocalDateTime.now()): Boolean {
         if (!on && !Siren.forced) return false
         val date = StudyLockRules.sessionDate(now)
-        return (lessonDay == date.toString() || Siren.forced) && solved(date) == 0 && !now.isBefore(SirenRules.start(date))
+        return (lessonDay == date.toString() || Siren.forced) && (solved(date) == 0 || homeworkOpen(date)) && !now.isBefore(SirenRules.start(date))
     }
 }
 
@@ -115,19 +122,22 @@ object Siren {
         val today = hasLessons(context, date)
         if (today) s.lessonDay = date.toString()
         val quiet = s.quietUntil.takeIf { it > 0 }?.let { LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(it), ZoneId.systemDefault()) }
-        if (SirenRules.shouldRing(now, today, s.solved(date), quiet)) {
+        // ДЗ на завтра не на 100% — день не сделан (до разблокировки файлов ДЗ не прочитать — берём запомненное).
+        val homework = if (WakePrefs.unlocked(context)) runCatching { Homeworks.openFor(context, date).isNotEmpty() }.getOrDefault(false) else s.homeworkOpen(date)
+        s.homeworkDay = if (homework) date.toString() else ""
+        if (SirenRules.shouldRing(now, today, s.solved(date), quiet, homework)) {
             start(context)
             return
         }
         // Тишина после мини-задачи — проверим, как закончится.
-        if (today && s.solved(date) == 0 && quiet != null && quiet.isAfter(now)) {
+        if (today && (s.solved(date) == 0 || homework) && quiet != null && quiet.isAfter(now)) {
             setClock(context, ms(quiet))
             return
         }
         // Ближайший учебный день: сегодня (если ещё нет 20:00 и не решено) или следующие.
         for (d in 0L..7L) {
             val day = date.plusDays(d)
-            if (d == 0L && (!today || s.solved(day) > 0 || !now.isBefore(SirenRules.start(day)))) continue
+            if (d == 0L && (!today || (s.solved(day) > 0 && !homework) || !now.isBefore(SirenRules.start(day)))) continue
             if (d > 0L && !hasLessons(context, day)) continue
             if (d > 0L) s.lessonDay = day.toString()
             setClock(context, ms(SirenRules.start(day)))

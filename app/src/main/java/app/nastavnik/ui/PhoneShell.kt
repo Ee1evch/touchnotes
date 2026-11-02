@@ -207,6 +207,7 @@ private fun StudyTab(resumeTick: Int, go: (String) -> Unit) {
         // Сгруппированный список, как в настройках Android 16–17.
         Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             val rows = listOf(
+                Triple(R.drawable.ic_pen, "Домашка", "ДЗ до 100%: решаешь в тетради, наставник проверяет") to MainActivity.SCREEN_HOMEWORK,
                 Triple(R.drawable.ic_chart, "Успеваемость", "Оценки из личного кабинета") to MainActivity.SCREEN_GRADES,
                 Triple(R.drawable.ic_flame, "Прогресс", "Серия и темы с ошибками") to MainActivity.SCREEN_PROGRESS,
                 Triple(R.drawable.ic_bell, "Напоминания", "Дедлайны и дела на всех устройствах") to MainActivity.SCREEN_REMINDERS,

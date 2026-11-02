@@ -20,6 +20,10 @@ class SirenRulesTest {
         assertFalse(SirenRules.shouldRing(mon.plusDays(1).atTime(5, 0), true, 0, null))
         // Решил основную — тихо.
         assertFalse(SirenRules.shouldRing(mon.atTime(21, 0), true, 1, null))
+        // Основная задача решена, но ДЗ на завтра не на 100% — день не сделан, звонит.
+        assertTrue(SirenRules.shouldRing(mon.atTime(21, 0), true, 1, null, homeworkOpen = true))
+        // …но тишина после мини-задачи действует и тут.
+        assertFalse(SirenRules.shouldRing(mon.atTime(21, 0), true, 1, mon.atTime(21, 4), homeworkOpen = true))
         // День без пар — тихо.
         assertFalse(SirenRules.shouldRing(mon.atTime(21, 0), false, 0, null))
     }

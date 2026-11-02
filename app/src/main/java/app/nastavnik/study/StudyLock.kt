@@ -120,12 +120,15 @@ object StudyLock {
         /** Когда в этот день закрывается: через 40 минут после последней пары. */
         val startAt: LocalDateTime,
         val emergency: Boolean,
+        /** ДЗ к следующему дню (и просроченные): «Матанализ: 4 из 6» и сделано ли на 100%. */
+        val homework: List<Pair<String, Boolean>> = emptyList(),
     ) {
         val cardsDone get() = due == 0
         val summariesDone get() = summaries.all { it.second }
         val prepDone get() = prep.all { it.second }
-        val allDone get() = cardsDone && summariesDone && prepDone
-        val steps get() = listOf(cardsDone, summariesDone, prepDone).count { it }
+        val homeworkDone get() = homework.all { it.second }
+        val allDone get() = cardsDone && summariesDone && prepDone && homeworkDone
+        val steps get() = listOf(cardsDone, summariesDone, prepDone, homeworkDone).count { it }
     }
 
     private fun dir(context: Context) = File(context.filesDir, "evening").apply { mkdirs() }
@@ -176,6 +179,9 @@ object StudyLock {
             nextDate = next,
             startAt = startFn(date),
             emergency = lp.emergencyActive,
+            homework = Homeworks.forEvening(context, date).map { hw ->
+                "${hw.subject}: ${HomeworkRules.done(hw.statuses)} из ${hw.tasks.size}" to hw.complete
+            },
         )
         // Заранее можно — но не раньше полудня: конспекты пар пишут после пар.
         if (lp.configured && s.allDone && date.toString() !in lp.done && (date in pending || now.isAfter(date.atTime(12, 0)))) {

@@ -19,10 +19,11 @@ object SirenRules {
 
     /**
      * Звонить ли сейчас. [hasLessons] — в учебный день [StudyLockRules.sessionDate] были пары;
-     * [solved] — сколько основных задач решено за этот день; [quietUntil] — до когда тишина после мини-задачи.
+     * [solved] — сколько основных задач решено за этот день; [quietUntil] — до когда тишина после мини-задачи;
+     * [homeworkOpen] — ДЗ на завтра не сделано на 100%: тогда день не сделан, даже если основная задача решена.
      */
-    fun shouldRing(now: LocalDateTime, hasLessons: Boolean, solved: Int, quietUntil: LocalDateTime?): Boolean {
-        if (!hasLessons || solved > 0) return false
+    fun shouldRing(now: LocalDateTime, hasLessons: Boolean, solved: Int, quietUntil: LocalDateTime?, homeworkOpen: Boolean = false): Boolean {
+        if (!hasLessons || (solved > 0 && !homeworkOpen)) return false
         val date = StudyLockRules.sessionDate(now)
         if (now.isBefore(start(date))) return false
         return quietUntil == null || !now.isBefore(quietUntil)

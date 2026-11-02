@@ -26,7 +26,11 @@ import app.nastavnik.sync.SyncRecord
 import app.nastavnik.sync.SyncEngine
 import app.nastavnik.study.AlarmShield
 import app.nastavnik.study.Learning
+import app.nastavnik.study.HomeworkRules
+import app.nastavnik.study.Homeworks
 import app.nastavnik.study.LiveNotifications
+import app.nastavnik.study.PageProblem
+import app.nastavnik.study.Textbook
 import app.nastavnik.study.LockPrefs
 import app.nastavnik.study.Siren
 import app.nastavnik.study.SirenPrefs
@@ -495,6 +499,69 @@ class CampusFlowTest {
             nm.cancel(LiveNotifications.LESSON_ID)
             device.executeShellCommand("cmd statusbar collapse")
         }
+    }
+
+    /**
+     * Домашка без нейросети: учебник с уже просмотренной страницей (задачи 245 и 246), ДЗ по номерам — условия
+     * находятся, экран «Домашка», «Решать» — страница в тетради с условием сверху и плашкой проверки;
+     * незасчитанное ДЗ на завтра держит вечернюю учёбу, засчитанное на 100% (одна спорная можно) — отпускает.
+     */
+    @Test
+    fun homeworkFromTextbookToNotebook() {
+        val pdf = File(ctx.cacheDir, "zadachnik.pdf")
+        android.graphics.pdf.PdfDocument().apply {
+            val page = startPage(android.graphics.pdf.PdfDocument.PageInfo.Builder(595, 842, 1).create())
+            val p = android.graphics.Paint().apply { textSize = 16f; color = android.graphics.Color.BLACK }
+            page.canvas.drawText("245. Найти предел lim (sin 3x)/x при x -> 0.", 50f, 120f, p)
+            page.canvas.drawText("246. Доказать, что последовательность 1/n сходится.", 50f, 300f, p)
+            finishPage(page)
+            pdf.outputStream().use { writeTo(it) }
+            close()
+        }
+        val book = runBlocking { Homeworks.importBook(ctx, android.net.Uri.fromFile(pdf), "Математический анализ") }.getOrThrow()
+        // Страница уже «просмотрена» — нейросеть не нужна.
+        File(ctx.filesDir, "textbooks/${book.id}.json").writeText(
+            kotlinx.serialization.json.Json.encodeToString(
+                Textbook.serializer(),
+                book.copy(index = mapOf(0 to listOf(PageProblem("245", 0.1f, 0.3f), PageProblem("246", 0.32f, 0.5f)))),
+            ),
+        )
+        // «Завтра» — от учебного дня (он начинается в 5:00), как считает вечерняя учёба.
+        val tomorrow = StudyLockRules.sessionDate(java.time.LocalDateTime.now()).plusDays(1)
+        val hw = Homeworks.fromBook(ctx, Homeworks.book(ctx, book.id)!!, HomeworkRules.parseNumbers("245–246"), tomorrow)
+        assertTrue(runBlocking { Homeworks.locate(ctx, hw.id) }.isSuccess)
+        val located = Homeworks.get(ctx, hw.id)!!
+        assertTrue("условия не нашлись", located.tasks.all { it.parts.isNotEmpty() })
+        assertEquals(0.32f, located.tasks.first().parts.first().bottom, 0.001f)
+        // ДЗ на завтра не сделано — вечер не закрыт.
+        val before = runBlocking { StudyLock.status(ctx) }
+        assertTrue("ДЗ не в вечерней учёбе", before.homework.any { it.first.startsWith("Математический анализ") && !it.second })
+
+        val sc = ActivityScenario.launch<MainActivity>(Intent(ctx, MainActivity::class.java).putExtra(MainActivity.EXTRA_SCREEN, MainActivity.SCREEN_HOMEWORK))
+        try {
+            assertNotNull("нет экрана «Домашка»", device.wait(Until.findObject(By.text("Домашка")), 10000))
+            assertNotNull("нет задачи", device.wait(Until.findObject(By.text("№ 245")), 8000))
+            SystemClock.sleep(800)
+            screenshot("homework_list")
+            device.findObject(By.text("Решать")).click()
+            assertNotNull("нет плашки ДЗ в тетради", device.wait(Until.findObject(By.textStartsWith("ДЗ · Математический анализ · № 245")), 15000))
+            assertNotNull("нет кнопки проверки", device.findObject(By.text("Готово — проверь")))
+            SystemClock.sleep(1200)
+            screenshot("homework_page")
+            val task = Homeworks.get(ctx, hw.id)!!.tasks.first()
+            assertTrue("страница не создана", task.pageId != 0L && ctx.app.notebooks.store.meta(task.notebookId)?.pages?.contains(task.pageId) == true)
+        } finally {
+            sc.close()
+        }
+        // Засчитано: одна задача верно, вторая — спорная (после двух непринятых проверок) → 100%.
+        val cur = Homeworks.get(ctx, hw.id)!!
+        Homeworks.save(ctx, cur.copy(tasks = listOf(cur.tasks[0].copy(status = HomeworkRules.Status.DONE), cur.tasks[1].copy(status = HomeworkRules.Status.WRONG, failed = 2))))
+        assertTrue("спорную не дали", Homeworks.dispute(ctx, hw.id, cur.tasks[1].id))
+        assertTrue(Homeworks.get(ctx, hw.id)!!.complete)
+        val after = runBlocking { StudyLock.status(ctx) }
+        assertTrue("засчитанное ДЗ держит вечер", after.homeworkDone)
+        Homeworks.delete(ctx, Homeworks.get(ctx, hw.id)!!)
+        Homeworks.deleteBook(ctx, Homeworks.book(ctx, book.id)!!)
     }
 
     /** Конструктор главной: правка, убрать блок, вернуть, сменить размер — раскладка сохраняется. */

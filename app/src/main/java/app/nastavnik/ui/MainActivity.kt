@@ -59,6 +59,12 @@ class MainActivity : ComponentActivity() {
     /** Пока из «Поделиться» готовятся страницы — показываем, что идёт работа. */
     private var importing by mutableStateOf(false)
 
+    /** Прислали PDF — спросить, это ДЗ или в тетрадь. */
+    private var askShared by mutableStateOf<List<Uri>?>(null)
+
+    /** PDF с заданиями из «Поделиться» — для экрана «Домашка». */
+    private var sharedHomework by mutableStateOf<Uri?>(null)
+
     /** Телефон: открытая вкладка. */
     private var phoneTab by mutableStateOf(PhoneTab.TODAY)
 
@@ -120,6 +126,24 @@ class MainActivity : ComponentActivity() {
                         else -> home()
                     }
                 }
+                askShared?.let { uris ->
+                    androidx.compose.material3.AlertDialog(
+                        onDismissRequest = { askShared = null },
+                        title = { Text("Что это за файл?") },
+                        text = { Text("Домашку наставник разберёт на задачи и будет проверять, пока не сделаешь на 100%. В тетрадь — просто писать поверх.") },
+                        confirmButton = {
+                            androidx.compose.material3.TextButton(onClick = {
+                                askShared = null
+                                sharedHomework = uris.first()
+                                fromOverlay = false
+                                screen = SCREEN_HOMEWORK
+                            }) { Text("Это домашка") }
+                        },
+                        dismissButton = {
+                            androidx.compose.material3.TextButton(onClick = { askShared = null; importShared(uris, "pdf") }) { Text("В тетрадь") }
+                        },
+                    )
+                }
                 if (importing) {
                     ImportingScreen()
                     return@NastavnikTheme
@@ -161,6 +185,10 @@ class MainActivity : ComponentActivity() {
                         SCREEN_ONBOARDING -> OnboardingScreen(resumeTick, onDone = { screen = SCREEN_HOME; moveTaskToBack(true) }, onSkip = { screen = SCREEN_HOME })
                         SCREEN_SETTINGS -> SettingsScreen(onBack = home, onAppearance = { go(SCREEN_APPEARANCE) }, onOnboarding = { go(SCREEN_ONBOARDING) }, onLks = { go(SCREEN_LKS) }, go = go)
                         SCREEN_EVENING -> EveningScreen(resumeTick, onBack = home, go = go)
+                        SCREEN_HOMEWORK -> HomeworkScreen(
+                            resumeTick, onBack = home, openNotebook = openNotebook,
+                            sharedFile = sharedHomework, onSharedUsed = { sharedHomework = null },
+                        )
                         SCREEN_LOCK_SETUP -> StudyLockSetupScreen(onBack = { go(SCREEN_SETTINGS) }, onDone = { go(SCREEN_EVENING) })
                         SCREEN_APPEARANCE -> AppearanceScreen(onBack = { go(SCREEN_SETTINGS) })
                         SCREEN_HISTORY -> HistoryScreen(onBack = home, onCleanReady = { go(SCREEN_CLEAN) })
@@ -200,6 +228,12 @@ class MainActivity : ComponentActivity() {
         val uris = sharedUris(intent)
         if (uris.isEmpty()) return
         val type = intent.type ?: uris.firstOrNull()?.let { contentResolver.getType(it) }.orEmpty()
+        // PDF — может быть домашкой: спросим.
+        if (type.contains("pdf")) { askShared = uris; return }
+        importShared(uris, type)
+    }
+
+    private fun importShared(uris: List<Uri>, type: String) {
         importing = true
         lifecycleScope.launch {
             val nbs = app.notebooks
@@ -289,6 +323,7 @@ class MainActivity : ComponentActivity() {
         const val SCREEN_GRADES = "grades"
         const val SCREEN_LKS = "lks"
         const val SCREEN_EVENING = "evening"
+        const val SCREEN_HOMEWORK = "homework"
         const val SCREEN_LOCK_SETUP = "lock_setup"
         const val EXTRA_NOTEBOOK = "notebook_id"
         const val EXTRA_FROM_OVERLAY = "from_overlay"
