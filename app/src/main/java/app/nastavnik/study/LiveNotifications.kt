@@ -8,11 +8,8 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
-import android.content.res.ColorStateList
 import android.os.Build
 import android.os.IBinder
-import android.view.View
-import android.widget.RemoteViews
 import androidx.core.content.ContextCompat
 import app.nastavnik.NastavnikApp
 import app.nastavnik.R
@@ -33,17 +30,19 @@ import java.time.LocalDateTime
 import java.time.ZoneId
 
 /**
- * Живое уведомление учебного дня — карточка пары (свой макет `live_lesson.xml`, свёрнутое — `live_lesson_small.xml`):
- * слева начало и конец, цветная полоса по типу пары, справа предмет, тип, аудитория в «таблетке», преподаватель;
- * внизу — полоса пары (сколько прошло; до пары и на перемене — пустая). В шапке — «Пара 2 из 4» и отсчёт до конца
- * пары (до пары и на перемене — до начала следующей).
+ * Живое уведомление учебного дня — системный шаблон, чтобы Android 16 показывал его «живым»: в строке состояния —
+ * отсчёт до конца текущего (пары или перемены). Свои макеты система «живыми» не делает.
+ *  - на паре: предмет; тип, аудитория, преподаватель; «13:30–14:50 · пара 2 из 4»; полоса пары цветом типа;
+ *  - на перемене: крупно «ПЕРЕМЕНА», что дальше и где; полоса перемены;
+ *  - до пар: первая пара, во сколько и где.
  * Обновление: «экономно» — только на границах пар; «обычно» — раз в 3 минуты; «точно» — сервис, раз в минуту.
  */
 object LiveNotifications {
     const val ACTION_LIVE = "app.nastavnik.LESSON_LIVE"
     const val LESSON_ID = 7702
     private const val LIVE_REQUEST = 7710
-    private const val ACCENT = 0xFF2563EB.toInt()
+    private const val BREAK_COLOR = 0xFF8A93A3.toInt()
+    const val EXTRA_PROMOTE = "android.requestPromotedOngoing"
 
     enum class Mode(val id: String, val label: String, val hint: String) {
         BOUNDARY("boundary", "Экономно", "Только в начале и конце пар — отсчёт идёт сам, полоса двигается редко"),
@@ -63,8 +62,6 @@ object LiveNotifications {
         "Лабораторная" -> 0xFF9B5DE5.toInt()
         else -> 0xFF7C8596.toInt()
     }
-
-    private fun where(l: Lesson) = listOfNotNull(l.classroom, l.type.takeIf { it.isNotBlank() }).joinToString(" · ")
 
     /** Состояние дня, если уведомление сейчас должно быть видно: с «за N минут до первой пары» до конца последней. */
     private fun visible(day: List<Lesson>, alert: Int, now: LocalDateTime): DayTimeline.State? {
@@ -105,47 +102,51 @@ object LiveNotifications {
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
     )
 
-    /** Уведомление по состоянию дня: карточка идущей пары, а до пар и на перемене — следующей. */
+    /** Уведомление по состоянию дня: идущая пара, перемена (крупно) или первая пара. */
     fun build(context: Context, s: DayTimeline.State, now: LocalDateTime): Notification {
         val focus = s.focus!!
         val start = focus.startsAt()!!
         val end = focus.endsAt() ?: start.plusMinutes(90)
-        val lesson = s.phase == DayTimeline.Phase.LESSON
-        val target = if (lesson) end else start
-        val title = when (s.phase) {
-            DayTimeline.Phase.BEFORE -> "${focus.discipline} в ${focus.start}"
-            DayTimeline.Phase.LESSON -> listOfNotNull(focus.discipline, focus.classroom).joinToString(" · ")
-            else -> "Перемена · дальше ${focus.discipline}"
-        }
-        val sub = when (s.phase) {
-            DayTimeline.Phase.BEFORE -> "Сегодня ${s.count} ${ruPlural(s.count, "пара", "пары", "пар")}"
-            DayTimeline.Phase.LESSON -> "Пара ${s.number} из ${s.count}"
-            else -> "Перемена · пара ${s.number} из ${s.count}"
-        }
-        val text = when (s.phase) {
-            DayTimeline.Phase.LESSON -> s.after?.let { "Дальше в ${it.start} — ${it.discipline}" } ?: "Последняя пара"
-            else -> where(focus).ifBlank { "в ${focus.start}" }
-        }
-        val total = Duration.between(start, end).toMinutes().toInt().coerceAtLeast(1)
-        val passed = if (lesson) Duration.between(start, now).toMinutes().toInt().coerceIn(0, total) else 0
-        val tint = color(focus.type)
-        val place = focus.classroom?.takeIf { it.isNotBlank() } ?: if (!focus.online.isNullOrBlank()) "Онлайн" else null
-        fun card(layout: Int, withTeacher: Boolean) = RemoteViews(context.packageName, layout).apply {
-            setTextViewText(R.id.live_start, focus.start)
-            setTextViewText(R.id.live_end, focus.end.ifBlank { "%02d:%02d".format(end.hour, end.minute) })
-            setInt(R.id.live_stripe, "setColorFilter", tint)
-            setTextViewText(R.id.live_title, focus.discipline)
-            if (focus.type.isBlank()) setViewVisibility(R.id.live_type, View.GONE)
-            else { setTextViewText(R.id.live_type, focus.type); setTextColor(R.id.live_type, tint) }
-            if (place == null) setViewVisibility(R.id.live_place, View.GONE) else setTextViewText(R.id.live_room, place)
-            if (withTeacher) {
-                val teacher = focus.teachersShort
-                if (teacher == null) setViewVisibility(R.id.live_teacher, View.GONE) else setTextViewText(R.id.live_teacher, teacher)
+        val phase = s.phase
+        val target = if (phase == DayTimeline.Phase.LESSON) end else start
+        val details = listOfNotNull(focus.type.takeIf { it.isNotBlank() }, focus.classroom?.takeIf { it.isNotBlank() }, focus.teachersShort).joinToString(" · ")
+        val times = "${focus.start}–${focus.end.ifBlank { "%02d:%02d".format(end.hour, end.minute) }}"
+        val title: String
+        val text: String
+        val sub: String
+        // Полоса: на паре — сколько прошло от пары, на перемене — от перемены, до пар — пустая полоса первой пары.
+        val total: Int
+        val passed: Int
+        val tint: Int
+        when (phase) {
+            DayTimeline.Phase.LESSON -> {
+                title = focus.discipline
+                text = details.ifBlank { s.after?.let { "Дальше в ${it.start} — ${it.discipline}" } ?: "Последняя пара" }
+                sub = "$times · пара ${s.number} из ${s.count}"
+                total = Duration.between(start, end).toMinutes().toInt().coerceAtLeast(1)
+                passed = Duration.between(start, now).toMinutes().toInt().coerceIn(0, total)
+                tint = color(focus.type)
             }
-            setProgressBar(R.id.live_progress, total, passed, false)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) setColorStateList(R.id.live_progress, "setProgressTintList", ColorStateList.valueOf(tint))
+            DayTimeline.Phase.BREAK -> {
+                title = "ПЕРЕМЕНА"
+                text = "Дальше в ${focus.start} — ${focus.discipline}" + (focus.classroom?.takeIf { it.isNotBlank() }?.let { " · $it" } ?: "")
+                sub = "до ${focus.start} · пара ${s.number} из ${s.count}"
+                // Перемена — кусок дня прямо перед следующей парой.
+                val i = s.parts.indexOfFirst { it.lesson == focus }
+                total = s.parts.getOrNull(i - 1)?.takeIf { it.lesson == null }?.minutes?.coerceAtLeast(1) ?: 1
+                passed = (total - Duration.between(now, start).toMinutes().toInt()).coerceIn(0, total)
+                tint = BREAK_COLOR
+            }
+            else -> {
+                title = focus.discipline
+                text = "Начало в ${focus.start}" + (details.takeIf { it.isNotBlank() }?.let { " · $it" } ?: "")
+                sub = "Сегодня ${s.count} ${ruPlural(s.count, "пара", "пары", "пар")}"
+                total = Duration.between(start, end).toMinutes().toInt().coerceAtLeast(1)
+                passed = 0
+                tint = color(focus.type)
+            }
         }
-        return Notification.Builder(context, NastavnikApp.CHANNEL_LESSONS)
+        val b = Notification.Builder(context, NastavnikApp.CHANNEL_LESSONS)
             .setSmallIcon(R.drawable.ic_calendar)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
@@ -153,18 +154,27 @@ object LiveNotifications {
             .setContentIntent(open(context))
             .setCategory(Notification.CATEGORY_EVENT)
             .setVisibility(Notification.VISIBILITY_PUBLIC)
+            // Отсчёт до конца пары или перемены — он же в строке состояния у «живого» уведомления.
             .setWhen(ms(target))
             .setUsesChronometer(true)
             .setChronometerCountDown(true)
             .setShowWhen(true)
-            // Текст — для экрана блокировки, часов и озвучки; в шторке — карточка.
             .setContentTitle(title)
             .setContentText(text)
             .setSubText(sub)
-            .setStyle(Notification.DecoratedCustomViewStyle())
-            .setCustomContentView(card(R.layout.live_lesson_small, withTeacher = false))
-            .setCustomBigContentView(card(R.layout.live_lesson, withTeacher = true))
-            .build()
+        if (Build.VERSION.SDK_INT >= 36) {
+            b.setStyle(
+                Notification.ProgressStyle()
+                    .setProgressSegments(listOf(Notification.ProgressStyle.Segment(total).setColor(tint)))
+                    .setProgress(passed)
+                    .setStyledByProgress(true),
+            )
+        } else {
+            b.setProgress(total, passed, false)
+        }
+        // Просьба показать «живым» (Android 16+): системный шаблон, без своих макетов.
+        b.extras.putBoolean(EXTRA_PROMOTE, true)
+        return b.build()
     }
 
     /** «Показать сейчас»: пример (сейчас идёт физика, началась 25 минут назад) на 2 минуты. */

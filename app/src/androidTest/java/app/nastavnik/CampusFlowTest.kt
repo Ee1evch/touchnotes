@@ -16,6 +16,7 @@ import androidx.test.uiautomator.Until
 import app.nastavnik.data.CardEntity
 import app.nastavnik.data.ReminderEntity
 import app.nastavnik.ink.Paper
+import app.nastavnik.schedule.DayTimeline
 import app.nastavnik.schedule.Lesson
 import app.nastavnik.schedule.ScheduleText
 import app.nastavnik.schedule.Week
@@ -142,8 +143,9 @@ class CampusFlowTest {
             runBlocking { LiveNotifications.updateLesson(ctx) }
             val live = ctx.getSystemService(android.app.NotificationManager::class.java).activeNotifications.firstOrNull { it.id == 7702 }
             assertNotNull("нет живого уведомления", live)
-            assertEquals("Физика · Альфа 5.8", live!!.notification.extras.getCharSequence(android.app.Notification.EXTRA_TITLE)?.toString())
-            assertEquals("Пара 2 из 2", live.notification.extras.getCharSequence(android.app.Notification.EXTRA_SUB_TEXT)?.toString())
+            assertEquals("Физика", live!!.notification.extras.getCharSequence(android.app.Notification.EXTRA_TITLE)?.toString())
+            val liveSub = live.notification.extras.getCharSequence(android.app.Notification.EXTRA_SUB_TEXT)?.toString().orEmpty()
+            assertTrue("подпись: $liveSub", liveSub.endsWith("пара 2 из 2"))
             device.openNotification()
             SystemClock.sleep(1500)
             screenshot("live_notification")
@@ -301,8 +303,12 @@ class CampusFlowTest {
                 assertEquals("мигает: на экране ${device.currentPackageName}", ctx.packageName, device.currentPackageName)
             }
             // Рабочий стол открыт: после «Домой» на нём и остаёмся.
+            // Лаунчер при первом запуске на эмуляторе бывает медленным — ждём его до 10 секунд, потом 3 секунды
+            // проверяем, что «Наставник» не открылся поверх снова.
             device.pressHome()
-            SystemClock.sleep(4000)
+            val homeBy = System.currentTimeMillis() + 10_000
+            while (System.currentTimeMillis() < homeBy && device.currentPackageName.let { it == ctx.packageName || it == "com.android.settings" }) SystemClock.sleep(250)
+            SystemClock.sleep(3000)
             val home = device.currentPackageName
             if (home == ctx.packageName || home == "com.android.settings") screenshot("lock_home_fail")
             assertTrue("рабочий стол закрыт: $home", home != ctx.packageName && home != "com.android.settings")
@@ -417,31 +423,52 @@ class CampusFlowTest {
         }
     }
 
-    /** Живое уведомление — карточка пары: развёрнутая (с преподавателем) и свёрнутая; снимок каждой. */
+    /**
+     * Живое уведомление: на паре — предмет, тип, аудитория, преподаватель, отсчёт до конца; на перемене — крупно
+     * «ПЕРЕМЕНА» и что дальше. Системный шаблон с просьбой о «живом» (без своих макетов) — снимок каждого.
+     */
     @Test
-    fun liveNotificationCard() {
+    fun liveNotificationLessonAndBreak() {
         val nm = ctx.getSystemService(android.app.NotificationManager::class.java)
+        fun live() = nm.activeNotifications.firstOrNull { it.id == LiveNotifications.LESSON_ID }?.notification
+        fun shot(name: String, title: String) {
+            device.openNotification()
+            assertNotNull("нет «$title» в шторке", device.wait(Until.findObject(By.text(title)), 8000))
+            SystemClock.sleep(1000)
+            screenshot(name)
+            device.executeShellCommand("cmd statusbar collapse")
+            SystemClock.sleep(600)
+        }
         try {
             nm.cancel(LiveNotifications.LESSON_ID)
             runBlocking { LiveNotifications.preview(ctx) }
             SystemClock.sleep(600)
-            val n = nm.activeNotifications.firstOrNull { it.id == LiveNotifications.LESSON_ID }
+            val n = live()
             assertNotNull("нет живого уведомления", n)
-            assertEquals("Физика · Альфа 5.8", n!!.notification.extras.getCharSequence(android.app.Notification.EXTRA_TITLE)?.toString())
-            device.openNotification()
-            assertNotNull("нет карточки в шторке", device.wait(Until.findObject(By.text("Физика")), 8000))
-            // Развернуть, если система показала свёрнутой.
-            if (device.wait(Until.findObject(By.text("Ваганов М. Г.")), 2000) == null) {
-                device.findObject(By.res("android:id/expand_button"))?.click()
-            }
-            assertNotNull("нет преподавателя в развёрнутой карточке", device.wait(Until.findObject(By.text("Ваганов М. Г.")), 5000))
-            assertNotNull("нет аудитории", device.findObject(By.text("Альфа 5.8")))
-            assertNotNull("нет типа пары", device.findObject(By.text("Практика")))
-            SystemClock.sleep(800)
-            screenshot("live_card")
-            device.findObject(By.res("android:id/expand_button"))?.click()
-            SystemClock.sleep(1200)
-            screenshot("live_card_small")
+            val x = n!!.extras
+            assertEquals("Физика", x.getCharSequence(android.app.Notification.EXTRA_TITLE)?.toString())
+            assertEquals("Практика · Альфа 5.8 · Ваганов М. Г.", x.getCharSequence(android.app.Notification.EXTRA_TEXT)?.toString())
+            assertTrue("нет просьбы о «живом»", x.getBoolean(LiveNotifications.EXTRA_PROMOTE))
+            @Suppress("DEPRECATION")
+            assertTrue("свой макет — система не сделает «живым»", n.contentView == null && n.bigContentView == null)
+            assertTrue("нет отсчёта", x.getBoolean(android.app.Notification.EXTRA_SHOW_CHRONOMETER) && x.getBoolean(android.app.Notification.EXTRA_CHRONOMETER_COUNT_DOWN))
+            shot("live_lesson", "Физика")
+
+            // Перемена: физика кончилась 5 минут назад, линал через 10.
+            val now = java.time.LocalDateTime.now().withSecond(0).withNano(0)
+            fun hm(t: java.time.LocalDateTime) = "%02d:%02d".format(t.hour, t.minute)
+            val today = now.toLocalDate().toString()
+            val day = listOf(
+                Lesson(id = "b1", date = today, start = hm(now.minusMinutes(95)), end = hm(now.minusMinutes(5)), discipline = "Физика", type = "Практика", classroom = "Альфа 5.8"),
+                Lesson(id = "b2", date = today, start = hm(now.plusMinutes(10)), end = hm(now.plusMinutes(100)), discipline = "Линейная алгебра", type = "Семинар", classroom = "Гамма 2.1"),
+            )
+            val st = DayTimeline.at(day, now)!!
+            nm.notify(LiveNotifications.LESSON_ID, LiveNotifications.build(ctx, st, now))
+            SystemClock.sleep(600)
+            val br = live()!!.extras
+            assertEquals("ПЕРЕМЕНА", br.getCharSequence(android.app.Notification.EXTRA_TITLE)?.toString())
+            assertEquals("Дальше в ${hm(now.plusMinutes(10))} — Линейная алгебра · Гамма 2.1", br.getCharSequence(android.app.Notification.EXTRA_TEXT)?.toString())
+            shot("live_break", "ПЕРЕМЕНА")
         } finally {
             nm.cancel(LiveNotifications.LESSON_ID)
             device.executeShellCommand("cmd statusbar collapse")

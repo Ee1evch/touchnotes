@@ -174,7 +174,7 @@ class NastavnikApp : Application() {
         )
         nm.createNotificationChannel(
             NotificationChannel(CHANNEL_LESSONS, "Скоро пара", NotificationManager.IMPORTANCE_HIGH).apply {
-                description = "Живое уведомление о парах: что и в какой аудитории, отсчёт и весь день полосой"
+                description = "Живое уведомление о парах: что и где, отсчёт до конца пары или перемены и полоса"
             },
         )
     }
