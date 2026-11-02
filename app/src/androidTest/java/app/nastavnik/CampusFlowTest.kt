@@ -567,8 +567,12 @@ class CampusFlowTest {
         assertTrue(Homeworks.get(ctx, hw.id)!!.complete)
         val after = runBlocking { StudyLock.status(ctx) }
         assertTrue("засчитанное ДЗ держит вечер", after.homeworkDone)
+        // Убрать за собой всё, включая тетрадь ДЗ, — следующие тесты берут «первую тетрадь».
+        val nbId = Homeworks.get(ctx, hw.id)!!.tasks.first().notebookId
         Homeworks.delete(ctx, Homeworks.get(ctx, hw.id)!!)
         Homeworks.deleteBook(ctx, Homeworks.book(ctx, book.id)!!)
+        if (nbId != 0L) ctx.app.notebooks.store.delete(nbId)
+        File(ctx.filesDir, "homework/notebooks.json").delete()
     }
 
     /** Конструктор главной: правка, убрать блок, вернуть, сменить размер — раскладка сохраняется. */

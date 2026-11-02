@@ -309,6 +309,12 @@ class MentorFlowTest {
             device.swipe((w * 0.7).toInt(), (h * 0.8).toInt(), (w * 0.7).toInt(), (h * 0.3).toInt(), 60)
         }
         screenshot("not_found_" + selector.toString().filter { it.isLetterOrDigit() }.take(24))
+        // Что видит UiAutomator (тексты в дереве окна) — понять, почему не нашёл видимое.
+        runCatching {
+            val out = java.io.ByteArrayOutputStream()
+            device.dumpWindowHierarchy(out)
+            Regex("""text="([^"]+)"""").findAll(out.toString()).map { it.groupValues[1] }.toList().let { println("TREEDIAG ${it.size}: ${it.take(60)}") }
+        }
         return null
     }
 
