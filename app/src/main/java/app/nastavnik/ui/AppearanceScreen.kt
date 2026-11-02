@@ -130,7 +130,7 @@ fun AppearanceScreen(onBack: () -> Unit) {
         }
 
         SectionCard("Фон") {
-            Segmented(Backdrop.entries.map { it to it.label }, runCatching { Backdrop.valueOf(s.backdrop) }.getOrDefault(Backdrop.BLOBS)) {
+            Segmented(Backdrop.entries.map { it to it.label }, runCatching { Backdrop.valueOf(s.backdrop) }.getOrDefault(Backdrop.PLAIN)) {
                 repo.setBackdrop(it.name); refresh()
             }
             Text(

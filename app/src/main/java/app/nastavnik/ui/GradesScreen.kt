@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -44,6 +45,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.nastavnik.R
 import app.nastavnik.app
@@ -51,6 +53,7 @@ import app.nastavnik.grades.CourseGrades
 import app.nastavnik.grades.GradeItem
 import app.nastavnik.grades.GradesSnapshot
 import app.nastavnik.grades.MoodleClient
+import app.nastavnik.study.ruPlural
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -323,118 +326,119 @@ fun lksMarkColor(v: String): Color {
     }
 }
 
-/** Журнал ЛКС в оформлении приложения: сводка и карточки дисциплин с лентой оценок. */
+/** Журнал ЛКС, как в приложении для родителя: сводка (средний балл, пропуски, предметы) и карточки предметов. */
 @Composable
 fun LksJournalView(j: app.nastavnik.grades.LksJournal) {
     val avg = j.lessons.mapNotNull { it.avgMark?.replace(',', '.')?.toDoubleOrNull() }.takeIf { it.isNotEmpty() }?.average()
-    val marks = j.lessons.sumOf { l -> l.entries.sumOf { it.marks.size } }
-    val absences = j.lessons.sumOf { it.absences }
+    val all = j.lessons.flatMap { it.entries }.filter { it.absent }
+    val missed = all.size
+    val valid = all.count { it.absentValid == true }
     val shown by animateFloatAsState((avg ?: 0.0).toFloat(), androidx.compose.animation.core.spring(dampingRatio = 0.75f, stiffness = 120f), label = "avg")
-    Row(
-        Modifier.fillMaxWidth().enter().glass(RoundedCornerShape(28.dp), 10.dp).padding(20.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        Column(Modifier.weight(1f)) {
-            Text(if (avg != null) "%.2f".format(shown) else "—", style = MaterialTheme.typography.displaySmall, color = avg?.let { lksMarkColor(it.toInt().toString()) } ?: MaterialTheme.colorScheme.onSurface)
-            Text("средний балл" + (j.period.takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""), style = MaterialTheme.typography.bodyMedium, color = Brand.InkSoft)
-        }
-        Column(horizontalAlignment = Alignment.End) {
-            Text("$marks", style = MaterialTheme.typography.titleLarge)
-            Text("оценок · пропусков $absences", style = MaterialTheme.typography.bodySmall, color = Brand.InkSoft)
-        }
+    Row(Modifier.fillMaxWidth().enter().glass().padding(20.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+        Stat(if (avg != null) "%.2f".format(Locale.forLanguageTag("ru"), shown) else "—", "средний балл",
+            avg?.let { markColor("%.1f".format(Locale.US, it)) } ?: MaterialTheme.colorScheme.onSurface, Modifier.weight(1f))
+        Stat("$missed", ruPlural(missed, "пропуск", "пропуска", "пропусков") + if (valid > 0) ", $valid по уваж." else "",
+            if (missed - valid > 0) Brand.Error else Brand.Ok, Modifier.weight(1f))
+        Stat("${j.lessons.size}", ruPlural(j.lessons.size, "предмет", "предмета", "предметов"), MaterialTheme.colorScheme.onSurface, Modifier.weight(1f))
     }
-    val lessons = j.lessons.sortedWith(compareBy({ it.entries.none { e -> e.marks.isNotEmpty() } }, { it.title }))
+    if (j.period.isNotBlank()) Text(j.period, style = MaterialTheme.typography.bodySmall, color = Brand.InkSoft, modifier = Modifier.padding(start = 6.dp))
+    val lessons = j.lessons.sortedWith(compareBy({ it.avgMark == null && it.entries.none { e -> e.marks.isNotEmpty() } }, { it.title }))
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         lessons.forEach { l -> LksLessonCard(l) }
     }
 }
 
 @Composable
+private fun Stat(value: String, label: String, color: Color, modifier: Modifier) {
+    Column(modifier) {
+        Text(value, style = MaterialTheme.typography.headlineMedium, color = color)
+        Text(label, style = MaterialTheme.typography.bodySmall, color = Brand.InkSoft)
+    }
+}
+
+/** Цвет оценки, как у родителя: 5 — зелёный, 4 — синий, 3 — жёлтый, 2 — красный; зачёт — зелёный. */
+private fun markColor(v: String): Color {
+    val n = v.replace(',', '.').toDoubleOrNull() ?: return lksMarkColor(v)
+    return when {
+        n >= 4.5 -> Brand.Ok
+        n >= 3.5 -> Color(0xFF2563EB)
+        n >= 2.5 -> Color(0xFFE0A21E)
+        else -> Brand.Error
+    }
+}
+
+/** Карточка предмета: средний справа, оценки фишками (свежие первыми); касание — по датам с комментариями и заданиями. */
+@Composable
 private fun LksLessonCard(l: app.nastavnik.grades.LksLesson) {
     var open by remember { mutableStateOf(false) }
-    var picked by remember { mutableStateOf<app.nastavnik.grades.LksEntry?>(null) }
-    val turn by animateFloatAsState(if (open) 90f else 0f, androidx.compose.animation.core.spring(dampingRatio = 0.6f, stiffness = 500f), label = "lessonArrow")
-    val entries = l.entries.filter { it.marks.isNotEmpty() || it.absent }
+    val marks = l.entries.flatMap { e -> e.marks.map { it.value } }
+    val missed = l.entries.count { it.absent }
+    val unexcused = l.entries.count { it.absent && it.absentValid != true }
     Column(
-        Modifier.fillMaxWidth().enter().glass(RoundedCornerShape(24.dp), 8.dp)
+        Modifier.fillMaxWidth().enter().glass()
             .clickable { open = !open }
             .animateContentSize(androidx.compose.animation.core.spring(dampingRatio = 0.8f, stiffness = 380f))
-            .padding(horizontal = 18.dp, vertical = 14.dp),
+            .padding(18.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text(l.title, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(l.title, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 val sub = listOfNotNull(
-                    l.rating?.let { "рейтинг $it" },
-                    l.absences.takeIf { it > 0 }?.let { "пропусков $it" },
-                    "оценок ${l.entries.sumOf { it.marks.size }}",
+                    "${marks.size} ${ruPlural(marks.size, "оценка", "оценки", "оценок")}",
+                    missed.takeIf { it > 0 }?.let { "$it ${ruPlural(it, "пропуск", "пропуска", "пропусков")}" },
+                    l.rating?.takeIf { it.isNotBlank() }?.let { "рейтинг $it" },
                 ).joinToString(" · ")
-                Text(sub, style = MaterialTheme.typography.bodySmall, color = Brand.InkSoft)
+                Text(sub, style = MaterialTheme.typography.bodySmall, color = when { unexcused > 0 -> Brand.Error; missed > 0 -> Color(0xFFE0A21E); else -> Brand.InkSoft })
             }
-            Box(
-                Modifier.clip(RoundedCornerShape(14.dp)).background((l.avgMark?.let { lksMarkColor(it) } ?: Brand.InkSoft).copy(alpha = 0.15f)).padding(horizontal = 12.dp, vertical = 6.dp),
-            ) {
-                Text(l.avgMark ?: "—", style = MaterialTheme.typography.titleMedium, color = l.avgMark?.let { lksMarkColor(it) } ?: Brand.InkSoft)
-            }
-            Icon(painterResource(R.drawable.ic_chevron), null, tint = Brand.InkSoft, modifier = Modifier.size(18.dp).graphicsLayer { rotationZ = turn })
+            l.avgMark?.takeIf { it.isNotBlank() }?.let { Text(it, style = MaterialTheme.typography.headlineMedium.copy(fontSize = 28.sp), color = markColor(it)) }
         }
-        // Лента оценок: последние — справа, прокрутка пальцем.
-        if (entries.isNotEmpty()) {
-            val scroll = androidx.compose.foundation.rememberScrollState()
-            androidx.compose.runtime.LaunchedEffect(entries.size) { scroll.scrollTo(scroll.maxValue) }
-            Row(Modifier.horizontalScroll(scroll), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                entries.forEach { e -> MarkPill(e, selected = picked == e) { picked = if (picked == e) null else e; open = true } }
+        if (marks.isNotEmpty()) {
+            Row(Modifier.horizontalScroll(androidx.compose.foundation.rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                marks.takeLast(20).reversed().forEach { MarkChip(it) }
             }
         }
         if (open) {
-            val e = picked ?: entries.lastOrNull()
-            if (e != null) EntryDetails(e)
-            val hw = l.entries.lastOrNull { !it.hometask.isNullOrBlank() }
-            if (hw != null && hw != e) Text("Последнее задание (${shortDate(hw.date)}): ${hw.hometask}", style = MaterialTheme.typography.bodySmall, color = Brand.InkSoft)
+            l.entries.reversed().filter { it.absent || it.marks.isNotEmpty() || !it.comment.isNullOrBlank() || !it.hometask.isNullOrBlank() }.forEach { e -> EntryRow(e) }
         }
     }
 }
 
 @Composable
-private fun MarkPill(e: app.nastavnik.grades.LksEntry, selected: Boolean, onClick: () -> Unit) {
-    val k by animateFloatAsState(if (selected) 1.12f else 1f, androidx.compose.animation.core.spring(dampingRatio = 0.45f, stiffness = 700f), label = "pill")
-    val label = if (e.marks.isNotEmpty()) e.marks.joinToString(" ") { m -> m.value + (m.second?.let { "/$it" } ?: "") }
-        else if (e.absentValid == true) "НУ" else if (e.absentValid == false) "НН" else "Н"
-    val color = e.marks.firstOrNull()?.let { lksMarkColor(it.value) } ?: Color(0xFF8A8F98)
-    Column(
-        Modifier.graphicsLayer { scaleX = k; scaleY = k }.clip(RoundedCornerShape(14.dp))
-            .background(color.copy(alpha = if (selected) 0.32f else 0.16f)).clickable(onClick = onClick)
-            .padding(horizontal = 10.dp, vertical = 6.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Text(label, style = MaterialTheme.typography.titleSmall, color = color)
-        Text(shortDate(e.date), style = MaterialTheme.typography.labelSmall, color = Brand.InkSoft)
+private fun MarkChip(value: String) {
+    val c = markColor(value)
+    Box(Modifier.size(30.dp).clip(RoundedCornerShape(10.dp)).background(c.copy(alpha = 0.14f)), contentAlignment = Alignment.Center) {
+        Text(value, style = MaterialTheme.typography.labelLarge, color = c, maxLines = 1)
     }
 }
 
 @Composable
-private fun EntryDetails(e: app.nastavnik.grades.LksEntry) {
-    Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Brand.Accent.copy(alpha = 0.07f)).padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        Text(
-            listOfNotNull(
-                fullDate(e.date),
-                e.marks.takeIf { it.isNotEmpty() }?.joinToString(", ") { it.value + (it.second?.let { s -> " / $s" } ?: "") }?.let { "оценка $it" },
-                if (e.absent) (if (e.absentValid == true) "пропуск по уважительной" else "пропуск") else null,
-            ).joinToString(" · "),
-            style = MaterialTheme.typography.titleSmall,
-        )
-        e.comment?.let { Text("Комментарий: $it", style = MaterialTheme.typography.bodySmall) }
-        e.hometask?.let { Text("Задание: $it", style = MaterialTheme.typography.bodySmall) }
+private fun AbsenceBadge(valid: Boolean) {
+    val c = if (valid) Color(0xFFE0A21E) else Brand.Error
+    Text(
+        if (valid) "Пропуск · уваж." else "Пропуск", style = MaterialTheme.typography.labelMedium, color = c,
+        modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(c.copy(alpha = 0.12f)).padding(horizontal = 10.dp, vertical = 5.dp),
+    )
+}
+
+/** Строка даты в раскрытой карточке: пропуск, оценки, комментарий; задание — строкой ниже. */
+@Composable
+private fun EntryRow(e: app.nastavnik.grades.LksEntry) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(entryDate(e.date), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.width(110.dp))
+            if (e.absent) AbsenceBadge(e.absentValid == true)
+            e.marks.forEach { MarkChip(it.value + (it.second?.let { s -> "/$s" } ?: "")) }
+            e.comment?.takeIf { it.isNotBlank() }?.let {
+                Text(it, style = MaterialTheme.typography.bodySmall, color = Brand.InkSoft, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            }
+        }
+        e.hometask?.takeIf { it.isNotBlank() }?.let { Text("Задание: $it", style = MaterialTheme.typography.bodySmall, color = Brand.InkSoft) }
     }
 }
 
-private fun shortDate(iso: String): String = runCatching {
-    java.time.LocalDate.parse(iso).format(java.time.format.DateTimeFormatter.ofPattern("d.MM"))
+private fun entryDate(iso: String): String = runCatching {
+    java.time.LocalDate.parse(iso.take(10)).format(java.time.format.DateTimeFormatter.ofPattern("d MMM, EE", Locale.forLanguageTag("ru")))
 }.getOrDefault(iso)
 
 private fun fullDate(iso: String): String = runCatching {

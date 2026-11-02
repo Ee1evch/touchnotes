@@ -64,6 +64,7 @@ import app.nastavnik.app
 import app.nastavnik.schedule.Lesson
 import app.nastavnik.schedule.ScheduleText
 import app.nastavnik.study.Alarms
+import app.nastavnik.study.ruPlural
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.Duration
@@ -137,13 +138,14 @@ fun ScheduleScreen(onBack: (() -> Unit)?) {
     }
 
     ScreenScaffold(title = "", onBack = null, scrollable = true) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             if (onBack != null) RoundIconButton(R.drawable.ic_arrow_back, "Назад", onBack)
-            Column(Modifier.weight(1f)) {
-                Text("Расписание", style = MaterialTheme.typography.headlineSmall)
-                Text(group, style = MaterialTheme.typography.bodyMedium, color = Brand.Accent, modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { picking = true })
+            Column(Modifier.weight(1f).padding(start = 4.dp)) {
+                Text("Расписание", style = MaterialTheme.typography.headlineMedium)
+                Text(group, style = MaterialTheme.typography.bodySmall, color = Brand.InkSoft, modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { picking = true })
             }
             RefreshButton(loading) { refresh(force = true) }
+            RoundIconButton(R.drawable.ic_tune, "Сменить группу") { picking = true }
         }
 
         WeekStrip(day, week.orEmpty(), onPick = { day = it }, onShift = { day = day.plusWeeks(it.toLong()) })
@@ -170,11 +172,13 @@ fun ScheduleScreen(onBack: (() -> Unit)?) {
         ) { d ->
             val lessons = week?.filter { it.date == d.toString() }?.sortedBy { it.start }
             Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-                Text(
-                    d.format(DateTimeFormatter.ofPattern("EEEE, d MMMM", ru)).replaceFirstChar { it.uppercase() },
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.padding(start = 4.dp, top = 4.dp),
-                )
+                Column(Modifier.padding(start = 4.dp, top = 4.dp)) {
+                    Text(d.format(DateTimeFormatter.ofPattern("EEEE, d MMMM", ru)).replaceFirstChar { it.uppercase() }, style = MaterialTheme.typography.titleLarge)
+                    if (!lessons.isNullOrEmpty()) Text(
+                        "${lessons.size} ${ruPlural(lessons.size, "пара", "пары", "пар")} · ${lessons.first().start}–${lessons.last().end}",
+                        style = MaterialTheme.typography.bodySmall, color = Brand.InkSoft,
+                    )
+                }
                 when {
                     lessons == null -> Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Brand.Accent) }
                     lessons.isEmpty() -> EmptyDay(loading)
@@ -186,7 +190,6 @@ fun ScheduleScreen(onBack: (() -> Unit)?) {
             }
         }
         Spacer(Modifier.height(8.dp))
-        LinkText("Сменить группу", onClick = { picking = true })
         Text(
             "Расписание — с сайта schedule.siriusuniversity.ru (на основе Lecturial 2). Неофициально; сверяйся с сайтом при сомнениях.",
             style = MaterialTheme.typography.bodySmall, color = Brand.InkSoft,
@@ -206,50 +209,51 @@ private fun RefreshButton(loading: Boolean, onClick: () -> Unit) {
     }
 }
 
-/** Неделя: семь дней, выбранный — на скользящей подложке, под днями с парами — точка. */
+/** Неделя: «‹ 2 нояб. — 8 нояб. ›» и семь плиток дней, выбранный — цветом акцента, под днями с парами — точка. */
 @Composable
 private fun WeekStrip(day: LocalDate, lessons: List<Lesson>, onPick: (LocalDate) -> Unit, onShift: (Int) -> Unit) {
     val monday = ScheduleText.monday(day)
     val today = LocalDate.now()
     val busy = lessons.map { it.date }.toSet()
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        Icon(painterResource(R.drawable.ic_chevron_left), "Прошлая неделя", tint = Brand.InkSoft, modifier = Modifier.size(28.dp).clip(CircleShape).clickable { onShift(-1) }.padding(4.dp))
-        BoxWithConstraints(Modifier.weight(1f).glass(RoundedCornerShape(22.dp), 8.dp)) {
-            val cell = maxWidth / 7
-            val idx = (day.dayOfWeek.value - 1)
-            val x by androidx.compose.animation.core.animateDpAsState(cell * idx, Motion.spatial(), label = "dayX")
-            Box(Modifier.offset(x = x).width(cell).height(64.dp).padding(4.dp).clip(RoundedCornerShape(18.dp)).background(Brand.Accent))
-            Row(Modifier.fillMaxWidth()) {
-                (0..6).forEach { i ->
-                    val d = monday.plusDays(i.toLong())
-                    val sel = d == day
-                    Column(
-                        Modifier.width(cell).height(64.dp).clip(RoundedCornerShape(18.dp)).clickable { onPick(d) },
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center,
-                    ) {
-                        val fg = if (sel) Brand.OnAccent else if (d == today) Brand.Accent else MaterialTheme.colorScheme.onSurface
-                        Text(d.dayOfWeek.getDisplayName(TextStyle.SHORT, ru).replaceFirstChar { it.uppercase() }, style = MaterialTheme.typography.labelSmall, color = fg.copy(alpha = 0.8f))
-                        Text(d.dayOfMonth.toString(), style = MaterialTheme.typography.titleMedium, color = fg)
-                        Box(Modifier.padding(top = 3.dp).size(5.dp).clip(CircleShape).background(if (d.toString() in busy) (if (sel) Brand.OnAccent else Brand.Accent) else Color.Transparent))
-                    }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            RoundIconButton(R.drawable.ic_chevron_left, "Прошлая неделя") { onShift(-1) }
+            val end = monday.plusDays(6)
+            Text(
+                "${monday.dayOfMonth} ${monday.month.getDisplayName(TextStyle.SHORT, ru)} — ${end.dayOfMonth} ${end.month.getDisplayName(TextStyle.SHORT, ru)}",
+                style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            )
+            RoundIconButton(R.drawable.ic_chevron, "Следующая неделя") { onShift(1) }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            (0..6).forEach { i ->
+                val d = monday.plusDays(i.toLong())
+                val sel = d == day
+                val bg by androidx.compose.animation.animateColorAsState(if (sel) Brand.Accent else Brand.Glass, Motion.enter(220), label = "dayBg")
+                Column(
+                    Modifier.weight(1f).clip(RoundedCornerShape(16.dp)).background(bg).clickable { onPick(d) }.padding(vertical = 8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    val fg = if (sel) Brand.OnAccent else MaterialTheme.colorScheme.onSurface
+                    Text(d.dayOfWeek.getDisplayName(TextStyle.SHORT, ru).replaceFirstChar { it.uppercase() }, style = MaterialTheme.typography.labelSmall, color = fg.copy(alpha = 0.7f))
+                    Text(
+                        d.dayOfMonth.toString(), style = MaterialTheme.typography.titleMedium, color = fg,
+                        fontWeight = if (d == today) androidx.compose.ui.text.font.FontWeight.Bold else androidx.compose.ui.text.font.FontWeight.SemiBold,
+                    )
+                    Box(Modifier.padding(top = 3.dp).size(5.dp).clip(CircleShape).background(if (d.toString() in busy) (if (sel) Brand.OnAccent else Brand.Accent) else Color.Transparent))
                 }
             }
         }
-        Icon(painterResource(R.drawable.ic_chevron), "Следующая неделя", tint = Brand.InkSoft, modifier = Modifier.size(28.dp).clip(CircleShape).clickable { onShift(1) }.padding(4.dp))
     }
 }
 
 @Composable
 private fun EmptyDay(loading: Boolean) {
-    Column(
-        Modifier.fillMaxWidth().glass(RoundedCornerShape(24.dp), 8.dp).padding(28.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        Text(if (loading) "Загружаю…" else "Пар нет", style = MaterialTheme.typography.titleMedium)
-        if (!loading) Text("Можно повторить карточки или отдохнуть", style = MaterialTheme.typography.bodyMedium, color = Brand.InkSoft)
-    }
+    Text(
+        if (loading) "Загружаю расписание…" else "Пар нет — выходной.",
+        style = MaterialTheme.typography.bodyMedium, color = Brand.InkSoft,
+        modifier = Modifier.fillMaxWidth().glass(RoundedCornerShape(24.dp)).padding(20.dp),
+    )
 }
 
 /** Окно между парами — если больше 20 минут. */
@@ -272,56 +276,58 @@ fun durationText(min: Long): String = when {
     else -> "${min / 60} ч ${min % 60} мин"
 }
 
-/** Карточка пары; появляется с лёгким каскадом. Идущая сейчас — с полосой прогресса. */
+/**
+ * Карточка пары, как в приложении родителя: время слева, полоса цвета типа во всю высоту, предмет, тип, аудитория
+ * в «таблетке», преподаватель; идущая — «Идёт сейчас · ещё N мин» и полоса. Появляется с лёгким каскадом.
+ */
 @Composable
 fun LessonCard(l: Lesson, now: LocalDateTime, index: Int = 0, compact: Boolean = false) {
     val start = l.startsAt()
     val end = l.endsAt() ?: start?.plusMinutes(90)
     val live = start != null && end != null && !now.isBefore(start) && now.isBefore(end)
-    val past = end != null && !now.isBefore(end)
     var shown by remember(l.id) { mutableStateOf(false) }
     LaunchedEffect(l.id) { delay(30L * index); shown = true }
     val appear by animateFloatAsState(if (shown) 1f else 0f, Motion.enter(380), label = "appear")
     val color = lessonColor(l.type)
-    Row(
+    Column(
         Modifier
             .fillMaxWidth()
-            .graphicsLayer { alpha = appear * (if (past) 0.62f else 1f); translationY = (1 - appear) * 10.dp.toPx() }
-            .glass(RoundedCornerShape(22.dp), if (live) 14.dp else 8.dp, strong = live)
-            .padding(start = 14.dp, end = 16.dp, top = 14.dp, bottom = 14.dp),
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
+            .graphicsLayer { alpha = appear; translationY = (1 - appear) * 10.dp.toPx() }
+            .glass(RoundedCornerShape(24.dp))
+            .padding(16.dp),
     ) {
-        Column(Modifier.width(48.dp), horizontalAlignment = Alignment.End) {
-            Text(l.start, style = MaterialTheme.typography.titleSmall)
-            Text(l.end, style = MaterialTheme.typography.bodySmall, color = Brand.InkSoft)
-        }
-        Box(Modifier.width(4.dp).height(if (compact) 44.dp else 58.dp).clip(RoundedCornerShape(2.dp)).background(color))
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            Text(l.discipline, style = MaterialTheme.typography.titleSmall, maxLines = if (compact) 1 else 2, overflow = TextOverflow.Ellipsis)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                if (l.type.isNotBlank()) Text(l.type, style = MaterialTheme.typography.labelMedium, color = color)
-                l.classroom?.let { room ->
-                    Row(
-                        Modifier.clip(RoundedCornerShape(10.dp)).background(Brand.Accent.copy(alpha = 0.1f)).padding(horizontal = 8.dp, vertical = 2.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        Icon(painterResource(R.drawable.ic_location), contentDescription = null, tint = Brand.Accent, modifier = Modifier.size(13.dp))
-                        Text(room, style = MaterialTheme.typography.labelMedium, color = Brand.Accent, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    }
-                }
+        Row(Modifier.height(androidx.compose.foundation.layout.IntrinsicSize.Min)) {
+            Column(Modifier.widthIn(min = 48.dp), horizontalAlignment = Alignment.End) {
+                Text(l.start, style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                Text(l.end, style = MaterialTheme.typography.bodyMedium, color = Brand.InkSoft)
             }
-            if (!compact) l.teachersShort?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Brand.InkSoft, maxLines = 1, overflow = TextOverflow.Ellipsis) }
-            if (live && start != null && end != null) {
-                val total = Duration.between(start, end).toMinutes().coerceAtLeast(1)
-                val passed = Duration.between(start, now).toMinutes().coerceIn(0, total)
-                val p by animateFloatAsState(passed.toFloat() / total, tween(800), label = "progress")
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
-                    Box(Modifier.weight(1f).height(5.dp).clip(RoundedCornerShape(3.dp)).background(Brand.Line)) {
-                        Box(Modifier.fillMaxHeight().fillMaxWidth(p).clip(RoundedCornerShape(3.dp)).background(color))
+            Box(Modifier.padding(horizontal = 14.dp).width(4.dp).fillMaxHeight().clip(RoundedCornerShape(2.dp)).background(color))
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(l.discipline, style = MaterialTheme.typography.titleMedium, maxLines = if (compact) 1 else 2, overflow = TextOverflow.Ellipsis)
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (l.type.isNotBlank()) Text(l.type, style = MaterialTheme.typography.bodyMedium, color = color)
+                    val place = l.classroom?.takeIf { it.isNotBlank() } ?: if (!l.online.isNullOrBlank()) "Онлайн" else null
+                    if (place != null) Row(
+                        Modifier.clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.surfaceVariant).padding(horizontal = 10.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(painterResource(R.drawable.ic_location), contentDescription = null, tint = Brand.InkSoft, modifier = Modifier.size(15.dp))
+                        Spacer(Modifier.width(5.dp))
+                        Text(place, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
-                    Text("ещё ${durationText(total - passed)}", style = MaterialTheme.typography.labelSmall, color = Brand.InkSoft)
                 }
+                if (!compact) l.teachersShort?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = Brand.InkSoft, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+            }
+        }
+        if (live && start != null && end != null) {
+            val total = Duration.between(start, end).toMinutes().coerceAtLeast(1)
+            val passed = Duration.between(start, now).toMinutes().coerceIn(0, total)
+            val p by animateFloatAsState(passed.toFloat() / total, tween(800), label = "progress")
+            Spacer(Modifier.height(12.dp))
+            Text("Идёт сейчас · ещё ${durationText(total - passed)}", style = MaterialTheme.typography.labelMedium, color = color)
+            Spacer(Modifier.height(6.dp))
+            Box(Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)).background(color.copy(alpha = 0.18f))) {
+                Box(Modifier.fillMaxHeight().fillMaxWidth(p).clip(RoundedCornerShape(2.dp)).background(color))
             }
         }
     }

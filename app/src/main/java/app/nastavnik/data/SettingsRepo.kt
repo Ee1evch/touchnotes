@@ -57,7 +57,7 @@ data class AppSettings(
     val lightTheme: String = "paper",
     val darkTheme: String = "graphite",
     val accent: Int = 0,
-    val backdrop: String = "BLOBS",
+    val backdrop: String = "PLAIN",
     val textScale: Float = 1f,
     /** Режим устройства (auto / phone / tablet) — здесь, чтобы смена сразу перестраивала экраны. */
     val deviceRole: String = "auto",
@@ -110,10 +110,22 @@ class SettingsRepo(private val context: Context) {
         lightTheme = prefs.getString(K_LIGHT, "paper").orEmpty(),
         darkTheme = prefs.getString(K_DARK, "graphite").orEmpty(),
         accent = prefs.getInt(K_ACCENT, 0),
-        backdrop = prefs.getString(K_BACKDROP, "BLOBS").orEmpty(),
+        backdrop = prefs.getString(K_BACKDROP, "PLAIN").orEmpty(),
         textScale = prefs.getFloat(K_TEXT_SCALE, 1f),
         deviceRole = prefs.getString(K_ROLE, "auto").orEmpty(),
     )
+
+    /**
+     * Один раз — на оформление как в приложении для родителя: светлая и тёмная темы по умолчанию, свой акцент
+     * сброшен, ровный фон. Дальше выбор в «Оформлении» остаётся за студентом.
+     */
+    fun migrateToParentDesign() {
+        if (prefs.getBoolean(K_DESIGN_PARENT, false)) return
+        prefs.edit {
+            putString(K_LIGHT, "paper"); putString(K_DARK, "graphite"); putInt(K_ACCENT, 0)
+            putString(K_BACKDROP, "PLAIN"); putBoolean(K_DESIGN_PARENT, true)
+        }
+    }
 
     fun setLightTheme(id: String) = prefs.edit { putString(K_LIGHT, id) }
     fun setDarkTheme(id: String) = prefs.edit { putString(K_DARK, id) }
@@ -422,6 +434,7 @@ class SettingsRepo(private val context: Context) {
         private const val K_DARK = "theme_dark"
         private const val K_ACCENT = "theme_accent"
         private const val K_BACKDROP = "theme_backdrop"
+        private const val K_DESIGN_PARENT = "design_parent_v1"
         private const val K_TEXT_SCALE = "text_scale"
         private const val K_LIMIT = "daily_limit_usd"
         private const val K_PROVIDER = "provider"

@@ -123,6 +123,7 @@ class NastavnikApp : Application() {
         WebView.enableSlowWholeDocumentDraw()
         createChannels()
         settings.forgetLksPassword()
+        settings.migrateToParentDesign()
         Palettes.installWallpaper(this)
         Reminders.schedule(this)
         Alarms.rescheduleAll(this)

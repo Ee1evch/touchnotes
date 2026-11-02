@@ -46,6 +46,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -93,7 +94,7 @@ fun PhoneShell(tab: PhoneTab, onTab: (PhoneTab) -> Unit, resumeTick: Int, go: (S
                     .togetherWith(fadeOut(tween(140)) + slideOutHorizontally(tween(200)) { -it / 18 * dir })
             },
             label = "tab",
-            modifier = Modifier.fillMaxSize().padding(bottom = 80.dp),
+            modifier = Modifier.fillMaxSize().navigationBarsPadding().padding(bottom = 80.dp),
         ) { t ->
             when (t) {
                 PhoneTab.TODAY -> TodayTab(resumeTick, go, onTab = onTab)
@@ -107,34 +108,27 @@ fun PhoneShell(tab: PhoneTab, onTab: (PhoneTab) -> Unit, resumeTick: Int, go: (S
 }
 
 /**
- * Нижняя панель: округлая стеклянная «пилюля», парящая над краем экрана. Подсветка выбранной вкладки
- * переезжает с пружинкой, значок мягко подпрыгивает.
+ * Нижняя панель, как в приложении для родителя: во всю ширину, цвета карточки; у выбранной вкладки — подложка
+ * под значком и цвет акцента.
  */
 @Composable
 private fun TabBar(tab: PhoneTab, onTab: (PhoneTab) -> Unit, modifier: Modifier) {
-    BoxWithConstraints(
-        modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 14.dp, vertical = 10.dp).height(66.dp)
-            .glass(RoundedCornerShape(33.dp), 18.dp, strong = true),
-    ) {
-        val cell = maxWidth / PhoneTab.entries.size
-        val x by animateDpAsState(cell * tab.ordinal, spring(dampingRatio = 0.68f, stiffness = 420f), label = "tabX")
-        Box(Modifier.offset(x = x).width(cell).height(66.dp).padding(6.dp).clip(RoundedCornerShape(27.dp)).background(Brand.Accent.copy(alpha = 0.16f)))
-        Row(Modifier.fillMaxSize()) {
-            PhoneTab.entries.forEach { t ->
-                val sel = t == tab
-                val k by animateFloatAsState(if (sel) 1.14f else 1f, spring(dampingRatio = 0.42f, stiffness = 650f), label = "tabIcon")
-                val lift by animateDpAsState(if (sel) (-1).dp else 0.dp, spring(dampingRatio = 0.5f, stiffness = 600f), label = "tabLift")
-                val fg by animateColorAsState(if (sel) Brand.Accent else Brand.InkSoft, tween(220), label = "tabColor")
-                Column(
-                    Modifier.width(cell).fillMaxSize().clip(RoundedCornerShape(27.dp))
-                        .clickable(remember { MutableInteractionSource() }, indication = null) { onTab(t) }
-                        .semantics { contentDescription = t.title; selected = sel },
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center,
-                ) {
-                    Icon(painterResource(t.icon), contentDescription = null, tint = fg, modifier = Modifier.offset(y = lift).size(22.dp).graphicsLayer { scaleX = k; scaleY = k })
-                    Text(t.title, style = MaterialTheme.typography.labelSmall, color = fg, maxLines = 1, modifier = Modifier.padding(top = 2.dp))
+    Row(modifier.fillMaxWidth().background(Brand.Glass).navigationBarsPadding().height(80.dp)) {
+        PhoneTab.entries.forEach { t ->
+            val sel = t == tab
+            val fg by animateColorAsState(if (sel) Brand.Accent else Brand.InkSoft, tween(220), label = "tabColor")
+            val pill by animateColorAsState(if (sel) Brand.Accent.copy(alpha = 0.14f) else Color.Transparent, tween(220), label = "tabPill")
+            Column(
+                Modifier.weight(1f).fillMaxHeight()
+                    .clickable(remember { MutableInteractionSource() }, indication = null) { onTab(t) }
+                    .semantics { contentDescription = t.title; selected = sel },
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+            ) {
+                Box(Modifier.size(width = 56.dp, height = 30.dp).clip(RoundedCornerShape(15.dp)).background(pill), contentAlignment = Alignment.Center) {
+                    Icon(painterResource(t.icon), contentDescription = null, tint = fg, modifier = Modifier.size(22.dp))
                 }
+                Text(t.title, style = MaterialTheme.typography.labelMedium, color = fg, maxLines = 1, modifier = Modifier.padding(top = 4.dp))
             }
         }
     }

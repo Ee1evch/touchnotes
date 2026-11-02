@@ -65,28 +65,22 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.nastavnik.R
 
-/** Мягкая «бумажная» тень под карточкой: почти незаметная, но отделяет карточку от фона. */
+/** Карточка без тени — как в приложении для родителя; [color] — фон (без него только скругление). */
+@Suppress("UNUSED_PARAMETER")
 fun Modifier.softCard(shape: Shape = RoundedCornerShape(24.dp), elevation: Dp = 14.dp, color: Color? = null): Modifier =
     this
-        .shadow(elevation, shape, ambientColor = Color(0x1A16161A), spotColor = Color(0x2216161A))
         .clip(shape)
         .then(if (color != null) Modifier.background(color) else Modifier)
 
 /**
- * Стеклянная пластина: полупрозрачная белая, светлее сверху (блик), со светлой кромкой и тонкой линией по краю.
- * Сквозь неё видны мягкие пятна фона. [strong] — плотнее, для мелких элементов поверх стекла.
+ * Карточка, как в приложении для родителя: ровная, цвета карточки темы (белая в светлой), без тени, блика и
+ * кромки. Параметры [elevation] и [strong] остались от «стекла» — ни на что не влияют.
  */
+@Suppress("UNUSED_PARAMETER")
 fun Modifier.glass(shape: Shape = RoundedCornerShape(24.dp), elevation: Dp = 10.dp, strong: Boolean = false): Modifier =
     this
-        .shadow(elevation, shape, ambientColor = Color(0x1216161A), spotColor = Color(0x1A16161A))
         .clip(shape)
-        .background(
-            Brush.verticalGradient(
-                listOf(Brand.Glass.copy(alpha = if (strong) 0.92f else 0.76f), Brand.Glass.copy(alpha = if (strong) 0.8f else 0.56f)),
-            ),
-        )
-        .border(0.6.dp, Brand.Line, shape)
-        .border(1.2.dp, Brush.verticalGradient(listOf(Color.White.copy(alpha = if (Brand.dark) 0.16f else 0.95f), Color.White.copy(alpha = if (Brand.dark) 0.03f else 0.25f))), shape)
+        .background(Brand.Glass)
 
 /**
  * Фон всех экранов под стеклом — по настройке «Фон»: мягкие пятна, «живые» (медленно плывут),
@@ -186,7 +180,7 @@ fun ScreenScaffold(
                 if (onBack != null || title.isNotBlank()) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                         if (onBack != null) RoundIconButton(R.drawable.ic_arrow_back, "Назад", onBack)
-                        Text(title, style = MaterialTheme.typography.headlineSmall, maxLines = 2)
+                        Text(title, style = MaterialTheme.typography.headlineMedium, maxLines = 2)
                     }
                 }
                 content()

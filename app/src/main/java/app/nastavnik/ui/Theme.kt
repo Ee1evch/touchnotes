@@ -53,9 +53,10 @@ data class Palette(
 
 /** Готовые темы: шесть светлых и четыре тёмные. */
 object Palettes {
+    // «Светлая» и «Тёмная» — как в приложении для родителя: ровный серо-голубой фон, белые карточки, синий акцент.
     val PAPER = Palette(
-        "paper", "Бумага", false, Color(0xFFF4F2EE), Color(0xFF16161A), Color(0xFF5E5D66),
-        Color(0xFF2C2C33), Color.White, Color.White, Color(0x1A16161A),
+        "paper", "Светлая", false, Color(0xFFF4F5F8), Color(0xFF16161A), Color(0xFF6B6F7A),
+        Color(0xFF2563EB), Color.White, Color.White, Color(0xFFE2E4EA),
         Color(0xFFD5E2F3), Color(0xFFF5DECD), Color(0xFFD5ECE1),
     )
     val OCEAN = Palette(
@@ -84,8 +85,8 @@ object Palettes {
         Color(0xFFF8D0DF), Color(0xFFFBE2D0), Color(0xFFE6D9F6),
     )
     val GRAPHITE = Palette(
-        "graphite", "Графит", true, Color(0xFF121215), Color(0xFFEDECF1), Color(0xFFA3A2AD),
-        Color(0xFFE4E3EA), Color(0xFF16161A), Color(0xFF2A2A31), Color(0x24FFFFFF),
+        "graphite", "Тёмная", true, Color(0xFF111216), Color(0xFFF2F3F5), Color(0xFFA3A7B1),
+        Color(0xFF8AB4FF), Color(0xFF0B1B3A), Color(0xFF1B1C21), Color(0xFF33353C),
         Color(0xFF1C2A3D), Color(0xFF3A2A20), Color(0xFF183028),
     )
     val MIDNIGHT = Palette(
@@ -153,7 +154,7 @@ data class Appearance(
     val light: String = Palettes.PAPER.id,
     val dark: String = Palettes.GRAPHITE.id,
     val accent: Int = 0,
-    val backdrop: Backdrop = Backdrop.BLOBS,
+    val backdrop: Backdrop = Backdrop.PLAIN,
     val textScale: Float = 1f,
 ) {
     fun resolve(systemDark: Boolean): Palette {
@@ -177,7 +178,7 @@ data class Appearance(
  */
 object Brand {
     var current by mutableStateOf(Palettes.PAPER)
-    var backdrop by mutableStateOf(Backdrop.BLOBS)
+    var backdrop by mutableStateOf(Backdrop.PLAIN)
 
     /** Фаза «живого» фона, 0…1 по кругу. */
     var phase by mutableFloatStateOf(0f)
@@ -226,8 +227,8 @@ private fun typography(k: Float): Typography {
         headlineMedium = t(26, 32, FontWeight.Bold, -0.4),
         headlineSmall = t(22, 28, FontWeight.SemiBold, -0.3),
         titleLarge = t(20, 26, FontWeight.SemiBold, -0.2),
-        titleMedium = t(16, 22, FontWeight.SemiBold),
-        titleSmall = t(14, 20, FontWeight.SemiBold),
+        titleMedium = t(17, 22, FontWeight.SemiBold),
+        titleSmall = t(15, 20, FontWeight.SemiBold),
         bodyLarge = t(16, 24, FontWeight.Normal),
         bodyMedium = t(15, 22, FontWeight.Normal),
         bodySmall = t(13, 18, FontWeight.Normal),

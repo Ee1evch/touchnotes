@@ -318,6 +318,6 @@ internal fun appearanceOf(st: AppSettings) = Appearance(
     light = st.lightTheme,
     dark = st.darkTheme,
     accent = st.accent,
-    backdrop = runCatching { Backdrop.valueOf(st.backdrop) }.getOrDefault(Backdrop.BLOBS),
+    backdrop = runCatching { Backdrop.valueOf(st.backdrop) }.getOrDefault(Backdrop.PLAIN),
     textScale = st.textScale,
 )
