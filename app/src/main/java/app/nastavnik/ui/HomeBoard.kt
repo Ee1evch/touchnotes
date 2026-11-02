@@ -144,6 +144,13 @@ fun HomeBoard(
 
     val columns = HomeLayout.columns(tablet)
     Column(Modifier.fillMaxWidth().animateContentSize(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        // Правка — панель сверху, чтобы сразу было видно, что делать.
+        if (editing) AddPanel(
+            hidden = catalog.filter { w -> items.none { it.id == w.id } },
+            onAdd = { w -> save(HomeLayout.add(items, w.id, w.sizes.last())) },
+            onReset = { save(defaults(tablet)) },
+            onDone = onDoneEditing,
+        )
         HomeLayout.rows(items, columns).forEach { row ->
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 var used = 0
@@ -177,12 +184,6 @@ fun HomeBoard(
                 if (used < columns) Spacer(Modifier.weight((columns - used).toFloat()))
             }
         }
-        if (editing) AddPanel(
-            hidden = catalog.filter { w -> items.none { it.id == w.id } },
-            onAdd = { w -> save(HomeLayout.add(items, w.id, w.sizes.last())) },
-            onReset = { save(defaults(tablet)) },
-            onDone = onDoneEditing,
-        )
     }
 }
 
@@ -212,7 +213,7 @@ private fun SmallIcon(icon: Int, label: String, onClick: () -> Unit) {
     ) { Icon(painterResource(icon), contentDescription = null, tint = Brand.Ink, modifier = Modifier.size(16.dp)) }
 }
 
-/** Внизу в режиме правки: убранные блоки — добавить обратно; «Как было» и «Готово». */
+/** Сверху в режиме правки: убранные блоки — добавить обратно; «Как было» и «Готово». */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun AddPanel(hidden: List<Widget>, onAdd: (Widget) -> Unit, onReset: () -> Unit, onDone: () -> Unit) {
