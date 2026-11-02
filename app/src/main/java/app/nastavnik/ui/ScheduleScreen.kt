@@ -86,10 +86,10 @@ fun lessonColor(type: String): Color = when (type) {
 
 /**
  * Расписание группы: неделя полоской дней, пары карточками, текущая — с полосой «сколько осталось»,
- * между парами — окна. Аудитория открывает маршрут на карте. Работает и без сети — из кеша.
+ * между парами — окна. Работает и без сети — из кеша.
  */
 @Composable
-fun ScheduleScreen(onBack: (() -> Unit)?, onRoom: (String) -> Unit) {
+fun ScheduleScreen(onBack: (() -> Unit)?) {
     val context = LocalContext.current
     val app = context.app
     val scope = rememberCoroutineScope()
@@ -180,7 +180,7 @@ fun ScheduleScreen(onBack: (() -> Unit)?, onRoom: (String) -> Unit) {
                     lessons.isEmpty() -> EmptyDay(loading)
                     else -> lessons.forEachIndexed { i, l ->
                         if (i > 0) Gap(lessons[i - 1], l)
-                        LessonCard(l, now, index = i, onRoom = onRoom)
+                        LessonCard(l, now, index = i)
                     }
                 }
             }
@@ -274,7 +274,7 @@ fun durationText(min: Long): String = when {
 
 /** Карточка пары; появляется с лёгким каскадом. Идущая сейчас — с полосой прогресса. */
 @Composable
-fun LessonCard(l: Lesson, now: LocalDateTime, index: Int = 0, compact: Boolean = false, onRoom: (String) -> Unit) {
+fun LessonCard(l: Lesson, now: LocalDateTime, index: Int = 0, compact: Boolean = false) {
     val start = l.startsAt()
     val end = l.endsAt() ?: start?.plusMinutes(90)
     val live = start != null && end != null && !now.isBefore(start) && now.isBefore(end)
@@ -302,7 +302,7 @@ fun LessonCard(l: Lesson, now: LocalDateTime, index: Int = 0, compact: Boolean =
                 if (l.type.isNotBlank()) Text(l.type, style = MaterialTheme.typography.labelMedium, color = color)
                 l.classroom?.let { room ->
                     Row(
-                        Modifier.clip(RoundedCornerShape(10.dp)).clickable { onRoom(room) }.background(Brand.Accent.copy(alpha = 0.1f)).padding(horizontal = 8.dp, vertical = 2.dp),
+                        Modifier.clip(RoundedCornerShape(10.dp)).background(Brand.Accent.copy(alpha = 0.1f)).padding(horizontal = 8.dp, vertical = 2.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
                     ) {

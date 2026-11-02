@@ -303,7 +303,7 @@ private fun LicensesSection() {
     var open by remember { mutableStateOf(false) }
     SectionCard("О приложении") {
         Text(
-            "Расписание загружается кодом на основе Lecturial 2 (Apache License 2.0). Карта — из данных навигатора ГМЦ. " +
+            "Расписание загружается кодом на основе Lecturial 2 (Apache License 2.0). " +
                 "Приложение неофициальное и не связано с Университетом «Сириус».",
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

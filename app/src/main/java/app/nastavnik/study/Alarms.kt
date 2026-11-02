@@ -40,6 +40,7 @@ object Alarms {
         app.appScope.launch(Dispatchers.IO) {
             runCatching { schedulePersonal(context) }
             runCatching { scheduleNextLesson(context) }
+            runCatching { LiveNotifications.updateLesson(context) }
             runCatching { LessonQuiet.update(context) }
             runCatching { WakeAlarm.reschedule(context) }
             runCatching { StudyLock.schedule(context) }

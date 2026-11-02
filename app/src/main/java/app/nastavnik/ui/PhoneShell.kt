@@ -71,7 +71,7 @@ import java.util.Locale
 enum class PhoneTab(val title: String, val icon: Int) {
     TODAY("Сегодня", R.drawable.ic_home),
     SCHEDULE("Расписание", R.drawable.ic_calendar),
-    MAP("Карта", R.drawable.ic_map),
+    GRADES("Оценки", R.drawable.ic_chart),
     STUDY("Учёба", R.drawable.ic_cards),
 }
 
@@ -80,7 +80,7 @@ enum class PhoneTab(val title: String, val icon: Int) {
  * Тетради для стилуса, наставник поверх записей и чистовики — на планшете.
  */
 @Composable
-fun PhoneShell(tab: PhoneTab, onTab: (PhoneTab) -> Unit, mapRoom: String?, onMapRoom: (String) -> Unit, resumeTick: Int, go: (String) -> Unit) {
+fun PhoneShell(tab: PhoneTab, onTab: (PhoneTab) -> Unit, resumeTick: Int, go: (String) -> Unit) {
     Box(Modifier.fillMaxSize().paperBackdrop()) {
         AnimatedContent(
             targetState = tab,
@@ -94,9 +94,9 @@ fun PhoneShell(tab: PhoneTab, onTab: (PhoneTab) -> Unit, mapRoom: String?, onMap
             modifier = Modifier.fillMaxSize().padding(bottom = 80.dp),
         ) { t ->
             when (t) {
-                PhoneTab.TODAY -> TodayTab(resumeTick, go, onRoom = onMapRoom, onTab = onTab)
-                PhoneTab.SCHEDULE -> ScheduleScreen(onBack = null, onRoom = onMapRoom)
-                PhoneTab.MAP -> MapScreen(initialRoom = mapRoom, onBack = null)
+                PhoneTab.TODAY -> TodayTab(resumeTick, go, onTab = onTab)
+                PhoneTab.SCHEDULE -> ScheduleScreen(onBack = null)
+                PhoneTab.GRADES -> GradesScreen(onBack = null, onSettings = { go(MainActivity.SCREEN_SETTINGS) }, onLks = { go(MainActivity.SCREEN_LKS) })
                 PhoneTab.STUDY -> StudyTab(resumeTick, go)
             }
         }
@@ -140,7 +140,7 @@ private fun TabBar(tab: PhoneTab, onTab: (PhoneTab) -> Unit, modifier: Modifier)
 
 /** «Сегодня»: шапка с тем, что сейчас; карточка дня; плитки; напоминания; оценки. */
 @Composable
-private fun TodayTab(resumeTick: Int, go: (String) -> Unit, onRoom: (String) -> Unit, onTab: (PhoneTab) -> Unit) {
+private fun TodayTab(resumeTick: Int, go: (String) -> Unit, onTab: (PhoneTab) -> Unit) {
     val context = LocalContext.current
     val app = context.app
     val version by app.schedule.version.collectAsStateWithLifecycle()
@@ -161,7 +161,7 @@ private fun TodayTab(resumeTick: Int, go: (String) -> Unit, onRoom: (String) -> 
         }
         EveningCard(resumeTick, go)
         SirenCard(resumeTick)
-        DayCard(lessons, tomorrow, now, hasGroup, onRoom = onRoom, onSchedule = { onTab(PhoneTab.SCHEDULE) })
+        DayCard(lessons, tomorrow, now, hasGroup, onSchedule = { onTab(PhoneTab.SCHEDULE) })
         PlanCard(resumeTick)
         val today = Streaks.day(nowMs)
         val perDay = remember(events) { events.groupingBy { Streaks.day(it.at) }.eachCount() }

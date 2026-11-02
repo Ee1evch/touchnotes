@@ -22,7 +22,6 @@ import app.nastavnik.study.Alarms
 import app.nastavnik.study.WakePrefs
 import app.nastavnik.ui.Palettes
 import app.nastavnik.schedule.ScheduleRepo
-import app.nastavnik.campus.CampusRepo
 import app.nastavnik.sync.SyncManager
 import app.nastavnik.grades.GradesRepo
 import app.nastavnik.study.Speaker
@@ -64,8 +63,6 @@ class NastavnikApp : Application() {
     /** Расписание своей группы с сайта Сириуса (с кешем). */
     val schedule: ScheduleRepo by lazy { ScheduleRepo(this, settings) }
 
-    /** Карта кампуса: этажи, поиск аудиторий, маршруты. */
-    val campus: CampusRepo by lazy { CampusRepo(this) }
 
     /** Успеваемость из личного кабинета (Moodle). */
     val grades: GradesRepo by lazy { GradesRepo(this, settings) }
@@ -177,7 +174,7 @@ class NastavnikApp : Application() {
         )
         nm.createNotificationChannel(
             NotificationChannel(CHANNEL_LESSONS, "Скоро пара", NotificationManager.IMPORTANCE_HIGH).apply {
-                description = "За несколько минут до пары: что и в какой аудитории, с маршрутом по карте"
+                description = "Живое уведомление о парах: что и в какой аудитории, отсчёт и весь день полосой"
             },
         )
     }

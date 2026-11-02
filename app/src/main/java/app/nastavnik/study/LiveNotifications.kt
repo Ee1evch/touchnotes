@@ -6,97 +6,124 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.graphics.Color
+import android.graphics.drawable.Icon
 import android.os.Build
 import app.nastavnik.NastavnikApp
 import app.nastavnik.R
 import app.nastavnik.app
+import app.nastavnik.schedule.DayTimeline
+import app.nastavnik.schedule.Lesson
 import app.nastavnik.ui.MainActivity
 import app.nastavnik.ui.Permissions
-import java.time.Duration
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneId
 
 /**
- * «Живые» уведомления (Live Updates Android 16): закреплены вверху шторки и на экране блокировки,
- * с обратным отсчётом и полосой прогресса. На старых версиях — обычное закреплённое уведомление с таймером.
+ * «Живое» уведомление на весь учебный день (Live Updates Android 16): закреплено вверху шторки и на экране
+ * блокировки, в строке состояния — отсчёт. Полоса — весь день: каждая пара своим цветом по типу, перемены серые,
+ * бегунок — где ты сейчас. До пар — «Физика через 9:41», на паре — сколько осталось и что дальше, на перемене —
+ * до какой пары и где. После последней пары исчезает. На старых Android — то же с обычной полосой.
  */
 object LiveNotifications {
     const val ACTION_LIVE = "app.nastavnik.LESSON_LIVE"
     private const val LESSON_ID = 7702
-    private const val NAV_ID = 7720
     private const val LIVE_REQUEST = 7710
+    private const val ACCENT = 0xFF2563EB.toInt()
+    private const val BREAK_COLOR = 0xFFB8BEC9.toInt()
 
     private fun ms(t: LocalDateTime) = t.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
 
-    private fun builder(context: Context, channel: String): Notification.Builder =
-        Notification.Builder(context, channel).apply {
-            setSmallIcon(R.drawable.ic_calendar)
-            setOngoing(true)
-            setOnlyAlertOnce(true)
-            setShowWhen(true)
-            // Просьба показать как «живое» уведомление (Android 16+).
-            extras.putBoolean("android.requestPromotedOngoing", true)
-        }
+    /** Цвет пары по типу — как в расписании. */
+    private fun color(type: String): Int = when (type) {
+        "Лекция" -> 0xFF4C7DF0.toInt()
+        "Практика" -> 0xFF1FA463.toInt()
+        "Семинар" -> 0xFFE08A1E.toInt()
+        "Лабораторная" -> 0xFF9B5DE5.toInt()
+        else -> 0xFF7C8596.toInt()
+    }
 
-    /** Пара: перед началом — отсчёт до неё, во время — сколько осталось и полоса. Ставит следующее обновление. */
+    private fun where(l: Lesson) = listOfNotNull(l.classroom, l.type.takeIf { it.isNotBlank() }).joinToString(" · ")
+
+    /** Обновить уведомление по текущему моменту и поставить следующее обновление. */
     suspend fun updateLesson(context: Context) {
         val app = context.app
         val nm = context.getSystemService(NotificationManager::class.java) ?: return
         val before = app.settings.lessonAlertMin()
         val now = LocalDateTime.now()
-        val today = app.schedule.day(LocalDate.now())
-        val current = today.firstOrNull { l -> val s = l.startsAt(); val e = l.endsAt(); s != null && e != null && !now.isBefore(s) && now.isBefore(e) }
-        val soon = today.filter { it.startsAt()?.let { s -> s.isAfter(now) && !s.isAfter(now.plusMinutes(before.toLong())) } == true }.minByOrNull { it.start }
-        val lesson = current ?: soon
-        if (lesson == null || before <= 0 || !Permissions.notifications(context)) {
+        val s = DayTimeline.at(app.schedule.day(LocalDate.now()), now)
+        val first = s?.parts?.firstOrNull { it.lesson != null }?.lesson?.startsAt()
+        // Показываем с «за N минут до первой пары» и до конца последней.
+        if (s == null || s.phase == DayTimeline.Phase.AFTER || before <= 0 || !Permissions.notifications(context) ||
+            (first != null && now.isBefore(first.minusMinutes(before.toLong())))
+        ) {
             nm.cancel(LESSON_ID)
             return
         }
-        val start = lesson.startsAt()!!
-        val end = lesson.endsAt() ?: start.plusMinutes(80)
+        val focus = s.focus ?: run { nm.cancel(LESSON_ID); return }
+        val start = focus.startsAt()!!
+        val end = focus.endsAt() ?: start.plusMinutes(90)
         val open = PendingIntent.getActivity(
             context, 7701,
-            Intent(context, MainActivity::class.java)
-                .putExtra(MainActivity.EXTRA_SCREEN, if (lesson.classroom != null) MainActivity.SCREEN_MAP else MainActivity.SCREEN_SCHEDULE)
-                .putExtra(MainActivity.EXTRA_ROOM, lesson.classroom)
+            Intent(context, MainActivity::class.java).putExtra(MainActivity.EXTRA_SCREEN, MainActivity.SCREEN_SCHEDULE)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        val where = listOfNotNull(lesson.classroom, lesson.type.takeIf { it.isNotBlank() }).joinToString(" · ")
-        val b = builder(context, NastavnikApp.CHANNEL_LESSONS).setContentIntent(open)
-        val next: Long
-        if (current == null) {
-            // До начала: «Физика через 9:41» — таймер считает сам, обновлять не нужно.
-            b.setContentTitle(lesson.discipline)
-                .setContentText(listOfNotNull("Начало в ${lesson.start}", where.ifBlank { null }).joinToString(" · "))
-                .setWhen(ms(start)).setUsesChronometer(true).setChronometerCountDown(true)
-                .setTimeoutAfter(Duration.between(now, end).toMillis())
-            if (lesson.classroom != null) b.addAction(Notification.Action.Builder(null, "Маршрут", open).build())
-            next = ms(start)
-        } else {
-            val total = Duration.between(start, end).toMinutes().coerceAtLeast(1)
-            val passed = Duration.between(start, now).toMinutes().coerceIn(0, total)
-            val following = today.filter { it.startsAt()?.isAfter(now) == true }.minByOrNull { it.start }
-            b.setContentTitle("${lesson.discipline} · идёт")
-                .setContentText(listOfNotNull(where.ifBlank { null }, following?.let { "дальше ${it.start} ${it.discipline}" }).joinToString(" · "))
-                .setWhen(ms(end)).setUsesChronometer(true).setChronometerCountDown(true)
-                .setTimeoutAfter(Duration.between(now, end).toMillis())
-            if (Build.VERSION.SDK_INT >= 36) {
-                b.setStyle(
-                    Notification.ProgressStyle()
-                        .setProgressSegments(listOf(Notification.ProgressStyle.Segment(total.toInt()).setColor(Color.parseColor("#4C7DF0"))))
-                        .setProgress(passed.toInt()),
-                )
-            } else {
-                b.setProgress(total.toInt(), passed.toInt(), false)
-            }
-            // Полоса — раз в 5 минут; в конце пары уведомление уйдёт само.
-            next = minOf(ms(now.plusMinutes(5)), ms(end) + 1000)
+        val b = Notification.Builder(context, NastavnikApp.CHANNEL_LESSONS)
+            .setSmallIcon(R.drawable.ic_calendar)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setColor(ACCENT)
+            .setContentIntent(open)
+            .setUsesChronometer(true)
+            .setChronometerCountDown(true)
+            .setShowWhen(true)
+            .setCategory(Notification.CATEGORY_EVENT)
+            .setVisibility(Notification.VISIBILITY_PUBLIC)
+        // Просьба показать как «живое» уведомление (Android 16+).
+        b.extras.putBoolean("android.requestPromotedOngoing", true)
+        val next = s.after?.let { "Дальше в ${it.start} — ${it.discipline}" } ?: "Последняя пара"
+        when (s.phase) {
+            DayTimeline.Phase.BEFORE -> b
+                .setContentTitle("${focus.discipline} в ${focus.start}")
+                .setContentText(where(focus).ifBlank { "Первая пара" })
+                .setSubText("Сегодня ${s.count} ${ruPlural(s.count, "пара", "пары", "пар")}")
+                .setWhen(ms(start))
+            DayTimeline.Phase.LESSON -> b
+                .setContentTitle(listOfNotNull(focus.discipline, focus.classroom).joinToString(" · "))
+                .setContentText(next)
+                .setSubText("Пара ${s.number} из ${s.count}")
+                .setWhen(ms(end))
+            else -> b
+                .setContentTitle("Перемена · дальше ${focus.discipline}")
+                .setContentText(listOfNotNull(focus.classroom, "в ${focus.start}").joinToString(" · "))
+                .setSubText("Пара ${s.number} из ${s.count}")
+                .setWhen(ms(start))
         }
+        if (Build.VERSION.SDK_INT >= 36) {
+            // Весь день полосой: пары цветом по типу, перемены серые, точки — начала пар.
+            var at = 0
+            val points = mutableListOf<Notification.ProgressStyle.Point>()
+            s.parts.forEach { p ->
+                if (p.lesson != null && at > 0) points += Notification.ProgressStyle.Point(at).setColor(color(p.lesson.type))
+                at += p.minutes
+            }
+            b.setStyle(
+                Notification.ProgressStyle()
+                    .setProgressSegments(s.parts.map { p -> Notification.ProgressStyle.Segment(p.minutes).setColor(p.lesson?.let { color(it.type) } ?: BREAK_COLOR) })
+                    .setProgressPoints(points)
+                    .setProgress(s.progress)
+                    .setProgressTrackerIcon(Icon.createWithResource(context, R.drawable.ic_flame).setTint(ACCENT))
+                    .setStyledByProgress(true),
+            )
+        } else {
+            b.setProgress(s.total, s.progress, false)
+        }
+        b.addAction(Notification.Action.Builder(null, "Расписание", open).build())
         runCatching { nm.notify(LESSON_ID, b.build()) }
-        schedule(context, next)
+        // Отсчёт идёт сам; полосу и этап (пара → перемена) обновляем раз в 3 минуты и точно на границах.
+        val boundary = if (s.phase == DayTimeline.Phase.LESSON) ms(end) else ms(start)
+        schedule(context, minOf(ms(now.plusMinutes(3)), boundary + 1000))
     }
 
     private fun schedule(context: Context, at: Long) {
@@ -106,37 +133,5 @@ object LiveNotifications {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         runCatching { am.setWindow(AlarmManager.RTC_WAKEUP, at, 30_000L, pi) }
-    }
-
-    /** Навигация: текущий шаг в шторке, пока идёшь по маршруту. */
-    fun showNavigation(context: Context, title: String, text: String, step: Int, steps: Int) {
-        if (!Permissions.notifications(context)) return
-        val nm = context.getSystemService(NotificationManager::class.java) ?: return
-        val open = PendingIntent.getActivity(
-            context, 7721,
-            Intent(context, MainActivity::class.java).putExtra(MainActivity.EXTRA_SCREEN, MainActivity.SCREEN_MAP)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-        )
-        val b = builder(context, NastavnikApp.CHANNEL_LESSONS)
-            .setSmallIcon(R.drawable.ic_route)
-            .setContentTitle(title)
-            .setContentText(text)
-            .setContentIntent(open)
-            .setShowWhen(false)
-        if (Build.VERSION.SDK_INT >= 36) {
-            b.setStyle(
-                Notification.ProgressStyle()
-                    .setProgressSegments(listOf(Notification.ProgressStyle.Segment(steps.coerceAtLeast(1)).setColor(Color.parseColor("#1FA463"))))
-                    .setProgress(step.coerceAtMost(steps)),
-            )
-        } else {
-            b.setProgress(steps.coerceAtLeast(1), step.coerceAtMost(steps), false)
-        }
-        runCatching { nm.notify(NAV_ID, b.build()) }
-    }
-
-    fun hideNavigation(context: Context) {
-        context.getSystemService(NotificationManager::class.java)?.cancel(NAV_ID)
     }
 }

@@ -59,9 +59,8 @@ class MainActivity : ComponentActivity() {
     /** Пока из «Поделиться» готовятся страницы — показываем, что идёт работа. */
     private var importing by mutableStateOf(false)
 
-    /** Телефон: открытая вкладка и аудитория, которую показать на карте. */
+    /** Телефон: открытая вкладка. */
     private var phoneTab by mutableStateOf(PhoneTab.TODAY)
-    private var mapRoom by mutableStateOf<String?>(null)
 
     /** Растёт при каждом onResume — экраны перечитывают состояние разрешений. */
     private var resumeTick by mutableIntStateOf(0)
@@ -73,7 +72,6 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge(statusBarStyle = bars, navigationBarStyle = bars)
         notebookId = savedInstanceState?.getLong(KEY_NOTEBOOK) ?: 0L
         savedInstanceState?.getString(KEY_TAB)?.let { t -> PhoneTab.entries.firstOrNull { it.name == t }?.let { phoneTab = it } }
-        mapRoom = savedInstanceState?.getString(KEY_ROOM)
         screen = savedInstanceState?.getString(KEY_SCREEN)
             ?: screenFrom(intent)
             // Первая настройка — про кнопку поверх записей; телефону она не нужна.
@@ -95,16 +93,12 @@ class MainActivity : ComponentActivity() {
             NastavnikTheme(appearance) {
                 val go: (String) -> Unit = { target ->
                     fromOverlay = false
-                    // На телефоне расписание и карта — вкладки главного экрана.
+                    // На телефоне расписание и успеваемость — вкладки главного экрана.
                     when {
                         !tablet && target == SCREEN_SCHEDULE -> { phoneTab = PhoneTab.SCHEDULE; screen = SCREEN_HOME }
-                        !tablet && target == SCREEN_MAP -> { phoneTab = PhoneTab.MAP; screen = SCREEN_HOME }
+                        !tablet && target == SCREEN_GRADES -> { phoneTab = PhoneTab.GRADES; screen = SCREEN_HOME }
                         else -> screen = target
                     }
-                }
-                val showRoom: (String) -> Unit = { room ->
-                    mapRoom = room
-                    go(SCREEN_MAP)
                 }
                 val home = {
                     screen = SCREEN_HOME
@@ -143,8 +137,7 @@ class MainActivity : ComponentActivity() {
                     when (target) {
                         SCREEN_NOTEBOOKS -> NotebooksScreen(resumeTick, onBack = home, onOpen = openNotebook, readOnly = !tablet)
                         SCREEN_VIEWER -> NotebookViewer(notebookId, onBack = { go(SCREEN_NOTEBOOKS) })
-                        SCREEN_SCHEDULE -> ScheduleScreen(onBack = home, onRoom = showRoom)
-                        SCREEN_MAP -> MapScreen(initialRoom = mapRoom, onBack = home)
+                        SCREEN_SCHEDULE -> ScheduleScreen(onBack = home)
                         SCREEN_REMINDERS -> RemindersScreen(onBack = home)
                         SCREEN_GRADES -> GradesScreen(onBack = home, onSettings = { go(SCREEN_SETTINGS) }, onLks = { go(SCREEN_LKS) })
                         SCREEN_LKS -> LksScreen(onBack = { go(SCREEN_GRADES) }, onDone = { go(SCREEN_GRADES) })
@@ -185,8 +178,8 @@ class MainActivity : ComponentActivity() {
                             onSettings = { go(SCREEN_SETTINGS) },
                             onExample = { go(SCREEN_CLEAN_TEST) },
                         )
-                        else -> if (tablet) HomeScreen(resumeTick, go, openNotebook, onRoom = showRoom)
-                        else PhoneShell(phoneTab, onTab = { phoneTab = it; if (it != PhoneTab.MAP) mapRoom = null }, mapRoom = mapRoom, onMapRoom = showRoom, resumeTick = resumeTick, go = go)
+                        else -> if (tablet) HomeScreen(resumeTick, go, openNotebook)
+                        else PhoneShell(phoneTab, onTab = { phoneTab = it }, resumeTick = resumeTick, go = go)
                     }
                 }
             }
@@ -234,10 +227,9 @@ class MainActivity : ComponentActivity() {
     private fun screenFrom(intent: Intent): String? {
         val s = intent.getStringExtra(EXTRA_SCREEN) ?: return null
         fromOverlay = intent.getBooleanExtra(EXTRA_FROM_OVERLAY, false)
-        intent.getStringExtra(EXTRA_ROOM)?.let { mapRoom = it }
-        // Телефон: расписание и карта — вкладки.
+        // Телефон: расписание и успеваемость — вкладки.
         if (!app.isTablet()) when (s) {
-            SCREEN_MAP -> { phoneTab = PhoneTab.MAP; return SCREEN_HOME }
+            SCREEN_GRADES -> { phoneTab = PhoneTab.GRADES; return SCREEN_HOME }
             SCREEN_SCHEDULE -> { phoneTab = PhoneTab.SCHEDULE; return SCREEN_HOME }
         }
         intent.getLongExtra(EXTRA_NOTEBOOK, 0L).takeIf { it != 0L }?.let { notebookId = it }
@@ -273,7 +265,6 @@ class MainActivity : ComponentActivity() {
         outState.putString(KEY_SCREEN, screen)
         outState.putLong(KEY_NOTEBOOK, notebookId)
         outState.putString(KEY_TAB, phoneTab.name)
-        mapRoom?.let { outState.putString(KEY_ROOM, it) }
     }
 
     companion object {
@@ -293,14 +284,12 @@ class MainActivity : ComponentActivity() {
         const val SCREEN_EXAMS = "exams"
         const val SCREEN_NOTEBOOK = "notebook"
         const val SCREEN_SCHEDULE = "schedule"
-        const val SCREEN_MAP = "map"
         const val SCREEN_REMINDERS = "reminders"
         const val SCREEN_VIEWER = "viewer"
         const val SCREEN_GRADES = "grades"
         const val SCREEN_LKS = "lks"
         const val SCREEN_EVENING = "evening"
         const val SCREEN_LOCK_SETUP = "lock_setup"
-        const val EXTRA_ROOM = "room"
         const val EXTRA_NOTEBOOK = "notebook_id"
         const val EXTRA_FROM_OVERLAY = "from_overlay"
 
@@ -309,7 +298,6 @@ class MainActivity : ComponentActivity() {
         private const val KEY_SCREEN = "screen"
         private const val KEY_NOTEBOOK = "notebook"
         private const val KEY_TAB = "phone_tab"
-        private const val KEY_ROOM = "map_room"
     }
 }
 

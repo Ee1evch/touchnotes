@@ -178,7 +178,7 @@ fun DeviceSection(tablet: Boolean) {
             repo.setDeviceRole(it)
         }
         HorizontalDivider(Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant)
-        FieldLabel("Перед парой", "Уведомление с аудиторией и маршрутом по карте.")
+        FieldLabel("Перед парой", "Живое уведомление: аудитория, отсчёт до начала, весь день полосой.")
         Segmented(listOf(0 to "Не надо", 5 to "за 5 мин", 10 to "за 10", 15 to "за 15"), alert) {
             alert = it
             repo.setLessonAlertMin(it)
@@ -216,7 +216,7 @@ fun DeviceSection(tablet: Boolean) {
 
 /**
  * Группа английского: у группы несколько пар иностранного в одно время — у разных преподавателей.
- * Выбранная остаётся в расписании, на «Сегодня», в уведомлениях и маршрутах; «Все» — без фильтра.
+ * Выбранная остаётся в расписании, на «Сегодня» и в уведомлениях; «Все» — без фильтра.
  */
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable

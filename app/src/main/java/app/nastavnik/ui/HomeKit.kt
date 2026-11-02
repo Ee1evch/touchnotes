@@ -112,17 +112,17 @@ fun HomeHeader(now: LocalDateTime, status: String, actions: @Composable RowScope
 
 /**
  * Карточка дня: главная пара (идёт сейчас или следующая; вечером — первая завтра) и лента всех пар дня,
- * прокрученная к текущей. Нажатие на пару в ленте — маршрут до аудитории.
+ * прокрученная к текущей.
  */
 @Composable
-fun DayCard(lessons: List<Lesson>?, tomorrow: List<Lesson>, now: LocalDateTime, hasGroup: Boolean, onRoom: (String) -> Unit, onSchedule: () -> Unit) {
+fun DayCard(lessons: List<Lesson>?, tomorrow: List<Lesson>, now: LocalDateTime, hasGroup: Boolean, onSchedule: () -> Unit) {
     Column(
         Modifier.fillMaxWidth().enter().glass(RoundedCornerShape(28.dp), 12.dp).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         if (!hasGroup) {
             Text("Расписание", style = MaterialTheme.typography.titleMedium)
-            Text("Выбери свою группу — пары появятся здесь, а перед каждой придёт уведомление с маршрутом до аудитории.", style = MaterialTheme.typography.bodyMedium, color = Brand.InkSoft)
+            Text("Выбери свою группу — пары появятся здесь, а перед каждой придёт уведомление с аудиторией.", style = MaterialTheme.typography.bodyMedium, color = Brand.InkSoft)
             InkButton("Выбрать группу", icon = R.drawable.ic_calendar, onClick = onSchedule)
             return@Column
         }
@@ -144,16 +144,16 @@ fun DayCard(lessons: List<Lesson>?, tomorrow: List<Lesson>, now: LocalDateTime, 
             LinkText("Неделя", onClick = onSchedule)
         }
         when {
-            focus != null -> LessonCard(focus, now, compact = false, onRoom = onRoom)
-            evening && tomorrow.isNotEmpty() -> LessonCard(tomorrow.first(), now, compact = false, onRoom = onRoom)
+            focus != null -> LessonCard(focus, now, compact = false)
+            evening && tomorrow.isNotEmpty() -> LessonCard(tomorrow.first(), now, compact = false)
         }
         // Лента дня — только если пар больше одной: видно весь день и где ты в нём.
-        if (day.size > 1) DayStrip(day, now, focus, onRoom)
+        if (day.size > 1) DayStrip(day, now, focus)
     }
 }
 
 @Composable
-private fun DayStrip(day: List<Lesson>, now: LocalDateTime, focus: Lesson?, onRoom: (String) -> Unit) {
+private fun DayStrip(day: List<Lesson>, now: LocalDateTime, focus: Lesson?) {
     val list = rememberLazyListState()
     val target = day.indexOf(focus).takeIf { it >= 0 } ?: day.lastIndex
     LaunchedEffect(target) { list.animateScrollToItem((target - 1).coerceAtLeast(0)) }
@@ -170,7 +170,6 @@ private fun DayStrip(day: List<Lesson>, now: LocalDateTime, focus: Lesson?, onRo
                     .clip(shape)
                     .background(if (live) Brand.Accent.copy(alpha = 0.12f) else Brand.Ink.copy(alpha = if (past) 0.02f else 0.04f))
                     .border(if (live) 1.2.dp else 0.dp, if (live) Brand.Accent else Brand.Line.copy(alpha = 0f), shape)
-                    .clickable(enabled = l.classroom != null) { l.classroom?.let(onRoom) }
                     .padding(horizontal = 12.dp, vertical = 10.dp),
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
@@ -339,7 +338,6 @@ fun SectionsGrid(go: (String) -> Unit, columns: Int, items: List<Triple<Int, Str
 /** Разделы планшета для сетки. */
 val TABLET_SECTIONS = listOf(
     Triple(R.drawable.ic_calendar, "Расписание", MainActivity.SCREEN_SCHEDULE),
-    Triple(R.drawable.ic_map, "Карта", MainActivity.SCREEN_MAP),
     Triple(R.drawable.ic_chart, "Оценки", MainActivity.SCREEN_GRADES),
     Triple(R.drawable.ic_target, "Тренировка", MainActivity.SCREEN_TRAINING),
     Triple(R.drawable.ic_flame, "Прогресс", MainActivity.SCREEN_PROGRESS),

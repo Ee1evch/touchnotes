@@ -78,7 +78,7 @@ import java.util.Locale
  * На планшете — две колонки, на телефоне — одна.
  */
 @Composable
-fun HomeScreen(resumeTick: Int, go: (String) -> Unit, openNotebook: (Long) -> Unit, onRoom: (String) -> Unit = {}) {
+fun HomeScreen(resumeTick: Int, go: (String) -> Unit, openNotebook: (Long) -> Unit) {
     val context = LocalContext.current
     var tick by remember { mutableIntStateOf(0) }
     val overlay = remember(resumeTick, tick) { Permissions.overlay(context) }
@@ -137,7 +137,7 @@ fun HomeScreen(resumeTick: Int, go: (String) -> Unit, openNotebook: (Long) -> Un
                 EveningCard(resumeTick, go)
                 SirenCard(resumeTick)
 
-                val dayCard = @Composable { DayCard(lessons, tomorrow, clock, hasGroup, onRoom = onRoom, onSchedule = { go(MainActivity.SCREEN_SCHEDULE) }) }
+                val dayCard = @Composable { DayCard(lessons, tomorrow, clock, hasGroup, onSchedule = { go(MainActivity.SCREEN_SCHEDULE) }) }
                 val tiles = @Composable { DayTiles(due, streak, week, exam, resumeTick, promoteAlarm = false, go = go) }
                 val notebooks = @Composable { NotebooksSection(resumeTick, go, openNotebook) }
                 val mentor = @Composable { MentorStrip(resumeTick, tick, overlay) { tick++ } }

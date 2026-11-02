@@ -25,6 +25,7 @@ import app.nastavnik.sync.SyncRecord
 import app.nastavnik.sync.SyncEngine
 import app.nastavnik.study.AlarmShield
 import app.nastavnik.study.Learning
+import app.nastavnik.study.LiveNotifications
 import app.nastavnik.study.LockPrefs
 import app.nastavnik.study.Siren
 import app.nastavnik.study.SirenPrefs
@@ -55,8 +56,8 @@ import java.time.LocalDate
 import java.time.LocalTime
 
 /**
- * Суперприложение на эмуляторе: телефонный режим (сегодня, расписание, карта с маршрутом, напоминания),
- * карта на планшете и перенос данных синхронизацией (выгрузка → удаление → приём обратно).
+ * Суперприложение на эмуляторе: телефонный режим (сегодня, расписание, успеваемость, живое уведомление,
+ * напоминания) и перенос данных синхронизацией (выгрузка → удаление → приём обратно).
  */
 @RunWith(AndroidJUnit4::class)
 class CampusFlowTest {
@@ -114,7 +115,7 @@ class CampusFlowTest {
     private fun LocalTime.coerceAtMost23(): LocalTime = if (isBefore(LocalTime.of(1, 0)) && this != LocalTime.MIDNIGHT) LocalTime.of(23, 59) else this
 
     @Test
-    fun phoneTodayScheduleMapAndReminders() {
+    fun phoneTodayScheduleGradesAndReminders() {
         ctx.app.settings.setDeviceRole("phone")
         seedSchedule()
         runBlocking { ctx.app.db.reminders().all().forEach { ctx.app.db.reminders().delete(it.uid) } }
@@ -130,46 +131,23 @@ class CampusFlowTest {
             SystemClock.sleep(900)
             screenshot("phone_schedule")
 
-            // Аудитория пары → карта с выбранной аудиторией → маршрут от предыдущей пары.
-            device.findObject(By.text("Альфа 5.8")).click()
-            assertNotNull("карта не открылась", device.wait(Until.findObject(By.desc("Карта этажа")), 10000))
-            assertNotNull("аудитория не выбрана", device.wait(Until.findObject(By.text("Как дойти")), 10000))
-            SystemClock.sleep(1500)
-            screenshot("phone_map_room")
-            device.findObject(By.text("Как дойти")).click()
-            assertNotNull("маршрут не построен", device.wait(Until.findObject(By.textContains(" мин")), 20000))
-            SystemClock.sleep(1500)
-            screenshot("phone_route")
-
-            // По шагам, как в картах: плашка с манёвром сверху, «Завершить» снизу.
-            device.findObject(By.text("Поехали")).click()
-            assertNotNull("нет навигации по шагам", device.wait(Until.findObject(By.text("Завершить")), 8000))
-            assertNotNull(device.wait(Until.findObject(By.textContains("через")), 5000))
-            SystemClock.sleep(1200)
-            screenshot("phone_navigation")
-            device.findObject(By.desc("Следующий шаг"))?.click()
+            // Вместо карты — успеваемость.
+            device.findObject(By.desc("Оценки")).click()
+            assertNotNull("нет вкладки успеваемости", device.wait(Until.findObject(By.text("Успеваемость")), 8000))
             SystemClock.sleep(900)
-            screenshot("phone_navigation_next")
-            device.findObject(By.text("Завершить")).click()
-            SystemClock.sleep(600)
+            screenshot("phone_grades")
 
-            // Поиск на карте.
-            val search = device.wait(Until.findObject(By.clazz("android.widget.EditText")), 8000)
-            search.click()
-            SystemClock.sleep(400)
-            search.text = "буран"
-            var hit = device.wait(Until.findObject(By.textContains("Буран")), 8000)
-            if (hit == null) {
-                // Диагностика: что в поле и на экране.
-                println("MAPSEARCH field='${runCatching { device.findObject(By.clazz("android.widget.EditText"))?.text }.getOrNull()}'")
-                screenshot("phone_map_search_fail")
-                device.findObject(By.clazz("android.widget.EditText"))?.text = "буран"
-                hit = device.wait(Until.findObject(By.textContains("Буран")), 8000)
-            }
-            assertNotNull("поиск не нашёл музей", hit)
-            SystemClock.sleep(600)
-            screenshot("phone_map_search")
+            // Живое уведомление на весь день: идёт физика (пара 2 из 2), полоса — весь день.
+            runBlocking { LiveNotifications.updateLesson(ctx) }
+            val live = ctx.getSystemService(android.app.NotificationManager::class.java).activeNotifications.firstOrNull { it.id == 7702 }
+            assertNotNull("нет живого уведомления", live)
+            assertEquals("Физика · Альфа 5.8", live!!.notification.extras.getCharSequence(android.app.Notification.EXTRA_TITLE)?.toString())
+            assertEquals("Пара 2 из 2", live.notification.extras.getCharSequence(android.app.Notification.EXTRA_SUB_TEXT)?.toString())
+            device.openNotification()
+            SystemClock.sleep(1500)
+            screenshot("live_notification")
             device.pressBack()
+            SystemClock.sleep(500)
 
             // Напоминание через «Учёба» → «Напоминания».
             device.findObject(By.desc("Учёба")).click()
@@ -186,27 +164,6 @@ class CampusFlowTest {
             val saved = runBlocking { ctx.app.db.reminders().all() }
             assertEquals("Сдать лабу по физике", saved.single().title)
             assertTrue(saved.single().at > System.currentTimeMillis())
-        } finally {
-            sc.close()
-        }
-    }
-
-    @Test
-    fun tabletMapFindsRoomAndRoutesAcrossFloors() {
-        ctx.app.settings.setDeviceRole("tablet")
-        val sc = ActivityScenario.launch<MainActivity>(
-            Intent(ctx, MainActivity::class.java).putExtra(MainActivity.EXTRA_SCREEN, MainActivity.SCREEN_MAP).putExtra(MainActivity.EXTRA_ROOM, "Бета 3.3"),
-        )
-        try {
-            assertNotNull(device.wait(Until.findObject(By.text("Как дойти")), 15000))
-            SystemClock.sleep(1500)
-            screenshot("tablet_map")
-            // Откуда — с третьего этажа: маршрут с лестницей.
-            device.findObject(By.text("Откуда")).click()
-            assertNotNull(device.wait(Until.findObject(By.text("Откуда идёшь?")), 5000))
-            device.findObject(By.desc("3 этаж"))?.click()
-            SystemClock.sleep(1500)
-            screenshot("tablet_map_floor3")
         } finally {
             sc.close()
         }
