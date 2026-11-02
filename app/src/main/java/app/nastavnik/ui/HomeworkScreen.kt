@@ -252,19 +252,22 @@ private fun AddHomework(sharedFile: Uri?, onBack: () -> Unit, onAdded: (Homework
     }
     val subjects = (lessons.map { it.second } + books.map { it.subject }).distinct()
     var subject by remember { mutableStateOf("") }
-    var fromBook by remember { mutableStateOf(sharedFile == null) }
+    // Учебник или задания на один раз — выбираешь каждый раз сам (по одному предмету бывает и то и другое).
+    var fromBook by remember { mutableStateOf<Boolean?>(null) }
+    var bookId by remember { mutableStateOf<String?>(null) }
     var numbers by remember { mutableStateOf("") }
     var file by remember { mutableStateOf(sharedFile) }
     var due by remember { mutableStateOf<LocalDate?>(null) }
     var busy by remember { mutableStateOf<String?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
-    val book = books.firstOrNull { StudyLockRules.sameSubject(it.subject, subject) || it.subject == subject }
+    val subjectBooks = books.filter { subject.isNotBlank() && (StudyLockRules.sameSubject(it.subject, subject) || it.subject.equals(subject.trim(), ignoreCase = true)) }
+    val book = subjectBooks.firstOrNull { it.id == bookId } ?: subjectBooks.singleOrNull()
     val defaultDue = if (subject.isBlank()) null else HomeworkRules.defaultDue(subject, today, lessons) { a, b -> StudyLockRules.sameSubject(a, b) || a == b }
     val pickPdf = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) file = uri }
     val pickBook = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null && subject.isNotBlank()) scope.launch {
             busy = "Загружаю учебник…"
-            Homeworks.importBook(context, uri, subject).onFailure { error = it.message }
+            Homeworks.importBook(context, uri, subject.trim()).onSuccess { bookId = it.id }.onFailure { error = it.message }
             busy = null
         }
     }
@@ -276,27 +279,48 @@ private fun AddHomework(sharedFile: Uri?, onBack: () -> Unit, onAdded: (Homework
             }
             AppTextField(subject, { subject = it }, label = "Предмет", placeholder = "Математический анализ")
         }
-        SectionCard("Откуда задачи") {
-            Segmented(listOf(true to "Номера из учебника", false to "Файл с заданиями"), fromBook) { fromBook = it }
-            if (fromBook) {
-                if (book == null) {
-                    Text(
-                        if (subject.isBlank()) "Сначала выбери предмет." else "Учебника по этому предмету ещё нет — загрузи PDF один раз, дальше хватит номеров.",
-                        style = MaterialTheme.typography.bodyMedium, color = Brand.InkSoft,
-                    )
-                    if (subject.isNotBlank()) InkButton("Загрузить учебник (PDF)", icon = R.drawable.ic_pdf) { pickBook.launch(arrayOf("application/pdf")) }
-                } else {
-                    Text("Учебник: ${book.title} · ${book.pages} стр.", style = MaterialTheme.typography.bodyMedium, color = Brand.InkSoft)
-                    AppTextField(numbers, { numbers = it }, label = "Номера задач", placeholder = "245, 247–251, 260а")
-                    val parsed = HomeworkRules.parseNumbers(numbers)
-                    if (parsed.isNotEmpty()) Text("${parsed.size} ${ruPlural(parsed.size, "задача", "задачи", "задач")}: ${parsed.joinToString()}", style = MaterialTheme.typography.bodySmall, color = Brand.InkSoft)
-                }
-            } else {
-                Text(
-                    if (file == null) "PDF с заданиями — выбери здесь или пришли через «Поделиться → Наставник» из Telegram, почты." else "Файл: ${app.notebooks.displayName(file!!) ?: "выбран"}",
+        SectionCard("Что это за ДЗ") {
+            Segmented(listOf<Pair<Boolean?, String>>(true to "Из учебника — номера", false to "Задания на один раз"), fromBook) { fromBook = it }
+            when (fromBook) {
+                null -> Text(
+                    "Из учебника — учебник (задачник) в PDF загружается один раз, дальше хватит номеров задач. " +
+                        "На один раз — PDF с заданиями (например, прислали в Telegram): наставник сам разделит его на задачи.",
                     style = MaterialTheme.typography.bodyMedium, color = Brand.InkSoft,
                 )
-                SoftButton(if (file == null) "Выбрать PDF" else "Другой файл", icon = R.drawable.ic_pdf) { pickPdf.launch(arrayOf("application/pdf")) }
+                true -> {
+                    if (subject.isBlank()) Text("Сначала выбери предмет.", style = MaterialTheme.typography.bodyMedium, color = Brand.InkSoft)
+                    else {
+                        if (subjectBooks.isEmpty()) Text("Учебника по этому предмету ещё нет — загрузи PDF один раз.", style = MaterialTheme.typography.bodyMedium, color = Brand.InkSoft)
+                        if (subjectBooks.size > 1 || (subjectBooks.isNotEmpty() && book == null)) {
+                            Text("Какой учебник:", style = MaterialTheme.typography.bodyMedium, color = Brand.InkSoft)
+                        }
+                        if (subjectBooks.isNotEmpty()) Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            subjectBooks.forEach { b -> ChipButton("${b.title} · ${b.pages} стр.", selected = book?.id == b.id) { bookId = b.id } }
+                        }
+                        // Прислали PDF через «Поделиться» — его можно сразу сделать учебником.
+                        if (file != null) SoftButton("Присланный PDF — это учебник", icon = R.drawable.ic_pdf) {
+                            val f = file!!
+                            scope.launch {
+                                busy = "Загружаю учебник…"
+                                Homeworks.importBook(context, f, subject.trim()).onSuccess { bookId = it.id; file = null }.onFailure { error = it.message }
+                                busy = null
+                            }
+                        }
+                        LinkText(if (subjectBooks.isEmpty()) "Загрузить учебник (PDF)" else "Загрузить другой учебник") { pickBook.launch(arrayOf("application/pdf")) }
+                        if (book != null) {
+                            AppTextField(numbers, { numbers = it }, label = "Номера задач", placeholder = "245, 247–251, 260а")
+                            val parsed = HomeworkRules.parseNumbers(numbers)
+                            if (parsed.isNotEmpty()) Text("${parsed.size} ${ruPlural(parsed.size, "задача", "задачи", "задач")}: ${parsed.joinToString()}", style = MaterialTheme.typography.bodySmall, color = Brand.InkSoft)
+                        }
+                    }
+                }
+                false -> {
+                    Text(
+                        if (file == null) "PDF с заданиями — выбери здесь или пришли через «Поделиться → Наставник» из Telegram, почты." else "Файл: ${app.notebooks.displayName(file!!) ?: "выбран"}",
+                        style = MaterialTheme.typography.bodyMedium, color = Brand.InkSoft,
+                    )
+                    SoftButton(if (file == null) "Выбрать PDF" else "Другой файл", icon = R.drawable.ic_pdf) { pickPdf.launch(arrayOf("application/pdf")) }
+                }
             }
         }
         SectionCard("Срок") {
@@ -314,11 +338,15 @@ private fun AddHomework(sharedFile: Uri?, onBack: () -> Unit, onAdded: (Homework
         } }
         error?.let { StatusLine(it, Tone.ERROR) }
         val parsed = HomeworkRules.parseNumbers(numbers)
-        val ready = subject.isNotBlank() && busy == null && (if (fromBook) book != null && parsed.isNotEmpty() else file != null)
+        val ready = subject.isNotBlank() && busy == null && when (fromBook) {
+            true -> book != null && parsed.isNotEmpty()
+            false -> file != null
+            null -> false
+        }
         InkButton("Добавить", enabled = ready, modifier = Modifier.fillMaxWidth()) {
             val d = due ?: defaultDue ?: today.plusDays(1)
             error = null
-            if (fromBook) {
+            if (fromBook == true) {
                 val hw = Homeworks.fromBook(context, book!!, parsed, d)
                 onAdded(hw)
             } else scope.launch {

@@ -22,6 +22,8 @@ class Updater(private val context: Context) {
         .build()
 
     val currentBuild: Int get() = BuildConfig.VERSION_CODE
+    /** «1.5.128» — версия и номер сборки. */
+    val versionName: String get() = BuildConfig.VERSION_NAME
 
     /** null — обновлений нет. Бросает [IOException], если GitHub недоступен. */
     suspend fun check(): UpdateInfo? = withContext(Dispatchers.IO) {

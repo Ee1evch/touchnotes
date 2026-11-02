@@ -170,7 +170,7 @@ fun UpdateSection() {
     var checking by remember { mutableStateOf(false) }
     var progress by remember { mutableFloatStateOf(-1f) }
     SectionCard("Обновления") {
-        FieldLabel("Версия 1.${updater.currentBuild}", "Новые сборки выходят на GitHub. Обновление ставится поверх — тетради и настройки остаются.")
+        FieldLabel("Версия ${updater.versionName}", "Новые сборки выходят на GitHub. Обновление ставится поверх — тетради и настройки остаются.")
         val f = found
         when {
             progress >= 0f -> {

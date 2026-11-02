@@ -78,7 +78,7 @@ jobs:
           gh release create "build-${{ github.run_number }}" nastavnik.apk parent.apk \
             --repo "${{ github.repository }}" \
             --target "${{ github.sha }}" \
-            --title "Наставник, сборка ${{ github.run_number }}" \
+            --title "Наставник 1.5, сборка ${{ github.run_number }}" \
             --notes "Ветка ${{ github.ref_name }}, коммит ${{ github.sha }}" \
             --latest
 
