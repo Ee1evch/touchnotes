@@ -295,6 +295,10 @@ class MentorFlowTest {
     }
 
     /** Найти элемент, прокручивая экран вниз: длинные экраны не помещаются целиком. */
+    /** Сначала подождать на экране (без прокрутки, которая сбивает подгрузку), потом искать прокруткой. */
+    private fun findHere(selector: androidx.test.uiautomator.BySelector): androidx.test.uiautomator.UiObject2? =
+        device.wait(Until.findObject(selector), 15000) ?: findScrolling(selector, 15000)
+
     private fun findScrolling(selector: androidx.test.uiautomator.BySelector, timeoutMs: Long = 20000): androidx.test.uiautomator.UiObject2? {
         val until = SystemClock.uptimeMillis() + timeoutMs
         while (SystemClock.uptimeMillis() < until) {
@@ -458,13 +462,13 @@ class MentorFlowTest {
         sc = launch(MainActivity.SCREEN_TRAINING)
         device.wait(Until.findObject(By.text("Мини-тест")), 8000)!!.click()
         device.wait(Until.findObject(By.text("Начать тест")), 5000)!!.click()
-        findScrolling(By.text("Ничего"))!!.click()
+        // Варианты рисуются формулами (WebView) — их текст виден не сразу; ждём на месте, листаем только если нет.
+        findHere(By.text("Ничего"))!!.click()
         SystemClock.sleep(800)
         screenshot("quiz_answer")
-        findScrolling(By.text("Дальше"), 15000)!!.click()
-        findScrolling(By.text("Матрица"), 15000)!!.click()
-        // «Итог» появляется с анимацией под разбором — сначала ждём на экране, потом ищем прокруткой.
-        (device.wait(Until.findObject(By.text("Итог")), 15000) ?: findScrolling(By.text("Итог"), 15000))!!.click()
+        findHere(By.text("Дальше"))!!.click()
+        findHere(By.text("Матрица"))!!.click()
+        findHere(By.text("Итог"))!!.click()
         // Итог появляется с анимацией — на медленном эмуляторе бывает дольше 6 секунд.
         assertNotNull("нет итога теста", findScrolling(By.text("1 из 2"), 15000))
         val before = runBlocking { ctx.app.db.cards().observeCount().first() }

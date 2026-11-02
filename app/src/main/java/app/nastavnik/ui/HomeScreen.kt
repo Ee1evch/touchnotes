@@ -84,16 +84,7 @@ fun HomeScreen(resumeTick: Int, go: (String) -> Unit, openNotebook: (Long) -> Un
     val overlay = remember(resumeTick, tick) { Permissions.overlay(context) }
     val notReady = remember(resumeTick, tick) { context.app.settings.notReadyReason() }
 
-    // Учебный день: карточки, серия, экзамен.
-    val db = context.app.db
-    val now = remember(resumeTick) { System.currentTimeMillis() }
-    val due by remember(now) { db.cards().observeDueCount(now) }.collectAsStateWithLifecycle(initialValue = 0)
-    val events by remember { db.activity().observeAll() }.collectAsStateWithLifecycle(initialValue = emptyList())
-    val today = Streaks.day(now)
-    val perDay = remember(events) { events.groupingBy { Streaks.day(it.at) }.eachCount() }
-    val streak = remember(perDay, today) { Streaks.current(perDay.keys, today) }
-    val week = remember(perDay, today) { Streaks.lastDays(perDay, today, 7) }
-    val exam = remember(resumeTick) { context.app.study.nextExam() }
+    var editing by remember { mutableStateOf(false) }
 
     val enterOrder = remember { java.util.concurrent.atomic.AtomicInteger(0) }
     androidx.compose.runtime.CompositionLocalProvider(LocalEnterOrder provides enterOrder) {
@@ -124,6 +115,7 @@ fun HomeScreen(resumeTick: Int, go: (String) -> Unit, openNotebook: (Long) -> Un
                 val tomorrow by produceState<List<Lesson>>(emptyList(), version, resumeTick) { value = app.schedule.day(java.time.LocalDate.now().plusDays(1)) }
                 val hasGroup = app.settings.scheduleGroup().isNotBlank()
                 HomeHeader(clock, dayStatus(lessons, clock, hasGroup)) {
+                    RoundIconButton(R.drawable.ic_pen, "Изменить главную") { editing = !editing }
                     RoundIconButton(R.drawable.ic_search, "Поиск") { go(MainActivity.SCREEN_SEARCH) }
                     RoundIconButton(R.drawable.ic_tune, "Настройки") { go(MainActivity.SCREEN_SETTINGS) }
                 }
@@ -134,39 +126,19 @@ fun HomeScreen(resumeTick: Int, go: (String) -> Unit, openNotebook: (Long) -> Un
                     }
                 }
                 if (notReady != null) Banner("$notReady — без этого наставник не ответит.", "Настроить") { go(MainActivity.SCREEN_SETTINGS) }
-                EveningCard(resumeTick, go)
-                SirenCard(resumeTick)
-
-                val dayCard = @Composable { DayCard(lessons, tomorrow, clock, hasGroup, onSchedule = { go(MainActivity.SCREEN_SCHEDULE) }) }
-                val tiles = @Composable { DayTiles(due, streak, week, exam, resumeTick, promoteAlarm = false, go = go) }
-                val notebooks = @Composable { NotebooksSection(resumeTick, go, openNotebook) }
-                val mentor = @Composable { MentorStrip(resumeTick, tick, overlay) { tick++ } }
-                val reminders = @Composable { RemindersCard(go) }
-
-                if (wide) {
-                    // Слева — день и работа (тетради, наставник), справа — учёба и разделы.
-                    Row(horizontalArrangement = Arrangement.spacedBy(22.dp)) {
-                        Column(Modifier.weight(1.55f), verticalArrangement = Arrangement.spacedBy(18.dp)) {
-                            dayCard()
-                            PlanCard(resumeTick)
-                            notebooks()
-                            mentor()
-                        }
-                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(18.dp)) {
-                            tiles()
-                            reminders()
-                            SectionsGrid(go, columns = 3, items = TABLET_SECTIONS)
-                        }
-                    }
-                } else {
-                    dayCard()
-                    PlanCard(resumeTick)
-                    tiles()
-                    notebooks()
-                    mentor()
-                    reminders()
-                    SectionsGrid(go, columns = 3, items = TABLET_SECTIONS)
-                }
+                // Блоки — из конструктора: порядок и размер правятся кнопкой «Изменить главную».
+                HomeBoard(
+                    tablet = true,
+                    editing = editing,
+                    onDoneEditing = { editing = false },
+                    resumeTick = resumeTick,
+                    go = go,
+                    onSchedule = { go(MainActivity.SCREEN_SCHEDULE) },
+                    extra = mapOf(
+                        "notebooks" to { NotebooksSection(resumeTick, go, openNotebook) },
+                        "mentor" to { MentorStrip(resumeTick, tick, overlay) { tick++ } },
+                    ),
+                )
             }
         }
     }
@@ -202,7 +174,7 @@ private fun SectionHeader(title: String, action: String? = null, onAction: () ->
 
 /** Тетради: «Новая» и последние — с превью страницы, чтобы сразу продолжить. */
 @Composable
-private fun NotebooksSection(resumeTick: Int, go: (String) -> Unit, openNotebook: (Long) -> Unit) {
+internal fun NotebooksSection(resumeTick: Int, go: (String) -> Unit, openNotebook: (Long) -> Unit) {
     val context = LocalContext.current
     val nbs = context.app.notebooks
     val scope = rememberCoroutineScope()
@@ -356,7 +328,7 @@ private fun RecentNotebook(m: NotebookMeta, onOpen: () -> Unit) {
 
 /** Наставник поверх своего приложения для записей: одна строка — состояние и кнопка. */
 @Composable
-private fun MentorStrip(resumeTick: Int, tick: Int, canStart: Boolean, changed: () -> Unit) {
+internal fun MentorStrip(resumeTick: Int, tick: Int, canStart: Boolean, changed: () -> Unit) {
     val context = LocalContext.current
     val running by BubbleService.runningFlow.collectAsStateWithLifecycle()
     val notesApp = remember(resumeTick) { NoteApps.chosen(context) }

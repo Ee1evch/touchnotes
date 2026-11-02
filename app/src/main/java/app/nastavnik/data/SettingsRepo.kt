@@ -277,6 +277,14 @@ class SettingsRepo(private val context: Context) {
     /** За сколько минут до пары напомнить (0 — не напоминать). */
     fun lessonAlertMin(): Int = prefs.getInt(K_LESSON_ALERT, 10)
     fun setLessonAlertMin(m: Int) = prefs.edit { putInt(K_LESSON_ALERT, m.coerceIn(0, 60)) }
+    /** Живое уведомление: вид (minimal, timeline, card, moments, companion) и обновление (boundary, interval, service). */
+    fun liveDesign(): String = prefs.getString("live_design", "timeline").orEmpty()
+    fun setLiveDesign(v: String) = prefs.edit { putString("live_design", v) }
+    /** Раскладка главного экрана (конструктор), своя для телефона и планшета. */
+    fun homeLayout(tablet: Boolean): String = prefs.getString(if (tablet) "home_tablet" else "home_phone", "").orEmpty()
+    fun setHomeLayout(tablet: Boolean, v: String) = prefs.edit { putString(if (tablet) "home_tablet" else "home_phone", v) }
+    fun liveMode(): String = prefs.getString("live_mode", "interval").orEmpty()
+    fun setLiveMode(v: String) = prefs.edit { putString("live_mode", v) }
     /** «Тихо на парах» — на этом устройстве (не синхронизируется: на планшете может быть не нужно). */
     fun quietLessons(): Boolean = prefs.getBoolean(K_QUIET, false)
     fun setQuietLessons(on: Boolean) = prefs.edit { putBoolean(K_QUIET, on) }

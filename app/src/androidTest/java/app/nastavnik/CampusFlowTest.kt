@@ -44,6 +44,7 @@ import app.nastavnik.ui.WakeActivity
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -413,6 +414,64 @@ class CampusFlowTest {
             Siren.forced = false
             ctx.stopService(Intent(ctx, SirenService::class.java))
             sc?.close()
+        }
+    }
+
+    /** Все виды живого уведомления — снимок шторки каждого, чтобы выбрать. */
+    @Test
+    fun liveNotificationDesigns() {
+        val nm = ctx.getSystemService(android.app.NotificationManager::class.java)
+        try {
+            LiveNotifications.Design.entries.forEach { d ->
+                ctx.app.settings.setLiveDesign(d.id)
+                nm.cancel(LiveNotifications.LESSON_ID)
+                runBlocking { LiveNotifications.preview(ctx) }
+                SystemClock.sleep(600)
+                assertTrue("нет уведомления «${d.label}»", nm.activeNotifications.any { it.id == LiveNotifications.LESSON_ID })
+                device.openNotification()
+                SystemClock.sleep(1500)
+                screenshot("live_${d.id}")
+                device.executeShellCommand("cmd statusbar collapse")
+                SystemClock.sleep(600)
+            }
+        } finally {
+            ctx.app.settings.setLiveDesign("timeline")
+            nm.cancel(LiveNotifications.LESSON_ID)
+            device.executeShellCommand("cmd statusbar collapse")
+        }
+    }
+
+    /** Конструктор главной: правка, убрать блок, вернуть, сменить размер — раскладка сохраняется. */
+    @Test
+    fun homeBuilderEditsLayout() {
+        ctx.app.settings.setDeviceRole("phone")
+        ctx.app.settings.setHomeLayout(false, "")
+        seedSchedule()
+        val sc = ActivityScenario.launch<MainActivity>(Intent(ctx, MainActivity::class.java).putExtra(MainActivity.EXTRA_SCREEN, MainActivity.SCREEN_HOME))
+        try {
+            device.wait(Until.findObject(By.desc("Изменить главную")), 10000)!!.click()
+            assertNotNull("нет режима правки", device.wait(Until.findObject(By.text("Добавить блок")), 8000))
+            SystemClock.sleep(800)
+            screenshot("home_edit")
+            // Убрать первый блок (вечерняя учёба) — он появляется в «Добавить».
+            device.findObject(By.desc("Убрать")).click()
+            assertNotNull(device.wait(Until.findObject(By.text("+ Вечерняя учёба")), 5000))
+            assertFalse("evening" in ctx.app.settings.homeLayout(false))
+            device.findObject(By.text("+ Вечерняя учёба")).click()
+            SystemClock.sleep(500)
+            assertTrue("evening:L" in ctx.app.settings.homeLayout(false))
+            // Размер первого блока: L → (M или S, по кругу) — сохраняется.
+            val before = ctx.app.settings.homeLayout(false)
+            device.findObject(By.descStartsWith("Размер")).click()
+            SystemClock.sleep(500)
+            assertTrue("размер не поменялся", ctx.app.settings.homeLayout(false) != before)
+            device.findObject(By.text("Готово")).click()
+            assertTrue(device.wait(Until.gone(By.text("Добавить блок")), 5000))
+            SystemClock.sleep(800)
+            screenshot("home_after_edit")
+        } finally {
+            ctx.app.settings.setHomeLayout(false, "")
+            sc.close()
         }
     }
 

@@ -40,7 +40,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -138,7 +140,7 @@ private fun TabBar(tab: PhoneTab, onTab: (PhoneTab) -> Unit, modifier: Modifier)
     }
 }
 
-/** «Сегодня»: шапка с тем, что сейчас; карточка дня; плитки; напоминания; оценки. */
+/** «Сегодня»: шапка с тем, что сейчас, и блоки из конструктора (кнопка «Изменить главную»). */
 @Composable
 private fun TodayTab(resumeTick: Int, go: (String) -> Unit, onTab: (PhoneTab) -> Unit) {
     val context = LocalContext.current
@@ -146,30 +148,24 @@ private fun TodayTab(resumeTick: Int, go: (String) -> Unit, onTab: (PhoneTab) ->
     val version by app.schedule.version.collectAsStateWithLifecycle()
     val now by produceState(LocalDateTime.now(), resumeTick) { while (true) { value = LocalDateTime.now(); delay(30_000) } }
     val lessons by produceState<List<Lesson>?>(null, version, resumeTick, now.toLocalDate()) { value = app.schedule.day(LocalDate.now()) }
-    val tomorrow by produceState<List<Lesson>>(emptyList(), version, resumeTick) { value = app.schedule.day(LocalDate.now().plusDays(1)) }
-    val nowMs = remember(resumeTick) { System.currentTimeMillis() }
-    val due by remember(nowMs) { app.db.cards().observeDueCount(nowMs) }.collectAsStateWithLifecycle(initialValue = 0)
-    val events by remember { app.db.activity().observeAll() }.collectAsStateWithLifecycle(initialValue = emptyList())
     val sync by app.sync.status.collectAsStateWithLifecycle()
     val hasGroup = app.settings.scheduleGroup().isNotBlank()
-    val exam = remember(resumeTick) { app.study.nextExam() }
+    var editing by remember { mutableStateOf(false) }
 
     ScreenScaffold(title = "", onBack = null) {
         HomeHeader(now, dayStatus(lessons, now, hasGroup)) {
+            RoundIconButton(R.drawable.ic_pen, "Изменить главную") { editing = !editing }
             if (app.sync.configured) SyncDot(sync.running, sync.ok) { app.sync.soon(0) }
             RoundIconButton(R.drawable.ic_tune, "Настройки") { go(MainActivity.SCREEN_SETTINGS) }
         }
-        EveningCard(resumeTick, go)
-        SirenCard(resumeTick)
-        DayCard(lessons, tomorrow, now, hasGroup, onSchedule = { onTab(PhoneTab.SCHEDULE) })
-        PlanCard(resumeTick)
-        val today = Streaks.day(nowMs)
-        val perDay = remember(events) { events.groupingBy { Streaks.day(it.at) }.eachCount() }
-        val streak = remember(perDay, today) { Streaks.current(perDay.keys, today) }
-        val week = remember(perDay, today) { Streaks.lastDays(perDay, today, 7) }
-        DayTiles(due, streak, week, exam, resumeTick, promoteAlarm = true, go = go)
-        RemindersCard(go)
-        GradesCard(onOpen = { go(MainActivity.SCREEN_GRADES) })
+        HomeBoard(
+            tablet = false,
+            editing = editing,
+            onDoneEditing = { editing = false },
+            resumeTick = resumeTick,
+            go = go,
+            onSchedule = { onTab(PhoneTab.SCHEDULE) },
+        )
     }
 }
 

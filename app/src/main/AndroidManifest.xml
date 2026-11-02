@@ -194,7 +194,16 @@
             android:directBootAware="true"
             android:exported="false"
             android:foregroundServiceType="mediaPlayback" />
-        <!-- Учебная сирена: в 22:00 дня с парами, пока не решена задача дня. Работает и до разблокировки. -->
+        <!-- Живое уведомление, режим «точно»: пока идут пары, обновляет его раз в минуту. -->
+        <service
+            android:name=".study.LiveService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Живое уведомление учебного дня: отсчёт до конца пары и следующая пара, обновление раз в минуту по выбору пользователя" />
+        </service>
+        <!-- Учебная сирена: в 20:00 дня с парами, пока не решена задача дня. Работает и до разблокировки. -->
         <receiver
             android:name=".study.SirenReceiver"
             android:directBootAware="true"

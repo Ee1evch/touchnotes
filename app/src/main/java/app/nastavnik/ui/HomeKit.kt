@@ -208,74 +208,51 @@ fun HomeTile(
     }
 }
 
-/**
- * Три плитки в ряд: карточки, серия, будильник. Если будильник выключен — ближайший экзамен
- * (на телефоне без экзамена — приглашение включить будильник).
- */
+/** Плитка «Карточки»: сколько ждёт повторения. */
 @Composable
-fun DayTiles(due: Int, streak: Int, week: List<Int>, exam: Exam?, resumeTick: Int, promoteAlarm: Boolean, go: (String) -> Unit) {
+fun CardsTile(modifier: Modifier, due: Int, go: (String) -> Unit) = HomeTile(
+    modifier = modifier,
+    icon = R.drawable.ic_cards,
+    big = if (due > 0) due.toString() else "✓",
+    caption = if (due > 0) ruPlural(due, "карточка ждёт", "карточки ждут", "карточек ждут") else "всё повторено",
+    accent = due > 0,
+    onClick = { go(MainActivity.SCREEN_REVIEW) },
+)
+
+/** Плитка «Серия»: дни подряд и неделя точками. */
+@Composable
+fun StreakTile(modifier: Modifier, streak: Int, week: List<Int>, go: (String) -> Unit) = HomeTile(
+    modifier = modifier,
+    icon = R.drawable.ic_flame,
+    big = streak.toString(),
+    caption = if (streak > 0) ruPlural(streak, "день подряд", "дня подряд", "дней подряд") else "начни серию",
+    accent = false,
+    onClick = { go(MainActivity.SCREEN_PROGRESS) },
+) {
+    Row(horizontalArrangement = Arrangement.spacedBy(3.dp), modifier = Modifier.padding(top = 6.dp)) {
+        week.forEach { n -> Box(Modifier.size(8.dp).clip(CircleShape).background(if (n > 0) Brand.Theory else Brand.Line)) }
+    }
+}
+
+/** Плитка «Будильник»: время подъёма и «лечь до»; без будильника — экзамен (или приглашение). */
+@Composable
+fun AlarmTile(modifier: Modifier, exam: Exam?, resumeTick: Int, promoteAlarm: Boolean, go: (String) -> Unit) {
     val context = LocalContext.current
     val wakeOn = remember(resumeTick) { WakePrefs.of(context).on }
     val plan by produceState<WakeAlarm.Plan?>(null, resumeTick, wakeOn) { value = if (wakeOn) WakeAlarm.plan(context) else null }
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        HomeTile(
-            modifier = Modifier.weight(1f),
-            icon = R.drawable.ic_cards,
-            big = if (due > 0) due.toString() else "✓",
-            caption = if (due > 0) ruPlural(due, "карточка ждёт", "карточки ждут", "карточек ждут") else "всё повторено",
-            accent = due > 0,
-            onClick = { go(MainActivity.SCREEN_REVIEW) },
-        )
-        HomeTile(
-            modifier = Modifier.weight(1f),
-            icon = R.drawable.ic_flame,
-            big = streak.toString(),
-            caption = if (streak > 0) ruPlural(streak, "день подряд", "дня подряд", "дней подряд") else "начни серию",
-            accent = false,
-            onClick = { go(MainActivity.SCREEN_PROGRESS) },
-        ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(3.dp), modifier = Modifier.padding(top = 6.dp)) {
-                week.forEach { n -> Box(Modifier.size(8.dp).clip(CircleShape).background(if (n > 0) Brand.Theory else Brand.Line)) }
-            }
-        }
-        val p = plan
-        when {
-            wakeOn && p != null -> HomeTile(
-                modifier = Modifier.weight(1f),
-                icon = R.drawable.ic_bell,
-                big = WakeAlarm.hm(p.wake),
-                caption = "лечь до ${WakeAlarm.hm(p.bedtime)}",
-                accent = false,
-                onClick = { go(MainActivity.SCREEN_SETTINGS) },
-            )
-            exam != null -> {
-                val days = ExamPlan.daysLeft(exam.at, System.currentTimeMillis())
-                HomeTile(
-                    modifier = Modifier.weight(1f),
-                    icon = R.drawable.ic_target,
-                    big = if (days == 0) "сегодня" else "$days ${ruPlural(days, "день", "дня", "дней")}",
-                    caption = exam.subject,
-                    accent = days <= 3,
-                    onClick = { go(MainActivity.SCREEN_EXAMS) },
-                )
-            }
-            promoteAlarm -> HomeTile(
-                modifier = Modifier.weight(1f),
-                icon = R.drawable.ic_bell,
-                big = "—",
-                caption = if (wakeOn) "пар на неделе нет" else "будильник к паре",
-                accent = false,
-                onClick = { go(MainActivity.SCREEN_SETTINGS) },
-            )
-            else -> HomeTile(
-                modifier = Modifier.weight(1f),
-                icon = R.drawable.ic_target,
-                big = "+",
-                caption = "добавь экзамен",
-                accent = false,
-                onClick = { go(MainActivity.SCREEN_EXAMS) },
+    val p = plan
+    when {
+        wakeOn && p != null -> HomeTile(modifier, R.drawable.ic_bell, WakeAlarm.hm(p.wake), "лечь до ${WakeAlarm.hm(p.bedtime)}", false, { go(MainActivity.SCREEN_SETTINGS) })
+        exam != null -> {
+            val days = ExamPlan.daysLeft(exam.at, System.currentTimeMillis())
+            HomeTile(
+                modifier, R.drawable.ic_target,
+                if (days == 0) "сегодня" else "$days ${ruPlural(days, "день", "дня", "дней")}",
+                exam.subject, days <= 3, { go(MainActivity.SCREEN_EXAMS) },
             )
         }
+        promoteAlarm -> HomeTile(modifier, R.drawable.ic_bell, "—", if (wakeOn) "пар на неделе нет" else "будильник к паре", false, { go(MainActivity.SCREEN_SETTINGS) })
+        else -> HomeTile(modifier, R.drawable.ic_target, "+", "добавь экзамен", false, { go(MainActivity.SCREEN_EXAMS) })
     }
 }
 
