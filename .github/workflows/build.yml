@@ -45,7 +45,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: test-reports
-          path: app/build/reports/tests/
+          path: |
+            app/build/reports/tests/
+            parent/build/reports/tests/
           if-no-files-found: ignore
 
       - name: APK
@@ -53,6 +55,13 @@ jobs:
         with:
           name: nastavnik-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+
+      - name: APK для родителя
+        uses: actions/upload-artifact@v4
+        with:
+          name: parent-debug-apk
+          path: parent/build/outputs/apk/debug/parent-debug.apk
           if-no-files-found: error
 
       # Каждая сборка из push — релиз build-<номер> с APK: по нему приложение находит обновление
@@ -65,7 +74,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           cp app/build/outputs/apk/debug/app-debug.apk nastavnik.apk
-          gh release create "build-${{ github.run_number }}" nastavnik.apk \
+          cp parent/build/outputs/apk/debug/parent-debug.apk parent.apk
+          gh release create "build-${{ github.run_number }}" nastavnik.apk parent.apk \
             --repo "${{ github.repository }}" \
             --target "${{ github.sha }}" \
             --title "Наставник, сборка ${{ github.run_number }}" \

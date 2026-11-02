@@ -23,8 +23,10 @@ object UpdateCheck {
         val tag = obj.str("tag_name") ?: return null
         val build = Regex("(\\d+)$").find(tag)?.value?.toIntOrNull() ?: return null
         if (build <= currentBuild) return null
-        val asset = (obj["assets"] as? JsonArray)?.mapNotNull { it as? JsonObject }
-            ?.firstOrNull { it.str("name")?.endsWith(".apk") == true } ?: return null
+        // В релизе два APK — «Наставник» и приложение для родителя; нам — только свой.
+        val apks = (obj["assets"] as? JsonArray)?.mapNotNull { it as? JsonObject }?.filter { it.str("name")?.endsWith(".apk") == true }.orEmpty()
+        val asset = apks.firstOrNull { it.str("name") == "nastavnik.apk" }
+            ?: apks.firstOrNull { it.str("name")?.startsWith("parent") == false } ?: return null
         val url = asset.str("browser_download_url") ?: return null
         if (!url.startsWith("https://github.com/$REPO/")) return null
         return UpdateInfo(build, url, asset.str("size")?.toLongOrNull() ?: 0, obj.str("name") ?: tag)

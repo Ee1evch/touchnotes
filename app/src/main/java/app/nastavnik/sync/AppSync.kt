@@ -124,7 +124,7 @@ class AppSyncSource(private val app: NastavnikApp) : SyncSource {
                 ReminderEntity(record.id, d.s("title"), d.s("note"), d.l("at"), d.s("repeat").ifEmpty { "none" }, d.b("done"), d.l("created")),
             )
             "book" -> {
-                val meta = json.decodeFromJsonElement(NotebookMeta.serializer(), record.data)
+                val meta = json.decodeFromJsonElement(NotebookMeta.serializer(), d)
                 val store = app.notebooks.store
                 val dir = store.dir(meta.id).apply { mkdirs() }
                 for ((name, f) in files) {
@@ -138,7 +138,7 @@ class AppSyncSource(private val app: NastavnikApp) : SyncSource {
                 store.thumb(meta.id).delete()
                 app.notebooks.forget(meta.id)
             }
-            "grades" -> app.grades.applySynced(record.data.toString())
+            "grades" -> app.grades.applySynced(d.toString())
             "prefs" -> {
                 val st = app.settings
                 st.setScheduleGroup(d.s("group"))

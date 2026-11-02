@@ -75,10 +75,12 @@ fun dayStatus(lessons: List<Lesson>?, now: LocalDateTime, hasGroup: Boolean): St
     if (!hasGroup) return "Выбери группу — здесь будет твой день"
     if (lessons == null) return "Загружаю расписание…"
     val s = ScheduleNow.at(lessons, now)
+    val current = s.current
+    val next = s.next
     return when {
-        s.current != null -> "Сейчас ${s.current.discipline.lowercaseFirst()} — ещё ${durationText(s.minutesLeft ?: 0)}"
-        s.next != null && (s.minutesToNext ?: 0) <= 120 -> "Через ${durationText(s.minutesToNext ?: 0)} — ${s.next.discipline.lowercaseFirst()}"
-        s.next != null -> "Следующая пара в ${s.next.start}"
+        current != null -> "Сейчас ${current.discipline.lowercaseFirst()} — ещё ${durationText(s.minutesLeft ?: 0)}"
+        next != null && (s.minutesToNext ?: 0) <= 120 -> "Через ${durationText(s.minutesToNext ?: 0)} — ${next.discipline.lowercaseFirst()}"
+        next != null -> "Следующая пара в ${next.start}"
         lessons.isEmpty() -> "Сегодня пар нет"
         else -> "Пары на сегодня закончились"
     }
@@ -133,7 +135,7 @@ fun DayCard(lessons: List<Lesson>?, tomorrow: List<Lesson>, now: LocalDateTime, 
         val title = when {
             lessons == null -> "Загружаю…"
             state.current != null -> "Сейчас"
-            state.next != null -> "Дальше · в ${state.next.start}"
+            state.next != null -> "Дальше · в ${state.next!!.start}"
             evening && tomorrow.isNotEmpty() -> "Завтра первая · в ${tomorrow.first().start}"
             day.isEmpty() -> "Сегодня свободно"
             else -> "На сегодня всё"

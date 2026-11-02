@@ -31,5 +31,10 @@ class BackupAndUpdateTest {
         assertNull(UpdateCheck.parse(release("build-60", "https://evil.example/app.apk"), 50))
         assertNull(UpdateCheck.parse("{\"tag_name\":\"build-70\",\"assets\":[]}", 50))
         assertNull(UpdateCheck.parse("не json", 50))
+        // В релизе есть и APK родителя — берём свой, даже если родительский идёт первым.
+        val both = """{"tag_name":"build-80","assets":[{"name":"parent.apk","browser_download_url":"https://github.com/Ee1evch/touchnotes/releases/download/build-80/parent.apk"},""" +
+            """{"name":"nastavnik.apk","size":5,"browser_download_url":"https://github.com/Ee1evch/touchnotes/releases/download/build-80/nastavnik.apk"}]}"""
+        assertEquals("https://github.com/Ee1evch/touchnotes/releases/download/build-80/nastavnik.apk", UpdateCheck.parse(both, 50)!!.apkUrl)
+        assertNull(UpdateCheck.parse("""{"tag_name":"build-81","assets":[{"name":"parent.apk","browser_download_url":"https://github.com/Ee1evch/touchnotes/releases/download/build-81/parent.apk"}]}""", 50))
     }
 }
