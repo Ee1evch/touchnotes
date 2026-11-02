@@ -9,6 +9,7 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import app.nastavnik.BuildConfig
 import app.nastavnik.R
 import app.nastavnik.data.AppSettings
 import androidx.compose.foundation.layout.padding
@@ -83,6 +84,8 @@ class MainActivity : ComponentActivity() {
             // Первая настройка — про кнопку поверх записей; телефону она не нужна.
             ?: if (app.settings.load().onboardingDone || !app.isTablet()) SCREEN_HOME else SCREEN_ONBOARDING
         if (savedInstanceState == null) receiveShared(intent)
+        // Лёгкая версия — свой экран; первая настройка (кнопка поверх записей) ей не нужна.
+        if (BuildConfig.STUDENT) screen = SCREEN_HOME
 
         setContent {
             val prefs by remember { app.settings.flow() }.collectAsStateWithLifecycle(initialValue = null)
@@ -143,6 +146,11 @@ class MainActivity : ComponentActivity() {
                             androidx.compose.material3.TextButton(onClick = { askShared = null; importShared(uris, "pdf") }) { Text("В тетрадь") }
                         },
                     )
+                }
+                // «Наставник · Студент»: только расписание, оценки и настройки.
+                if (BuildConfig.STUDENT) {
+                    StudentShell()
+                    return@NastavnikTheme
                 }
                 if (importing) {
                     ImportingScreen()
@@ -225,6 +233,7 @@ class MainActivity : ComponentActivity() {
      * поверх можно писать, а наставник видит все страницы.
      */
     private fun receiveShared(intent: Intent) {
+        if (BuildConfig.STUDENT) return
         val uris = sharedUris(intent)
         if (uris.isEmpty()) return
         val type = intent.type ?: uris.firstOrNull()?.let { contentResolver.getType(it) }.orEmpty()
@@ -280,7 +289,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         resumeTick++
-        StudyWidget.refresh(this)
+        if (!BuildConfig.STUDENT) StudyWidget.refresh(this)
         app.sync.onForeground()
         // Оценки — не чаще раза в час; новые придут уведомлением.
         app.appScope.launch { app.grades.refresh(); app.grades.refreshLks() }

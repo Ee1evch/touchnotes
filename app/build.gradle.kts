@@ -22,6 +22,23 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    // Два приложения из одного кода: полный «Наставник» и лёгкий «Наставник · Студент» (расписание, оценки ЛКС,
+    // живое уведомление, «Тихо на парах», темы) — свой идентификатор, ставятся рядом.
+    flavorDimensions += "edition"
+    productFlavors {
+        create("full") {
+            dimension = "edition"
+            buildConfigField("boolean", "STUDENT", "false")
+            buildConfigField("String", "APK_NAME", "\"nastavnik.apk\"")
+        }
+        create("student") {
+            dimension = "edition"
+            applicationId = "app.nastavnik.student"
+            buildConfigField("boolean", "STUDENT", "true")
+            buildConfigField("String", "APK_NAME", "\"student.apk\"")
+        }
+    }
+
     signingConfigs {
         // Общий debug-ключ лежит в репозитории, чтобы APK из GitHub Actions
         // и локальные сборки ставились поверх друг друга через `adb install -r`.

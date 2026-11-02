@@ -31,7 +31,7 @@ class Updater(private val context: Context) {
         http.newCall(req).execute().use { resp ->
             if (resp.code == 404) return@withContext null
             if (!resp.isSuccessful) throw IOException("GitHub ответил ${resp.code}")
-            UpdateCheck.parse(resp.body?.string().orEmpty(), currentBuild)
+            UpdateCheck.parse(resp.body?.string().orEmpty(), currentBuild, BuildConfig.APK_NAME)
         }
     }
 

@@ -125,7 +125,8 @@ class NastavnikApp : Application() {
         settings.forgetLksPassword()
         settings.migrateToParentDesign()
         Palettes.installWallpaper(this)
-        Reminders.schedule(this)
+        // Лёгкая версия: без своих напоминаний (только расписание, оценки, живое уведомление).
+        if (!BuildConfig.STUDENT) Reminders.schedule(this)
         Alarms.rescheduleAll(this)
         GradesJob.schedule(this)
     }

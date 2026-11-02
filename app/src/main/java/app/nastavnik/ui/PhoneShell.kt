@@ -113,22 +113,31 @@ fun PhoneShell(tab: PhoneTab, onTab: (PhoneTab) -> Unit, resumeTick: Int, go: (S
  */
 @Composable
 private fun TabBar(tab: PhoneTab, onTab: (PhoneTab) -> Unit, modifier: Modifier) {
+    TabRowBar(
+        items = PhoneTab.entries.map { Triple(it.title, it.icon, it == tab) },
+        onClick = { onTab(PhoneTab.entries[it]) },
+        modifier = modifier,
+    )
+}
+
+/** Панель вкладок: подпись, значок, выбрана ли; [onClick] — номер вкладки. */
+@Composable
+fun TabRowBar(items: List<Triple<String, Int, Boolean>>, onClick: (Int) -> Unit, modifier: Modifier) {
     Row(modifier.fillMaxWidth().background(Brand.Glass).navigationBarsPadding().height(80.dp)) {
-        PhoneTab.entries.forEach { t ->
-            val sel = t == tab
+        items.forEachIndexed { i, (title, icon, sel) ->
             val fg by animateColorAsState(if (sel) Brand.Accent else Brand.InkSoft, tween(220), label = "tabColor")
             val pill by animateColorAsState(if (sel) Brand.Accent.copy(alpha = 0.14f) else Color.Transparent, tween(220), label = "tabPill")
             Column(
                 Modifier.weight(1f).fillMaxHeight()
-                    .clickable(remember { MutableInteractionSource() }, indication = null) { onTab(t) }
-                    .semantics { contentDescription = t.title; selected = sel },
+                    .clickable(remember { MutableInteractionSource() }, indication = null) { onClick(i) }
+                    .semantics { contentDescription = title; selected = sel },
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
             ) {
                 Box(Modifier.size(width = 56.dp, height = 30.dp).clip(RoundedCornerShape(15.dp)).background(pill), contentAlignment = Alignment.Center) {
-                    Icon(painterResource(t.icon), contentDescription = null, tint = fg, modifier = Modifier.size(22.dp))
+                    Icon(painterResource(icon), contentDescription = null, tint = fg, modifier = Modifier.size(22.dp))
                 }
-                Text(t.title, style = MaterialTheme.typography.labelMedium, color = fg, maxLines = 1, modifier = Modifier.padding(top = 4.dp))
+                Text(title, style = MaterialTheme.typography.labelMedium, color = fg, maxLines = 1, modifier = Modifier.padding(top = 4.dp))
             }
         }
     }

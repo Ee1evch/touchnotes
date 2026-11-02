@@ -1,5 +1,6 @@
 package app.nastavnik.study
 
+import app.nastavnik.BuildConfig
 import android.app.AlarmManager
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -38,10 +39,12 @@ object Alarms {
     fun rescheduleAll(context: Context) {
         val app = context.app
         app.appScope.launch(Dispatchers.IO) {
-            runCatching { schedulePersonal(context) }
             runCatching { scheduleNextLesson(context) }
             runCatching { LiveNotifications.updateLesson(context) }
             runCatching { LessonQuiet.update(context) }
+            // Лёгкая версия («Наставник · Студент»): только пары, живое уведомление и «Тихо на парах».
+            if (BuildConfig.STUDENT) return@launch
+            runCatching { schedulePersonal(context) }
             runCatching { WakeAlarm.reschedule(context) }
             runCatching { StudyLock.schedule(context) }
             runCatching { Siren.check(context) }

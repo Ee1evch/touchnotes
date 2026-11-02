@@ -18,15 +18,14 @@ object UpdateCheck {
     private val json = Json { ignoreUnknownKeys = true }
 
     /** Обновление, если релиз новее [currentBuild] и в нём есть APK; иначе null. */
-    fun parse(body: String, currentBuild: Int): UpdateInfo? {
+    fun parse(body: String, currentBuild: Int, apkName: String = "nastavnik.apk"): UpdateInfo? {
         val obj = runCatching { json.parseToJsonElement(body).jsonObject }.getOrNull() ?: return null
         val tag = obj.str("tag_name") ?: return null
         val build = Regex("(\\d+)$").find(tag)?.value?.toIntOrNull() ?: return null
         if (build <= currentBuild) return null
-        // В релизе два APK — «Наставник» и приложение для родителя; нам — только свой.
+        // В релизе несколько APK — «Наставник», «Студент» и приложение для родителя; нам — только свой.
         val apks = (obj["assets"] as? JsonArray)?.mapNotNull { it as? JsonObject }?.filter { it.str("name")?.endsWith(".apk") == true }.orEmpty()
-        val asset = apks.firstOrNull { it.str("name") == "nastavnik.apk" }
-            ?: apks.firstOrNull { it.str("name")?.startsWith("parent") == false } ?: return null
+        val asset = apks.firstOrNull { it.str("name") == apkName } ?: return null
         val url = asset.str("browser_download_url") ?: return null
         if (!url.startsWith("https://github.com/$REPO/")) return null
         return UpdateInfo(build, url, asset.str("size")?.toLongOrNull() ?: 0, obj.str("name") ?: tag)

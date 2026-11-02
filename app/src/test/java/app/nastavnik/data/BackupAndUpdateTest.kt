@@ -36,5 +36,9 @@ class BackupAndUpdateTest {
             """{"name":"nastavnik.apk","size":5,"browser_download_url":"https://github.com/Ee1evch/touchnotes/releases/download/build-80/nastavnik.apk"}]}"""
         assertEquals("https://github.com/Ee1evch/touchnotes/releases/download/build-80/nastavnik.apk", UpdateCheck.parse(both, 50)!!.apkUrl)
         assertNull(UpdateCheck.parse("""{"tag_name":"build-81","assets":[{"name":"parent.apk","browser_download_url":"https://github.com/Ee1evch/touchnotes/releases/download/build-81/parent.apk"}]}""", 50))
+        // «Наставник · Студент» берёт свой student.apk.
+        val three = """{"tag_name":"build-82","assets":[{"name":"nastavnik.apk","browser_download_url":"https://github.com/Ee1evch/touchnotes/releases/download/build-82/nastavnik.apk"},""" +
+            """{"name":"student.apk","browser_download_url":"https://github.com/Ee1evch/touchnotes/releases/download/build-82/student.apk"}]}"""
+        assertEquals("https://github.com/Ee1evch/touchnotes/releases/download/build-82/student.apk", UpdateCheck.parse(three, 50, "student.apk")!!.apkUrl)
     }
 }

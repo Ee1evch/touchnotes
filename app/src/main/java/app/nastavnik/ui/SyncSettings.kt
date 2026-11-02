@@ -164,21 +164,23 @@ fun SyncSection() {
 
 /** Устройство: как вести себя и за сколько предупреждать о паре. */
 @Composable
-fun DeviceSection(tablet: Boolean) {
+fun DeviceSection(tablet: Boolean, showRole: Boolean = true) {
     val context = LocalContext.current
     val repo = context.app.settings
     var role by remember { mutableStateOf(repo.deviceRole()) }
     var alert by remember { mutableStateOf(repo.lessonAlertMin()) }
     SectionCard("Это устройство") {
-        FieldLabel(
-            "Режим",
-            if (tablet) "Планшет: тетради для стилуса, наставник, чистовики — и всё остальное." else "Телефон: расписание, карта, карточки и напоминания — без тетрадей для стилуса.",
-        )
-        Segmented(listOf("auto" to "Сам", "phone" to "Телефон", "tablet" to "Планшет"), role) {
-            role = it
-            repo.setDeviceRole(it)
+        if (showRole) {
+            FieldLabel(
+                "Режим",
+                if (tablet) "Планшет: тетради для стилуса, наставник, чистовики — и всё остальное." else "Телефон: расписание, карта, карточки и напоминания — без тетрадей для стилуса.",
+            )
+            Segmented(listOf("auto" to "Сам", "phone" to "Телефон", "tablet" to "Планшет"), role) {
+                role = it
+                repo.setDeviceRole(it)
+            }
+            HorizontalDivider(Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant)
         }
-        HorizontalDivider(Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant)
         FieldLabel("Перед парой", "Живое уведомление: аудитория, отсчёт до начала, весь день полосой.")
         Segmented(listOf(0 to "Не надо", 5 to "за 5 мин", 10 to "за 10", 15 to "за 15"), alert) {
             alert = it

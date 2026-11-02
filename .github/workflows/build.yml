@@ -35,7 +35,7 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
 
       - name: Юнит-тесты
-        run: ./gradlew --no-daemon testDebugUnitTest :core:test
+        run: ./gradlew --no-daemon :app:testFullDebugUnitTest :parent:testDebugUnitTest :core:test
 
       - name: Сборка debug APK
         run: ./gradlew --no-daemon assembleDebug
@@ -54,7 +54,14 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: nastavnik-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: app/build/outputs/apk/full/debug/app-full-debug.apk
+          if-no-files-found: error
+
+      - name: APK «Студент»
+        uses: actions/upload-artifact@v4
+        with:
+          name: student-debug-apk
+          path: app/build/outputs/apk/student/debug/app-student-debug.apk
           if-no-files-found: error
 
       - name: APK для родителя
@@ -73,9 +80,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          cp app/build/outputs/apk/debug/app-debug.apk nastavnik.apk
+          cp app/build/outputs/apk/full/debug/app-full-debug.apk nastavnik.apk
+          cp app/build/outputs/apk/student/debug/app-student-debug.apk student.apk
           cp parent/build/outputs/apk/debug/parent-debug.apk parent.apk
-          gh release create "build-${{ github.run_number }}" nastavnik.apk parent.apk \
+          gh release create "build-${{ github.run_number }}" nastavnik.apk student.apk parent.apk \
             --repo "${{ github.repository }}" \
             --target "${{ github.sha }}" \
             --title "Наставник 1.5, сборка ${{ github.run_number }}" \
