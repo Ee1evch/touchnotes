@@ -6,8 +6,13 @@ adb logcat -c || true
 adb logcat -G 64M || true
 # Системные окна «… isn't responding» на медленном эмуляторе перекрывают экран и ломают тесты.
 adb shell settings put global hide_error_dialogs 1 || true
+# Журнал пишем в файл по ходу тестов: снимков много, и кольцевой буфер logcat вытеснял ранние.
+adb logcat -v brief SmokeTest:I MentorFlowTest:I Nastavnik:I System.out:I TestRunner:I AndroidRuntime:E '*:S' > smoke-logcat.txt &
+logpid=$!
 ./gradlew --no-daemon connectedDebugAndroidTest
 code=$?
+sleep 2
+kill $logpid 2>/dev/null || true
 echo "===== logcat (SmokeTest / System.out / ошибки) ====="
-adb logcat -d -v brief SmokeTest:I MentorFlowTest:I Nastavnik:I System.out:I TestRunner:I AndroidRuntime:E '*:S' || true
+cat smoke-logcat.txt
 exit $code

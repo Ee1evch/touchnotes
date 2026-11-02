@@ -34,7 +34,8 @@ import java.io.File
 
 /**
  * Что синхронизируется: тетради (с файлами страниц и подложек), карточки, учебные события (прогресс),
- * чистовики с PDF, напоминания и учебные настройки (группа, преподаватель языка, экзамены).
+ * чистовики с PDF, напоминания, учебные настройки (группа, преподаватель языка, экзамены) и журнал оценок ЛКС
+ * (с устройства, где вход, — на остальные: вход только на телефоне, оценки везде).
  * Разговоры с наставником остаются на своём устройстве — они привязаны к нему и к ключу API.
  */
 class AppSyncSource(private val app: NastavnikApp) : SyncSource {
@@ -77,6 +78,9 @@ class AppSyncSource(private val app: NastavnikApp) : SyncSource {
                 .filter { !it.name.endsWith(".tmp") }
                 .associateBy { it.name }
             out += LocalItem("book", m.id.toString(), json.encodeToJsonElement(NotebookMeta.serializer(), m.copy(conversationId = 0)), files)
+        }
+        app.grades.journalForSync()?.let { raw ->
+            runCatching { json.parseToJsonElement(raw) }.getOrNull()?.let { out += LocalItem("grades", "lks", it) }
         }
         val st = app.settings
         if (st.studyStamp() > 0 || st.scheduleGroup().isNotBlank() || !st.examsJson().isNullOrBlank()) {
@@ -134,6 +138,7 @@ class AppSyncSource(private val app: NastavnikApp) : SyncSource {
                 store.thumb(meta.id).delete()
                 app.notebooks.forget(meta.id)
             }
+            "grades" -> app.grades.applySynced(record.data.toString())
             "prefs" -> {
                 val st = app.settings
                 st.setScheduleGroup(d.s("group"))
@@ -151,6 +156,7 @@ class AppSyncSource(private val app: NastavnikApp) : SyncSource {
             "clean" -> db.cleanNotes().byUid(id)?.let { db.cleanNotes().delete(it.id) } ?: Unit
             "rem" -> db.reminders().delete(id)
             "book" -> id.toLongOrNull()?.let { app.notebooks.store.delete(it) } ?: Unit
+            "grades" -> app.grades.removeSynced()
             else -> Unit
         }
     }

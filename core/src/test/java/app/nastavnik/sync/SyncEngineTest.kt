@@ -104,6 +104,31 @@ class SyncEngineTest {
         assertTrue(cloud.files.containsKey("Nastavnik/devices/a.json.gz"))
     }
 
+    @Test fun cloudReaderTakesNewestAndWritesNothing() {
+        val cloud = MemoryStore()
+        val tablet = Device("tablet", cloud)
+        val phone = Device("phone", cloud)
+        tablet.notes["a"] = "старое"
+        tablet.sync()
+        phone.sync()
+        phone.clock = 5000
+        phone.notes["a"] = "новое"
+        phone.notes["gone"] = "x"
+        phone.sync()
+        phone.clock = 6000
+        phone.notes.remove("gone")
+        phone.sync()
+        val writes = cloud.writes
+        val got = runBlocking { CloudReader(cloud).latest(setOf("note/a", "note/gone", "note/none")) }
+        assertEquals("новое", got.getValue("note/a").data!!.jsonObject["text"]!!.jsonPrimitive.content)
+        assertFalse("удалённое не возвращается", "note/gone" in got)
+        assertEquals("читатель ничего не пишет", writes, cloud.writes)
+    }
+
+    @Test(expected = java.io.IOException::class) fun cloudReaderEmptyCloudExplains() {
+        runBlocking { CloudReader(MemoryStore()).latest(setOf("note/a")) }
+    }
+
     @Test fun recordHashIsStable() {
         val d = buildJsonObject { put("t", JsonPrimitive(1)) }
         assertEquals(SyncEngine.recordHash(d, mapOf("a" to "1", "b" to "2")), SyncEngine.recordHash(d, mapOf("b" to "2", "a" to "1")))

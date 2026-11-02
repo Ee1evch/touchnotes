@@ -35,7 +35,7 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
 
       - name: Юнит-тесты
-        run: ./gradlew --no-daemon testDebugUnitTest
+        run: ./gradlew --no-daemon testDebugUnitTest :core:test
 
       - name: Сборка debug APK
         run: ./gradlew --no-daemon assembleDebug

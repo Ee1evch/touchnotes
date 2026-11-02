@@ -364,8 +364,11 @@ class CampusFlowTest {
             repeat(3) { device.pressKeyCode(android.view.KeyEvent.KEYCODE_VOLUME_DOWN); SystemClock.sleep(200) }
             assertTrue("громкость убавилась кнопкой", audio.getStreamVolume(android.media.AudioManager.STREAM_ALARM) >= vol)
             // Выключить можно только решив пример на щите.
-            AlarmShield.answer!!.toString().forEach { ch -> device.findObject(By.text(ch.toString())).click(); SystemClock.sleep(150) }
-            SystemClock.sleep(1500)
+            // Цифры — именно на щите (в окнах системы тоже бывают одиночные цифры).
+            AlarmShield.answer!!.toString().forEach { ch -> device.findObject(By.text(ch.toString()).pkg(ctx.packageName)).click(); SystemClock.sleep(150) }
+            val offBy = System.currentTimeMillis() + 6000
+            while (WakeService.ringing && System.currentTimeMillis() < offBy) SystemClock.sleep(200)
+            if (WakeService.ringing) screenshot("alarm_not_off")
             assertTrue("будильник не выключился решением примера", !WakeService.ringing)
         } finally {
             runBlocking { WakeAlarm.dismiss(ctx, true) }
@@ -542,5 +545,15 @@ class CampusFlowTest {
         // Вторая выгрузка — то же самое содержимое.
         assertEquals(c.data, src.export().single { it.kind == "card" && it.id == card.uid }.data)
         app.db.cards().deleteUid(card.uid); app.db.reminders().delete("rem-sync-test"); app.notebooks.store.delete(nb.id)
+
+        // Оценки: здесь входа в ЛКС нет — журнал с телефона принимается и показывается, обратно не выгружается.
+        assertTrue("без входа журнал не выгружается", src.export().none { it.kind == "grades" })
+        val journal = """{"lessons":[{"title":"Физика","avgMark":"4.5","entries":[{"date":"2026-11-02","marks":[{"value":"5"}]}]}],"loadedAt":7}"""
+        src.apply(SyncRecord("grades", "lks", 1, data = kotlinx.serialization.json.Json.parseToJsonElement(journal)), emptyMap())
+        assertTrue("журнал с телефона не принят", app.grades.synced && app.grades.configured && app.grades.viaLks)
+        assertEquals("Физика", app.grades.journal.value!!.lessons.single().title)
+        assertTrue("копию не выгружаем обратно", src.export().none { it.kind == "grades" })
+        src.delete("grades", "lks")
+        assertTrue("копия не удалилась", !app.grades.synced && app.grades.journal.value == null)
     }
 }

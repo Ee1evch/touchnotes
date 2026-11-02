@@ -96,7 +96,10 @@ fun GradesScreen(onBack: (() -> Unit)?, onSettings: () -> Unit, onLks: () -> Uni
             if (repo.configured) {
                 Box(
                     Modifier.size(44.dp).glass(CircleShape, 6.dp, strong = true).clickable(enabled = !loading) {
-                        scope.launch { if (repo.viaLks) repo.refreshLks(force = true) else repo.refresh(force = true) }
+                        scope.launch {
+                            // Здесь журнал — копия с телефона: обновить = синхронизироваться.
+                            if (repo.synced) app.sync.now() else if (repo.viaLks) repo.refreshLks(force = true) else repo.refresh(force = true)
+                        }
                     },
                     contentAlignment = Alignment.Center,
                 ) {
@@ -109,6 +112,7 @@ fun GradesScreen(onBack: (() -> Unit)?, onSettings: () -> Unit, onLks: () -> Uni
             Column(Modifier.fillMaxWidth().enter().glass(RoundedCornerShape(28.dp), 10.dp).padding(22.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("Подключи личный кабинет", style = MaterialTheme.typography.titleMedium)
                 Text("Войди в ЛКС один раз (почта, пароль и капча) — оценки появятся здесь и будут обновляться сами, о новых придёт уведомление.", style = MaterialTheme.typography.bodyMedium, color = Brand.InkSoft)
+                Text("Вход нужен только на одном устройстве: с облаком (Настройки → Синхронизация) оценки придут на остальные сами.", style = MaterialTheme.typography.bodySmall, color = Brand.InkSoft)
                 InkButton("Войти в ЛКС", onClick = onLks)
             }
             return@ScreenScaffold

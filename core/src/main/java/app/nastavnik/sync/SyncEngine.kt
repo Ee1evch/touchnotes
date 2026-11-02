@@ -213,12 +213,6 @@ class SyncEngine(
         return SyncState(after, liveFiles, t) to SyncReport(received, sent, snapshots, removed)
     }
 
-    private fun newer(a: SyncRecord, b: SyncRecord): Boolean = when {
-        a.at != b.at -> a.at > b.at
-        a.deleted != b.deleted -> a.deleted
-        else -> a.by > b.by
-    }
-
     private fun fileHash(f: File, cache: MutableMap<String, String>): String {
         val stamp = "${f.length()}:${f.lastModified()}"
         cache[f.path]?.let { if (it.substringBeforeLast(':') == stamp) return it.substringAfterLast(':') }
@@ -238,12 +232,21 @@ class SyncEngine(
         return out.toByteArray()
     }
 
-    private fun decode(b: ByteArray): DeviceSnapshot =
-        json.decodeFromString(DeviceSnapshot.serializer(), GZIPInputStream(ByteArrayInputStream(b)).readBytes().decodeToString())
-
     companion object {
         const val ROOT = "Nastavnik"
         const val TOMBSTONE_MS = 90L * 24 * 3600 * 1000
+        private val reader = Json { ignoreUnknownKeys = true }
+
+        /** Снимок устройства из `devices/<id>.json.gz`. */
+        fun decode(b: ByteArray): DeviceSnapshot =
+            reader.decodeFromString(DeviceSnapshot.serializer(), GZIPInputStream(ByteArrayInputStream(b)).readBytes().decodeToString())
+
+        /** Какая версия записи свежее (при равенстве — удаление, потом по устройству — одинаково везде). */
+        fun newer(a: SyncRecord, b: SyncRecord): Boolean = when {
+            a.at != b.at -> a.at > b.at
+            a.deleted != b.deleted -> a.deleted
+            else -> a.by > b.by
+        }
 
         fun recordHash(data: JsonElement?, blobs: Map<String, String>): String {
             val md = MessageDigest.getInstance("SHA-256")

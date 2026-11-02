@@ -21,7 +21,8 @@ import java.io.File
 
 /**
  * Успеваемость: последний снимок с сайта (без сети показываем его), обновление и уведомление о новых оценках.
- * Пароль и токен — в зашифрованных настройках; оценки на другие устройства не отправляются.
+ * Пароль и токен — в зашифрованных настройках. Вход в ЛКС — только на одном устройстве (телефоне): журнал оттуда
+ * уходит через облако на остальные (планшет) — там он показывается без входа ([synced]).
  */
 class GradesRepo(private val context: Context, private val settings: SettingsRepo) {
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
@@ -34,8 +35,37 @@ class GradesRepo(private val context: Context, private val settings: SettingsRep
     private val _loading = MutableStateFlow(false)
     val loading: StateFlow<Boolean> = _loading
 
-    val configured get() = settings.gradesConfigured || settings.lksConfigured
-    val viaLks get() = settings.lksConfigured
+    val configured get() = settings.gradesConfigured || settings.lksConfigured || synced
+    val viaLks get() = settings.lksConfigured || synced
+
+    /** Журнал пришёл с другого устройства (там вход в ЛКС), здесь входа нет. */
+    val synced get() = !settings.lksConfigured && syncedFile.exists()
+    private val syncedFile get() = File(context.filesDir, "grades/lks_synced")
+
+    /** Журнал для облака — только с устройства, где вход (иначе это копия чужого). */
+    fun journalForSync(): String? = if (settings.lksConfigured) runCatching { journalFile.readText() }.getOrNull() else null
+
+    /** Журнал с другого устройства: сохранить и показать (уведомление о новых оценках — там, где вход). */
+    suspend fun applySynced(raw: String) = withContext(Dispatchers.IO) {
+        if (settings.lksConfigured) return@withContext
+        val j = runCatching { json.decodeFromString(LksJournal.serializer(), raw) }.getOrNull() ?: return@withContext
+        journalFile.parentFile?.mkdirs()
+        val tmp = File(journalFile.path + ".tmp")
+        tmp.writeText(raw)
+        tmp.renameTo(journalFile)
+        syncedFile.writeText("1")
+        _journal.value = j
+        val snap = LksClient.toSnapshot(j)
+        file.writeText(json.encodeToString(GradesSnapshot.serializer(), snap))
+        _snapshot.value = snap
+    }
+
+    /** На устройстве со входом ЛКС отключили — убрать копию. */
+    fun removeSynced() {
+        if (!synced) return
+        syncedFile.delete(); journalFile.delete(); file.delete()
+        _journal.value = null; _snapshot.value = null
+    }
 
     private val journalFile get() = File(context.filesDir, "grades/lks_journal.json")
     private val _journal = MutableStateFlow<LksJournal?>(null)
