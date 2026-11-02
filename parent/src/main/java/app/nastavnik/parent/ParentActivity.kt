@@ -278,6 +278,7 @@ private fun WeekStrip(monday: LocalDate, selected: LocalDate, state: ParentRepo.
 private fun DayTitle(date: LocalDate, lessons: List<Lesson>, journal: app.nastavnik.grades.LksJournal?) {
     val name = date.format(DateTimeFormatter.ofPattern("EEEE, d MMMM", ru)).replaceFirstChar { it.uppercase() }
     val missed = lessons.count { ParentData.entryFor(it, journal)?.absent == true }
+    val unexcused = lessons.count { ParentData.entryFor(it, journal)?.let { e -> e.absent && e.absentValid != true } == true }
     val sub = buildList {
         if (lessons.isNotEmpty()) add("${lessons.size} ${plural(lessons.size, "пара", "пары", "пар")} · ${lessons.first().start}–${lessons.last().end}")
         if (missed > 0) add("пропущено: $missed")
