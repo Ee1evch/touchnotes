@@ -146,8 +146,8 @@ class CampusFlowTest {
             device.openNotification()
             SystemClock.sleep(1500)
             screenshot("live_notification")
-            // Закрыть шторку наверняка: «Назад» на планшете её не всегда закрывает.
-            instr.uiAutomation.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_DISMISS_NOTIFICATION_SHADE)
+            // Закрыть шторку наверняка: «Назад» и жест на планшете её не всегда закрывают.
+            device.executeShellCommand("cmd statusbar collapse")
             assertNotNull("шторка не закрылась", device.wait(Until.findObject(By.desc("Учёба")), 8000))
             SystemClock.sleep(500)
 
@@ -167,6 +167,8 @@ class CampusFlowTest {
             assertEquals("Сдать лабу по физике", saved.single().title)
             assertTrue(saved.single().at > System.currentTimeMillis())
         } finally {
+            // Открытая шторка не должна ломать следующие тесты.
+            device.executeShellCommand("cmd statusbar collapse")
             sc.close()
         }
     }
