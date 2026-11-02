@@ -388,7 +388,18 @@ class CampusFlowTest {
             assertTrue("громкость убавилась кнопкой", audio.getStreamVolume(android.media.AudioManager.STREAM_ALARM) >= vol)
             // Выключить можно только решив пример на щите.
             // Цифры — именно на щите (в окнах системы тоже бывают одиночные цифры).
-            AlarmShield.answer!!.toString().forEach { ch -> device.findObject(By.text(ch.toString()).pkg(ctx.packageName)).click(); SystemClock.sleep(150) }
+            // Щит перерисовывается раз в полсекунды — найденная кнопка может «устареть»: ищем заново.
+            fun tap(ch: Char) {
+                repeat(4) {
+                    try {
+                        device.findObject(By.text(ch.toString()).pkg(ctx.packageName))?.click() ?: throw androidx.test.uiautomator.StaleObjectException()
+                        return
+                    } catch (_: androidx.test.uiautomator.StaleObjectException) {
+                        SystemClock.sleep(150)
+                    }
+                }
+            }
+            AlarmShield.answer!!.toString().forEach { ch -> tap(ch); SystemClock.sleep(150) }
             val offBy = System.currentTimeMillis() + 6000
             while (WakeService.ringing && System.currentTimeMillis() < offBy) SystemClock.sleep(200)
             if (WakeService.ringing) screenshot("alarm_not_off")
