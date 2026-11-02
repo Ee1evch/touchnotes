@@ -463,7 +463,8 @@ class MentorFlowTest {
         screenshot("quiz_answer")
         findScrolling(By.text("Дальше"), 15000)!!.click()
         findScrolling(By.text("Матрица"), 15000)!!.click()
-        findScrolling(By.text("Итог"), 15000)!!.click()
+        // «Итог» появляется с анимацией под разбором — сначала ждём на экране, потом ищем прокруткой.
+        (device.wait(Until.findObject(By.text("Итог")), 15000) ?: findScrolling(By.text("Итог"), 15000))!!.click()
         // Итог появляется с анимацией — на медленном эмуляторе бывает дольше 6 секунд.
         assertNotNull("нет итога теста", findScrolling(By.text("1 из 2"), 15000))
         val before = runBlocking { ctx.app.db.cards().observeCount().first() }

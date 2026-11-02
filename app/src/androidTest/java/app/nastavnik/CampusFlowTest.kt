@@ -146,7 +146,9 @@ class CampusFlowTest {
             device.openNotification()
             SystemClock.sleep(1500)
             screenshot("live_notification")
-            device.pressBack()
+            // Закрыть шторку наверняка: «Назад» на планшете её не всегда закрывает.
+            instr.uiAutomation.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_DISMISS_NOTIFICATION_SHADE)
+            assertNotNull("шторка не закрылась", device.wait(Until.findObject(By.desc("Учёба")), 8000))
             SystemClock.sleep(500)
 
             // Напоминание через «Учёба» → «Напоминания».
