@@ -406,27 +406,16 @@ fun WakeSection() {
     }
 }
 
-/** Живое уведомление: вид и способ обновления — посмотреть каждый можно сразу кнопкой «Показать сейчас». */
+/** Живое уведомление: способ обновления и пример кнопкой «Показать сейчас». */
 @Composable
 private fun LiveSection() {
     val context = LocalContext.current
     val repo = context.app.settings
     val scope = rememberCoroutineScope()
-    var design by remember { mutableStateOf(LiveNotifications.design(context)) }
     var mode by remember { mutableStateOf(LiveNotifications.mode(context)) }
-    fun apply() {
-        context.getSystemService(android.app.NotificationManager::class.java)?.cancel(LiveNotifications.LESSON_ID)
-        Alarms.rescheduleAll(context)
-    }
     HorizontalDivider(Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant)
-    FieldLabel("Вид живого уведомления", "Выбери и нажми «Показать сейчас» — пример появится в шторке на 2 минуты.")
-    LiveNotifications.Design.entries.forEach { d ->
-        RadioRow(design == d, d.label, d.hint) { design = d; repo.setLiveDesign(d.id); apply() }
-    }
-    if (design != LiveNotifications.Design.MOMENTS) {
-        FieldLabel("Обновление", mode.hint)
-        Segmented(LiveNotifications.Mode.entries.map { it to it.label }, mode) { mode = it; repo.setLiveMode(it.id); apply() }
-    }
+    FieldLabel("Живое уведомление — обновление", mode.hint)
+    Segmented(LiveNotifications.Mode.entries.map { it to it.label }, mode) { mode = it; repo.setLiveMode(it.id); Alarms.rescheduleAll(context) }
     SoftButton("Показать сейчас") { scope.launch { LiveNotifications.preview(context) } }
 }
 

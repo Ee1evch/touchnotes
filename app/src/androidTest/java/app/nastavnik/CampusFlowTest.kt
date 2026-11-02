@@ -417,25 +417,32 @@ class CampusFlowTest {
         }
     }
 
-    /** Все виды живого уведомления — снимок шторки каждого, чтобы выбрать. */
+    /** Живое уведомление — карточка пары: развёрнутая (с преподавателем) и свёрнутая; снимок каждой. */
     @Test
-    fun liveNotificationDesigns() {
+    fun liveNotificationCard() {
         val nm = ctx.getSystemService(android.app.NotificationManager::class.java)
         try {
-            LiveNotifications.Design.entries.forEach { d ->
-                ctx.app.settings.setLiveDesign(d.id)
-                nm.cancel(LiveNotifications.LESSON_ID)
-                runBlocking { LiveNotifications.preview(ctx) }
-                SystemClock.sleep(600)
-                assertTrue("нет уведомления «${d.label}»", nm.activeNotifications.any { it.id == LiveNotifications.LESSON_ID })
-                device.openNotification()
-                SystemClock.sleep(1500)
-                screenshot("live_${d.id}")
-                device.executeShellCommand("cmd statusbar collapse")
-                SystemClock.sleep(600)
+            nm.cancel(LiveNotifications.LESSON_ID)
+            runBlocking { LiveNotifications.preview(ctx) }
+            SystemClock.sleep(600)
+            val n = nm.activeNotifications.firstOrNull { it.id == LiveNotifications.LESSON_ID }
+            assertNotNull("нет живого уведомления", n)
+            assertEquals("Физика · Альфа 5.8", n!!.notification.extras.getCharSequence(android.app.Notification.EXTRA_TITLE)?.toString())
+            device.openNotification()
+            assertNotNull("нет карточки в шторке", device.wait(Until.findObject(By.text("Физика")), 8000))
+            // Развернуть, если система показала свёрнутой.
+            if (device.wait(Until.findObject(By.text("Ваганов М. Г.")), 2000) == null) {
+                device.findObject(By.res("android:id/expand_button"))?.click()
             }
+            assertNotNull("нет преподавателя в развёрнутой карточке", device.wait(Until.findObject(By.text("Ваганов М. Г.")), 5000))
+            assertNotNull("нет аудитории", device.findObject(By.text("Альфа 5.8")))
+            assertNotNull("нет типа пары", device.findObject(By.text("Практика")))
+            SystemClock.sleep(800)
+            screenshot("live_card")
+            device.findObject(By.res("android:id/expand_button"))?.click()
+            SystemClock.sleep(1200)
+            screenshot("live_card_small")
         } finally {
-            ctx.app.settings.setLiveDesign("timeline")
             nm.cancel(LiveNotifications.LESSON_ID)
             device.executeShellCommand("cmd statusbar collapse")
         }

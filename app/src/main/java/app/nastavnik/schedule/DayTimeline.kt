@@ -38,26 +38,6 @@ object DayTimeline {
         return out
     }
 
-    /** Момент дня для вида «Только моменты»: «скоро пара» или «перемена». */
-    data class Moment(val at: LocalDateTime, val soon: Boolean, val lesson: Lesson, val breakMinutes: Long = 0)
-
-    /**
-     * Моменты дня: за [alertMin] минут до каждой пары — «скоро», в конце каждой пары, после которой есть ещё одна, —
-     * «перемена» (с длиной и следующей парой). По времени.
-     */
-    fun moments(day: List<Lesson>, alertMin: Int): List<Moment> {
-        val ls = lessons(day)
-        val out = mutableListOf<Moment>()
-        ls.forEachIndexed { i, l ->
-            out += Moment(l.startsAt()!!.minusMinutes(alertMin.toLong()), soon = true, lesson = l)
-            val next = ls.getOrNull(i + 1) ?: return@forEachIndexed
-            val end = l.endsAt() ?: l.startsAt()!!.plusMinutes(90)
-            out += Moment(end, soon = false, lesson = next, breakMinutes = Duration.between(end, next.startsAt()!!).toMinutes())
-        }
-        // Короткая перемена: «скоро следующая» не раньше «перемены» — перемена уже говорит, что дальше.
-        return out.sortedBy { it.at }.filter { m -> !(m.soon && out.any { o -> !o.soon && o.lesson == m.lesson && !o.at.isBefore(m.at) }) }
-    }
-
     fun at(day: List<Lesson>, now: LocalDateTime): State? {
         val ls = lessons(day)
         if (ls.isEmpty()) return null

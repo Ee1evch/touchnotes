@@ -47,15 +47,4 @@ class DayTimelineTest {
         assertNull(DayTimeline.at(emptyList(), day.atTime(9, 0)))
     }
 
-    @Test
-    fun momentsForSilentMode() {
-        val m = DayTimeline.moments(lessons, alertMin = 10)
-        // 8:50 скоро физика; 10:30 перемена 10 мин → матан (а «скоро матан» в 10:30 поглощён переменой);
-        // 12:10 перемена 50 мин → линал; 12:50 скоро линал.
-        assertEquals(listOf("08:50", "10:30", "12:10", "12:50"), m.map { "%02d:%02d".format(it.at.hour, it.at.minute) })
-        assertEquals(listOf(true, false, false, true), m.map { it.soon })
-        assertEquals(listOf("Физика", "Матанализ", "Линал", "Линал"), m.map { it.lesson.discipline })
-        assertEquals(10L, m[1].breakMinutes)
-        assertEquals(50L, m[2].breakMinutes)
-    }
 }

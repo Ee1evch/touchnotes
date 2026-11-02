@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Полоса пары внизу живого уведомления: скруглённая дорожка и заполнение (цвет — по типу пары из кода, Android 12+). -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:id="@android:id/background">
+        <shape android:shape="rectangle">
+            <corners android:radius="2dp" />
+            <solid android:color="#33888888" />
+        </shape>
+    </item>
+    <item android:id="@android:id/progress">
+        <scale android:scaleWidth="100%">
+            <shape android:shape="rectangle">
+                <corners android:radius="2dp" />
+                <solid android:color="#FF2563EB" />
+            </shape>
+        </scale>
+    </item>
+</layer-list>

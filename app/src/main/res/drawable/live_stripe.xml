@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Цветная полоса пары (цвет задаётся из кода по типу пары). -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
-    <corners android:radius="3dp" />
-    <solid android:color="#FF4C7DF0" />
+    <corners android:radius="2dp" />
+    <solid android:color="#FFFFFFFF" />
 </shape>

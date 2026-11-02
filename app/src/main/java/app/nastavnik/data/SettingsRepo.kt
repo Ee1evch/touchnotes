@@ -278,8 +278,6 @@ class SettingsRepo(private val context: Context) {
     fun lessonAlertMin(): Int = prefs.getInt(K_LESSON_ALERT, 10)
     fun setLessonAlertMin(m: Int) = prefs.edit { putInt(K_LESSON_ALERT, m.coerceIn(0, 60)) }
     /** Живое уведомление: вид (minimal, timeline, card, moments, companion) и обновление (boundary, interval, service). */
-    fun liveDesign(): String = prefs.getString("live_design", "timeline").orEmpty()
-    fun setLiveDesign(v: String) = prefs.edit { putString("live_design", v) }
     /** Раскладка главного экрана (конструктор), своя для телефона и планшета. */
     fun homeLayout(tablet: Boolean): String = prefs.getString(if (tablet) "home_tablet" else "home_phone", "").orEmpty()
     fun setHomeLayout(tablet: Boolean, v: String) = prefs.edit { putString(if (tablet) "home_tablet" else "home_phone", v) }

@@ -165,8 +165,6 @@ class AlarmReceiver : BroadcastReceiver() {
                     Alarms.ACTION_DONE -> if (uid != null) runCatching { Alarms.markDone(context, uid) }
                     Alarms.ACTION_LESSON -> runCatching { Alarms.onLesson(context) }
                     LiveNotifications.ACTION_LIVE -> runCatching { LiveNotifications.updateLesson(context) }
-                    LiveNotifications.ACTION_CARD_SHOW, LiveNotifications.ACTION_CARD_YES, LiveNotifications.ACTION_CARD_NO ->
-                        runCatching { LiveNotifications.onCardAction(context, intent.action!!) }
                     LessonQuiet.ACTION -> runCatching { LessonQuiet.update(context) }
                 }
             } finally {
