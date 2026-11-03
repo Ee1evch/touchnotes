@@ -65,6 +65,7 @@ fun SettingsScreen(onBack: () -> Unit, onAppearance: () -> Unit = {}, onOnboardi
         SirenSection()
         WakeSection()
         LanguageSection()
+        TeacherPhotosSection()
         if (tablet) SectionCard("Нейросеть") {
             ProviderEditor(onChanged = {})
         }

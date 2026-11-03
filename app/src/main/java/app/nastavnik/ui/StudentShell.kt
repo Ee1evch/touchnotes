@@ -86,6 +86,7 @@ private fun StudentSettings(onBack: () -> Unit, onAppearance: () -> Unit, onLks:
         }
         DeviceSection(tablet = false, showRole = false)
         LanguageSection()
+        TeacherPhotosSection()
         SectionCard("Оценки") {
             val lks = context.app.settings.lksConfigured
             FieldLabel(if (lks) "Личный кабинет подключён" else "Личный кабинет", "Оценки и пропуски из ЛКС Сириуса — обновляются сами, о новых придёт уведомление.")

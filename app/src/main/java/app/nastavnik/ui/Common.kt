@@ -93,6 +93,18 @@ fun Modifier.paperBackdrop(): Modifier = drawBehind {
     val m = maxOf(w, h)
     when (Brand.backdrop) {
         Backdrop.PLAIN -> Unit
+        Backdrop.IMAGE -> Brand.backdropImage?.let { img ->
+            // По размеру экрана с обрезкой (как обои) и лёгкая вуаль цвета темы — чтобы текст читался.
+            val k = maxOf(w / img.width, h / img.height)
+            val dw = (img.width * k).toInt()
+            val dh = (img.height * k).toInt()
+            drawImage(
+                img,
+                dstOffset = androidx.compose.ui.unit.IntOffset(((w - dw) / 2).toInt(), ((h - dh) / 2).toInt()),
+                dstSize = androidx.compose.ui.unit.IntSize(dw, dh),
+            )
+            drawRect(Brand.Paper.copy(alpha = if (Brand.dark) 0.45f else 0.35f))
+        }
         Backdrop.GRADIENT -> {
             drawRect(Brush.linearGradient(listOf(Brand.BlobCool, Brand.Paper.copy(alpha = 0f)), Offset(w, 0f), Offset(w * 0.2f, h * 0.7f)))
             drawRect(Brush.linearGradient(listOf(Brand.BlobWarm.copy(alpha = 0.9f), Brand.Paper.copy(alpha = 0f)), Offset(0f, h), Offset(w * 0.6f, h * 0.3f)))

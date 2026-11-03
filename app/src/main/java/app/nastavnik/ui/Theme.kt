@@ -142,7 +142,7 @@ object Palettes {
 }
 
 /** Фон экранов. */
-enum class Backdrop(val label: String) { BLOBS("Пятна"), LIVE("Живые"), GRADIENT("Градиент"), PLAIN("Ровный") }
+enum class Backdrop(val label: String) { BLOBS("Пятна"), LIVE("Живые"), GRADIENT("Градиент"), PLAIN("Ровный"), IMAGE("Картинка") }
 
 /** Как выбрана тема в настройках. */
 enum class ThemeMode(val label: String) { SYSTEM("Как в системе"), LIGHT("Светлая"), DARK("Тёмная") }
@@ -179,6 +179,9 @@ data class Appearance(
 object Brand {
     var current by mutableStateOf(Palettes.PAPER)
     var backdrop by mutableStateOf(Backdrop.PLAIN)
+
+    /** Своя картинка фона (для [Backdrop.IMAGE]). */
+    var backdropImage by mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null)
 
     /** Фаза «живого» фона, 0…1 по кругу. */
     var phase by mutableFloatStateOf(0f)
@@ -299,6 +302,12 @@ fun NastavnikTheme(appearance: Appearance = Appearance(), content: @Composable (
     val palette = target.copy(paper = paper, ink = ink, inkSoft = inkSoft, accent = accent, onAccent = onAccent, glass = glass, line = line, blobA = a, blobB = b, blobC = c)
     Brand.current = palette
     Brand.backdrop = appearance.backdrop
+    // Своя картинка фона — загружаем, когда выбрана (и заново, если её сменили).
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val image by androidx.compose.runtime.produceState<androidx.compose.ui.graphics.ImageBitmap?>(null, appearance.backdrop, CustomImages.version) {
+        value = if (appearance.backdrop == Backdrop.IMAGE) CustomImages.load(CustomImages.backdropFile(context)) else null
+    }
+    Brand.backdropImage = image
 
     // «Живой» фон: пятна медленно плывут (цикл 28 с). Меняется только рисование, без перекомпоновки.
     if (appearance.backdrop == Backdrop.LIVE) {

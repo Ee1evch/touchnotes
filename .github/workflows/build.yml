@@ -37,8 +37,18 @@ jobs:
       - name: Юнит-тесты
         run: ./gradlew --no-daemon :app:testFullDebugUnitTest :parent:testDebugUnitTest :core:test
 
-      - name: Сборка debug APK
-        run: ./gradlew --no-daemon assembleDebug
+      # Релизные сборки (не отладочные) — их ставит любой телефон с Android 10+.
+      - name: Сборка релизных APK
+        run: ./gradlew --no-daemon assembleRelease
+
+      - name: APK для релиза
+        run: |
+          cp app/build/outputs/apk/full/release/app-full-release.apk nastavnik.apk
+          cp app/build/outputs/apk/student/release/app-student-release.apk student.apk
+          cp parent/build/outputs/apk/release/parent-release.apk parent.apk
+          # Подпись: какие схемы и каким сертификатом (для проверки установки на любых телефонах).
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          "$BT/apksigner" verify -v nastavnik.apk | grep -E "Verified using" || true
 
       - name: Отчёты тестов
         if: always()
@@ -53,22 +63,11 @@ jobs:
       - name: APK
         uses: actions/upload-artifact@v4
         with:
-          name: nastavnik-debug-apk
-          path: app/build/outputs/apk/full/debug/app-full-debug.apk
-          if-no-files-found: error
-
-      - name: APK «Студент»
-        uses: actions/upload-artifact@v4
-        with:
-          name: student-debug-apk
-          path: app/build/outputs/apk/student/debug/app-student-debug.apk
-          if-no-files-found: error
-
-      - name: APK для родителя
-        uses: actions/upload-artifact@v4
-        with:
-          name: parent-debug-apk
-          path: parent/build/outputs/apk/debug/parent-debug.apk
+          name: apks
+          path: |
+            nastavnik.apk
+            student.apk
+            parent.apk
           if-no-files-found: error
 
       # Каждая сборка из push — релиз build-<номер> с APK: по нему приложение находит обновление
@@ -80,9 +79,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          cp app/build/outputs/apk/full/debug/app-full-debug.apk nastavnik.apk
-          cp app/build/outputs/apk/student/debug/app-student-debug.apk student.apk
-          cp parent/build/outputs/apk/debug/parent-debug.apk parent.apk
           gh release create "build-${{ github.run_number }}" nastavnik.apk student.apk parent.apk \
             --repo "${{ github.repository }}" \
             --target "${{ github.sha }}" \

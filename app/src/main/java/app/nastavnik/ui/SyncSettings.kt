@@ -219,6 +219,57 @@ fun DeviceSection(tablet: Boolean, showRole: Boolean = true) {
 }
 
 /**
+ * Фото преподавателей в расписании: по умолчанию выключено — без фото не появляются пустые кружки. Включил —
+ * список преподавателей из расписания (эта и следующая неделя), к каждому можно выбрать фото из галереи.
+ */
+@Composable
+fun TeacherPhotosSection() {
+    val context = LocalContext.current
+    val app = context.app
+    val scope = rememberCoroutineScope()
+    var on by remember { mutableStateOf(app.settings.teacherPhotos()) }
+    val teachers by androidx.compose.runtime.produceState(emptyList<String>(), on) {
+        val monday = ScheduleText.monday(java.time.LocalDate.now())
+        value = listOf(monday, monday.plusWeeks(1)).flatMap { m -> app.schedule.cached(m)?.lessons.orEmpty() }
+            .flatMap { it.teachers }.map { it.trim() }.filter { it.isNotBlank() }.distinct().sorted()
+    }
+    var picking by remember { mutableStateOf<String?>(null) }
+    val pick = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia(),
+    ) { uri ->
+        val t = picking
+        if (uri != null && t != null) scope.launch { CustomImages.save(context, uri, CustomImages.teacherFile(context, t), 512) }
+        picking = null
+    }
+    SectionCard("Преподаватели") {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                FieldLabel("Фото в расписании", "Маленькое фото рядом с фамилией — у тех, кому ты его поставил.")
+            }
+            AppSwitch(on) { on = it; app.settings.setTeacherPhotos(it) }
+        }
+        if (on) {
+            if (teachers.isEmpty()) Text("Преподаватели появятся, когда загрузится расписание.", style = MaterialTheme.typography.bodySmall, color = Brand.InkSoft)
+            val version = CustomImages.version
+            teachers.forEach { t ->
+                val has = remember(t, version) { CustomImages.teacherFile(context, t).exists() }
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    TeacherAvatar(listOf(t), 36.dp)
+                    Text(Lesson.shortName(t), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                    LinkText(if (has) "Сменить" else "Фото") {
+                        picking = t
+                        runCatching {
+                            pick.launch(androidx.activity.result.PickVisualMediaRequest(androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageOnly))
+                        }
+                    }
+                    if (has) LinkText("Убрать") { CustomImages.remove(CustomImages.teacherFile(context, t)) }
+                }
+            }
+        }
+    }
+}
+
+/**
  * Группа английского: у группы несколько пар иностранного в одно время — у разных преподавателей.
  * Выбранная остаётся в расписании, на «Сегодня» и в уведомлениях; «Все» — без фильтра.
  */

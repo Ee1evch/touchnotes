@@ -88,7 +88,7 @@ class ParentActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
-        setContent { ParentTheme { ParentRoot() } }
+        setContent { ParentTheme { BackdropBox { ParentRoot() } } }
     }
 }
 
@@ -134,7 +134,8 @@ private fun ParentRoot() {
     }
 
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
+        // Фон — у BackdropBox (своя картинка или цвет темы).
+        containerColor = Color.Transparent,
         bottomBar = {
             NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
                 Tab.entries.forEach { t ->
@@ -498,7 +499,7 @@ private fun SettingsScreen(repo: ParentRepo, first: Boolean, onDone: () -> Unit,
     var group by rememberSaveable { mutableStateOf(repo.groupOverride) }
     var show by remember { mutableStateOf(false) }
     Column(
-        Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).statusBarsPadding().imePadding()
+        Modifier.fillMaxSize().statusBarsPadding().imePadding()
             .verticalScroll(rememberScrollState()).padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
@@ -548,6 +549,7 @@ private fun SettingsScreen(repo: ParentRepo, first: Boolean, onDone: () -> Unit,
                 OutlinedTextField(group, { group = it }, Modifier.fillMaxWidth().semantics { contentDescription = "Группа" }, singleLine = true, placeholder = { Text("как у студента") })
             }
         }
+        BackdropCard()
         Button(
             onClick = { repo.save(token, book, group); onDone() },
             enabled = token.isNotBlank() || book.isNotBlank(),
@@ -566,5 +568,28 @@ private fun plural(n: Int, one: String, few: String, many: String): String {
         m10 == 1 && m100 != 11 -> one
         m10 in 2..4 && m100 !in 12..14 -> few
         else -> many
+    }
+}
+
+/** Свой фон: картинка из галереи на всех экранах. */
+@Composable
+private fun BackdropCard() {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val has = remember(ParentBackdrop.version) { ParentBackdrop.has(context) }
+    val pick = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia(),
+    ) { uri -> if (uri != null) scope.launch { ParentBackdrop.save(context, uri) } }
+    Card {
+        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("Фон", style = MaterialTheme.typography.titleSmall)
+            Text("Своё фото на фоне всех экранов — чуть приглушено, чтобы текст читался.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                TextButton(onClick = {
+                    runCatching { pick.launch(androidx.activity.result.PickVisualMediaRequest(androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageOnly)) }
+                }) { Text(if (has) "Сменить картинку" else "Выбрать картинку") }
+                if (has) TextButton(onClick = { ParentBackdrop.remove(context) }) { Text("Убрать", color = Tone.Bad) }
+            }
+        }
     }
 }

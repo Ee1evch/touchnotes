@@ -296,6 +296,10 @@ class SettingsRepo(private val context: Context) {
     fun liveMode(): String = prefs.getString("live_mode", "interval").orEmpty()
     fun setLiveMode(v: String) = prefs.edit { putString("live_mode", v) }
     /** «Тихо на парах» — на этом устройстве (не синхронизируется: на планшете может быть не нужно). */
+    /** Фото преподавателей в расписании — по умолчанию выключено (без пустых кружков). */
+    fun teacherPhotos(): Boolean = prefs.getBoolean(K_TEACHER_PHOTOS, false)
+    fun setTeacherPhotos(on: Boolean) = prefs.edit { putBoolean(K_TEACHER_PHOTOS, on) }
+
     fun quietLessons(): Boolean = prefs.getBoolean(K_QUIET, false)
     fun setQuietLessons(on: Boolean) = prefs.edit { putBoolean(K_QUIET, on) }
     fun quietRuleId(): String = prefs.getString(K_QUIET_RULE, "").orEmpty()
@@ -416,6 +420,7 @@ class SettingsRepo(private val context: Context) {
         private const val K_LANG_TEACHER = "language_teacher"
         private const val K_LESSON_ALERT = "lesson_alert_min"
         private const val K_QUIET = "quiet_lessons"
+        private const val K_TEACHER_PHOTOS = "teacher_photos"
         private const val K_QUIET_RULE = "quiet_rule_id"
         private const val K_ROLE = "device_role"
         private const val K_DEVICE_ID = "device_id"

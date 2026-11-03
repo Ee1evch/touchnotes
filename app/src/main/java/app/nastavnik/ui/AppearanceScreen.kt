@@ -48,6 +48,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import app.nastavnik.R
 import app.nastavnik.app
+import kotlinx.coroutines.launch
 
 /** Вход в «Оформление» из настроек: мини-палитра текущей темы и стрелка. */
 @Composable
@@ -84,6 +85,19 @@ fun AppearanceScreen(onBack: () -> Unit) {
     // Локальные копии — чтобы выбор отзывался мгновенно, а настройки сохранялись следом.
     var s by remember { mutableStateOf(repo.load()) }
     fun refresh() { s = repo.load() }
+    val context = LocalContext.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    // Своя картинка фона: выбрал — сохраняем уменьшенную копию и включаем «Картинка».
+    val pickBackdrop = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia(),
+    ) { uri ->
+        if (uri != null) scope.launch {
+            if (CustomImages.save(context, uri, CustomImages.backdropFile(context), 2400)) { repo.setBackdrop(Backdrop.IMAGE.name); refresh() }
+        }
+    }
+    fun chooseImage() = runCatching {
+        pickBackdrop.launch(androidx.activity.result.PickVisualMediaRequest(androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageOnly))
+    }
     val mode = runCatching { ThemeMode.valueOf(s.themeMode) }.getOrDefault(ThemeMode.LIGHT)
 
     ScreenScaffold(title = "Оформление", onBack = onBack) {
@@ -131,10 +145,19 @@ fun AppearanceScreen(onBack: () -> Unit) {
 
         SectionCard("Фон") {
             Segmented(Backdrop.entries.map { it to it.label }, runCatching { Backdrop.valueOf(s.backdrop) }.getOrDefault(Backdrop.PLAIN)) {
-                repo.setBackdrop(it.name); refresh()
+                // «Картинка» без выбранной картинки — сразу выбор из галереи.
+                if (it == Backdrop.IMAGE && !CustomImages.backdropFile(context).exists()) chooseImage()
+                else { repo.setBackdrop(it.name); refresh() }
+            }
+            if (s.backdrop == Backdrop.IMAGE.name) Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                SoftButton("Сменить картинку", icon = R.drawable.ic_image) { chooseImage() }
+                SoftButton("Убрать") {
+                    CustomImages.remove(CustomImages.backdropFile(context))
+                    repo.setBackdrop(Backdrop.PLAIN.name); refresh()
+                }
             }
             Text(
-                "«Живые» — пятна под стеклом медленно плывут. «Ровный» — спокойный цвет темы без пятен.",
+                "«Картинка» — своё фото на фоне всех экранов (чуть приглушено, чтобы текст читался). «Ровный» — спокойный цвет темы.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

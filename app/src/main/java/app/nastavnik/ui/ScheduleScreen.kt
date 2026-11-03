@@ -316,7 +316,13 @@ fun LessonCard(l: Lesson, now: LocalDateTime, index: Int = 0, compact: Boolean =
                         Text(place, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
-                if (!compact) l.teachersShort?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = Brand.InkSoft, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                if (!compact) l.teachersShort?.let {
+                    // Фото преподавателя — только если включено в настройках и фото есть.
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TeacherAvatar(l.teachers, 28.dp)
+                        Text(it, style = MaterialTheme.typography.bodyMedium, color = Brand.InkSoft, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                }
             }
         }
         if (live && start != null && end != null) {
