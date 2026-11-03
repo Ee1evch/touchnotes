@@ -138,6 +138,7 @@ class NotebookController(val app: NastavnikApp, val notebookId: Long, private va
 
     /** Сам проверять страницу, когда студент перестал писать. */
     var autoCheck by mutableStateOf(app.settings.notebookAutoCheck())
+        private set
 
     /** Наставник включён (тумблер в верхней панели тетради). */
     var mentorOn by mutableStateOf(app.settings.notebookMentorOn())
@@ -148,7 +149,6 @@ class NotebookController(val app: NastavnikApp, val notebookId: Long, private va
         app.settings.setNotebookMentorOn(on)
         if (!on) autoJob?.cancel()
     }
-        private set
 
     /** Контрольная: до какого момента идёт (0 — не идёт). Наставник молчит, пока её не сдадут. */
     var examEndsAt by mutableLongStateOf(0L)
