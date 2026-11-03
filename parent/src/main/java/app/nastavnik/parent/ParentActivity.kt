@@ -224,20 +224,37 @@ private fun ScheduleTab(repo: ParentRepo, state: ParentRepo.State) {
     var day by rememberSaveable { mutableStateOf(LocalDate.now().toString()) }
     val date = LocalDate.parse(day)
     val monday = ScheduleText.monday(date)
-    val lessons = repo.day(date, state)
+    val scheduled = repo.day(date, state)
+    // Расписания нет (группа неизвестна), а у старосты пары есть — показываем их.
+    val lessons = scheduled.ifEmpty {
+        repo.attendanceDay(date, state).map { a ->
+            Lesson(id = "att-${a.id}", date = a.date, start = a.start, end = a.end, discipline = a.title, type = if (a.type == "Лекции") "Лекция" else a.type)
+        }
+    }
     val journal = state.student?.journal
+    val marks = lessons.map { l -> repo.markFor(l, state) }
     LazyColumn(contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item { WeekStrip(monday, date, state) { day = it.toString() } }
-        item { DayTitle(date, lessons, journal) }
-        if (repo.group(state.student).isBlank()) {
-            item { Hint("Группа не известна: включи синхронизацию в «Наставнике» студента или впиши группу в настройках.") }
-        } else if (state.weeks[monday.toString()] == null) {
-            item { Hint(if (state.loading) "Загружаю расписание…" else "Этой недели нет в снимке — обнови, когда будет интернет.") }
-        } else if (lessons.isEmpty()) {
-            item { Hint("Пар нет — выходной.") }
+        item { DayTitle(date, lessons, journal, marks) }
+        if (lessons.isEmpty()) {
+            if (repo.group(state.student).isBlank()) {
+                item { Hint("Группа не известна: впиши номер зачётки или группу в настройках, или включи синхронизацию в «Наставнике» студента.") }
+            } else if (state.weeks[monday.toString()] == null && state.attendance[monday.toString()] == null) {
+                item { Hint(if (state.loading) "Загружаю расписание…" else "Этой недели нет в снимке — обнови, когда будет интернет.") }
+            } else {
+                item { Hint("Пар нет — выходной.") }
+            }
         }
-        items(lessons) { l -> LessonCard(l, ParentData.entryFor(l, journal)) }
+        items(lessons.indices.toList()) { i -> LessonCard(lessons[i], ParentData.entryFor(lessons[i], journal), marks[i]) }
     }
+}
+
+/** Цвет отметки старосты. */
+private fun markColor(m: Mark): Color = when (m) {
+    Mark.PRESENT -> Tone.Ok
+    Mark.LATE, Mark.REASON, Mark.CRITICAL_LATE -> Tone.Warn
+    Mark.ILL -> Tone.Accent
+    Mark.ABSENT -> Tone.Bad
 }
 
 @Composable
@@ -275,17 +292,31 @@ private fun WeekStrip(monday: LocalDate, selected: LocalDate, state: ParentRepo.
 }
 
 @Composable
-private fun DayTitle(date: LocalDate, lessons: List<Lesson>, journal: app.nastavnik.grades.LksJournal?) {
+private fun DayTitle(date: LocalDate, lessons: List<Lesson>, journal: app.nastavnik.grades.LksJournal?, marks: List<AttendanceLesson?>) {
     val name = date.format(DateTimeFormatter.ofPattern("EEEE, d MMMM", ru)).replaceFirstChar { it.uppercase() }
-    val missed = lessons.count { ParentData.entryFor(it, journal)?.absent == true }
-    val unexcused = lessons.count { ParentData.entryFor(it, journal)?.let { e -> e.absent && e.absentValid != true } == true }
+    // Отметка старосты важнее журнала ЛКС; нет её — по журналу.
+    var missed = 0
+    var unexcused = 0
+    var late = 0
+    lessons.forEachIndexed { i, l ->
+        val m = marks.getOrNull(i)?.status
+        if (m != null) {
+            if (m.missed) missed++
+            if (m == Mark.ABSENT) unexcused++
+            if (m == Mark.LATE || m == Mark.CRITICAL_LATE) late++
+        } else ParentData.entryFor(l, journal)?.takeIf { it.absent }?.let { e ->
+            missed++
+            if (e.absentValid != true) unexcused++
+        }
+    }
     val sub = buildList {
         if (lessons.isNotEmpty()) add("${lessons.size} ${plural(lessons.size, "пара", "пары", "пар")} · ${lessons.first().start}–${lessons.last().end}")
-        if (missed > 0) add("пропущено: $missed")
+        if (missed > 0) add("пропущено: $missed" + if (unexcused > 0) " (прогулов $unexcused)" else "")
+        if (late > 0) add("опозданий: $late")
     }.joinToString(" · ")
     Column(Modifier.padding(top = 8.dp, start = 4.dp)) {
         Text(name, style = MaterialTheme.typography.titleLarge)
-        if (sub.isNotBlank()) Text(sub, style = MaterialTheme.typography.bodySmall, color = when { unexcused > 0 -> Tone.Bad; missed > 0 -> Tone.Warn; else -> MaterialTheme.colorScheme.onSurfaceVariant })
+        if (sub.isNotBlank()) Text(sub, style = MaterialTheme.typography.bodySmall, color = when { unexcused > 0 -> Tone.Bad; missed > 0 || late > 0 -> Tone.Warn; else -> MaterialTheme.colorScheme.onSurfaceVariant })
     }
 }
 
@@ -296,7 +327,7 @@ private fun Hint(text: String) {
 
 /** Карточка пары: время слева, полоса цвета типа, предмет, тип, аудитория, преподаватель; внизу — посещаемость и оценки. */
 @Composable
-private fun LessonCard(l: Lesson, entry: LksEntry?) {
+private fun LessonCard(l: Lesson, entry: LksEntry?, mark: AttendanceLesson? = null) {
     val tint = Tone.lesson(l.type)
     val now = LocalDateTime.now()
     val start = l.startsAt()
@@ -339,12 +370,20 @@ private fun LessonCard(l: Lesson, entry: LksEntry?) {
                     color = tint, trackColor = tint.copy(alpha = 0.18f), drawStopIndicator = {},
                 )
             }
-            if (entry != null && (entry.absent || entry.marks.isNotEmpty())) {
+            val status = mark?.status
+            if (status != null || (entry != null && (entry.absent || entry.marks.isNotEmpty()))) {
                 Spacer(Modifier.height(12.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    if (entry.absent) Badge(if (entry.absentValid == true) "Пропуск · уважительная" else "Пропуск", if (entry.absentValid == true) Tone.Warn else Tone.Bad)
-                    else Badge("Был", Tone.Ok)
-                    entry.marks.forEach { m -> MarkChip(m.value) }
+                    when {
+                        // Отметка старосты (itattendance) — главная.
+                        status != null -> Badge(
+                            status.label + if (status == Mark.REASON && mark?.confirmed == true) " · подтверждена" else "",
+                            markColor(status),
+                        )
+                        entry != null && entry.absent -> Badge(if (entry.absentValid == true) "Пропуск · уважительная" else "Пропуск", if (entry.absentValid == true) Tone.Warn else Tone.Bad)
+                        entry != null -> Badge("Был", Tone.Ok)
+                    }
+                    entry?.marks?.forEach { m -> MarkChip(m.value) }
                 }
             }
         }
@@ -376,7 +415,7 @@ private fun GradesTab(state: ParentRepo.State) {
         Column(Modifier.padding(16.dp)) {
             Hint(
                 if (state.loading) "Загружаю оценки…"
-                else "Оценок пока нет. Они появятся, когда студент войдёт в ЛКС в «Наставнике» на телефоне и там включена синхронизация с Яндекс Диском.",
+                else "Оценок пока нет. Они появятся, когда в настройках вписан токен Яндекс Диска студента, а студент вошёл в ЛКС в «Наставнике» на телефоне с включённой синхронизацией.",
             )
         }
         return
@@ -476,7 +515,7 @@ private fun SettingsScreen(repo: ParentRepo, first: Boolean, onDone: () -> Unit,
             Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("Токен Яндекс Диска студента", style = MaterialTheme.typography.titleSmall)
                 Text(
-                    "Тот же, что вписан в «Наставнике» (Настройки → Синхронизация). Приложение только читает папку «Nastavnik» и ничего не меняет на Диске. Токен хранится зашифрованным.",
+                    "Для оценок. Тот же, что вписан в «Наставнике» (Настройки → Синхронизация). Приложение только читает папку «Nastavnik» и ничего не меняет на Диске. Токен хранится зашифрованным. Без токена — только расписание и посещаемость.",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 OutlinedTextField(
@@ -494,7 +533,7 @@ private fun SettingsScreen(repo: ParentRepo, first: Boolean, onDone: () -> Unit,
         Card {
             Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("Номер зачётной книжки", style = MaterialTheme.typography.titleSmall)
-                Text("Для посещаемости, которую отмечает староста.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Посещаемость, которую отмечает староста (itattendance.ru): был, опоздал, болезнь, прогул — у каждой пары. Хватит и одного номера — тогда без оценок.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 OutlinedTextField(book, { book = it }, Modifier.fillMaxWidth().semantics { contentDescription = "Номер зачётки" }, singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii))
             }
@@ -511,7 +550,7 @@ private fun SettingsScreen(repo: ParentRepo, first: Boolean, onDone: () -> Unit,
         }
         Button(
             onClick = { repo.save(token, book, group); onDone() },
-            enabled = token.isNotBlank(),
+            enabled = token.isNotBlank() || book.isNotBlank(),
             modifier = Modifier.fillMaxWidth().height(52.dp),
             shape = RoundedCornerShape(18.dp),
         ) { Text(if (first) "Подключить" else "Сохранить") }

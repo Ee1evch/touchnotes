@@ -78,7 +78,20 @@ class ParentFlowTest {
         File(dir, "student.json").writeText(json.encodeToString(Student.serializer(), Student("К0109-24", "", journal, System.currentTimeMillis())))
         File(dir, "weeks").mkdirs()
         File(dir, "weeks/$monday.json").writeText(json.encodeToString(Week.serializer(), Week("К0109-24", monday.toString(), lessons, System.currentTimeMillis())))
-        ParentRepo.get(ctx).save("test-token", "2024-0001", "")
+        // Сначала номер зачётки (смена номера чистит прежние отметки), потом отметки.
+        ParentRepo.get(ctx).save("test-token", "240001", "")
+        // Отметки старосты (как с itattendance.ru): по матанализу — прогул, по физике — «был».
+        File(dir, "attendee.json").writeText(json.encodeToString(AttendanceStudent.serializer(), AttendanceStudent("240001", 42, 7, "К0109-24")))
+        File(dir, "attendance").mkdirs()
+        File(dir, "attendance/$monday.json").writeText(
+            json.encodeToString(
+                kotlinx.serialization.builtins.ListSerializer(AttendanceLesson.serializer()),
+                listOf(
+                    AttendanceLesson("901", today.toString(), 1, "Математический анализ", "Лекции", lessons[0].start, lessons[0].end, "absent"),
+                    AttendanceLesson("902", today.toString(), 2, "Физика", "Практика", lessons[1].start, lessons[1].end, "present"),
+                ),
+            ),
+        )
     }
 
     @Test
@@ -86,7 +99,9 @@ class ParentFlowTest {
         seed()
         ctx.startActivity(Intent(ctx, ParentActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
         assertNotNull("нет пары в расписании", device.wait(Until.findObject(By.text("Физика")), 15000))
-        assertNotNull("нет пропуска", device.wait(Until.findObject(By.text("Пропуск")), 5000))
+        // Отметки старосты — на карточках пар.
+        assertNotNull("нет «Прогул» от старосты", device.wait(Until.findObject(By.text("Прогул")), 5000))
+        assertNotNull("нет «Был» от старосты", device.findObject(By.text("Был")))
         assertNotNull("нет идущей пары", device.findObject(By.textStartsWith("Идёт сейчас")))
         SystemClock.sleep(800)
         screenshot("parent_schedule")

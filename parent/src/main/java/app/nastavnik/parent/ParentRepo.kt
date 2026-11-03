@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import java.io.File
 import java.time.LocalDate
@@ -30,6 +31,10 @@ class ParentRepo private constructor(private val context: Context) {
         val student: Student? = null,
         /** Понедельник недели → неделя. */
         val weeks: Map<String, Week> = emptyMap(),
+        /** Посещаемость (староста): понедельник недели → пары с отметками. */
+        val attendance: Map<String, List<AttendanceLesson>> = emptyMap(),
+        /** Студент на сайте посещаемости (по номеру зачётки). */
+        val attendee: AttendanceStudent? = null,
         val loading: Boolean = false,
         val error: String? = null,
     )
@@ -60,9 +65,16 @@ class ParentRepo private constructor(private val context: Context) {
     val recordBook: String get() = secure.getString("record_book", "").orEmpty()
     /** Группа вручную; пусто — как в «Наставнике» студента. */
     val groupOverride: String get() = secure.getString("group", "").orEmpty()
-    val configured: Boolean get() = token.isNotBlank()
+    /** Подключено: токен Диска (оценки, группа) и/или номер зачётки (посещаемость, группа). */
+    val configured: Boolean get() = token.isNotBlank() || recordBook.isNotBlank()
 
     fun save(token: String, recordBook: String, group: String) {
+        // Другая зачётка — отметки прежнего студента больше не нужны.
+        if (recordBook.trim() != this.recordBook) {
+            File(dir, "attendee.json").delete()
+            File(dir, "attendance").deleteRecursively()
+            _state.update { it.copy(attendee = null, attendance = emptyMap()) }
+        }
         secure.edit().putString("disk_token", token.trim()).putString("record_book", recordBook.trim()).putString("group", group.trim()).apply()
     }
 
@@ -72,8 +84,20 @@ class ParentRepo private constructor(private val context: Context) {
         _state.value = State()
     }
 
-    /** Группа для расписания: вручную или из настроек студента. */
-    fun group(student: Student? = _state.value.student): String = groupOverride.ifBlank { student?.group.orEmpty() }
+    /** Группа для расписания: вручную, из настроек студента или с сайта посещаемости. */
+    fun group(student: Student? = _state.value.student, attendee: AttendanceStudent? = _state.value.attendee): String =
+        groupOverride.ifBlank { student?.group?.ifBlank { null } ?: attendee?.group.orEmpty() }
+
+    /** Отметка старосты за пару: та же дата и время начала, иначе тот же предмет в этот день. */
+    fun markFor(l: Lesson, s: State = _state.value): AttendanceLesson? {
+        val week = s.attendance[ScheduleText.monday(l.day).toString()] ?: return null
+        val sameDay = week.filter { it.date == l.date }
+        return sameDay.firstOrNull { it.start == l.start } ?: sameDay.firstOrNull { ParentData.sameSubject(it.title, l.discipline) }
+    }
+
+    /** Пары дня по журналу старосты — если расписания нет (группа неизвестна). */
+    fun attendanceDay(date: LocalDate, s: State = _state.value): List<AttendanceLesson> =
+        s.attendance[ScheduleText.monday(date).toString()].orEmpty().filter { it.date == date.toString() }
 
     /** Пары дня — с учётом преподавателя языка студента (его подгруппа). */
     fun day(date: LocalDate, s: State = _state.value): List<Lesson> {
@@ -88,32 +112,64 @@ class ParentRepo private constructor(private val context: Context) {
         val weeks = File(dir, "weeks").listFiles().orEmpty().mapNotNull { f ->
             runCatching { json.decodeFromString(Week.serializer(), f.readText()) }.getOrNull()
         }.associateBy { it.start }
-        _state.update { it.copy(student = student, weeks = weeks) }
+        val attendee = runCatching { json.decodeFromString(AttendanceStudent.serializer(), File(dir, "attendee.json").readText()) }.getOrNull()
+            ?.takeIf { it.registry == recordBook }
+        val attendance = File(dir, "attendance").listFiles().orEmpty().mapNotNull { f ->
+            runCatching { f.name.removeSuffix(".json") to json.decodeFromString(ListSerializer(AttendanceLesson.serializer()), f.readText()) }.getOrNull()
+        }.toMap()
+        _state.update { it.copy(student = student, weeks = weeks, attendee = attendee, attendance = if (attendee != null) attendance else emptyMap()) }
     }
 
-    /** Обновить: Диск студента (оценки, группа), потом расписание — прошлая, эта и следующая недели. */
+    /**
+     * Обновить: Диск студента (оценки, группа) — если есть токен; посещаемость старосты — если есть номер зачётки;
+     * потом расписание — прошлая, эта и следующая недели. Ошибка одного не мешает остальному.
+     */
     suspend fun refresh() = lock.withLock {
         if (!configured) return@withLock
         _state.update { it.copy(loading = true, error = null) }
-        try {
-            val student = withContext(Dispatchers.IO) {
+        val errors = mutableListOf<String>()
+        val monday = ScheduleText.monday(LocalDate.now())
+        var student = _state.value.student
+        if (token.isNotBlank()) try {
+            student = withContext(Dispatchers.IO) {
                 val records = CloudReader(YandexDiskStore(token)).latest(ParentData.KEYS)
                 ParentData.student(records, System.currentTimeMillis()).also { write("student.json", json.encodeToString(Student.serializer(), it)) }
             }
             _state.update { it.copy(student = student) }
-            val group = group(student)
-            if (group.isNotBlank()) {
-                val weeks = HashMap(_state.value.weeks.filterValues { it.group == group })
-                SiriusClient().weeks(group, ScheduleText.monday(LocalDate.now()).minusWeeks(1), 3) { w ->
-                    weeks[w.start] = w
-                    withContext(Dispatchers.IO) { write("weeks/${w.start}.json", json.encodeToString(Week.serializer(), w)) }
-                    _state.update { it.copy(weeks = HashMap(weeks)) }
-                }
-            }
-            _state.update { it.copy(loading = false) }
         } catch (e: Exception) {
-            _state.update { it.copy(loading = false, error = e.message ?: "Не удалось обновить") }
+            errors += "Оценки: ${e.message ?: "не удалось обновить"}"
         }
+        val book = recordBook
+        if (book.isNotBlank()) try {
+            val client = AttendanceClient()
+            val attendee = _state.value.attendee?.takeIf { it.registry == book } ?: client.student(book).also {
+                withContext(Dispatchers.IO) { write("attendee.json", json.encodeToString(AttendanceStudent.serializer(), it)) }
+            }
+            val weeks = HashMap(_state.value.attendance)
+            for (m in listOf(monday.minusWeeks(1), monday, monday.plusWeeks(1))) {
+                val lessons = client.week(attendee, m)
+                weeks[m.toString()] = lessons
+                withContext(Dispatchers.IO) { write("attendance/$m.json", json.encodeToString(ListSerializer(AttendanceLesson.serializer()), lessons)) }
+            }
+            _state.update { it.copy(attendee = attendee, attendance = HashMap(weeks)) }
+        } catch (e: Exception) {
+            errors += "Посещаемость: ${e.message ?: "не удалось обновить"}"
+        }
+        val group = group(student)
+        if (group.isNotBlank()) try {
+            val weeks = HashMap(_state.value.weeks.filterValues { it.group == group })
+            SiriusClient().weeks(group, monday.minusWeeks(1), 3) { w ->
+                weeks[w.start] = w
+                withContext(Dispatchers.IO) { write("weeks/${w.start}.json", json.encodeToString(Week.serializer(), w)) }
+                _state.update { it.copy(weeks = HashMap(weeks)) }
+            }
+        } catch (e: Exception) {
+            errors += "Расписание: ${e.message ?: "не удалось обновить"}"
+        }
+        // Обновлено — помечаем время, даже если что-то одно не вышло.
+        if (student == null) _state.update { it.copy(student = Student(loadedAt = System.currentTimeMillis())) }
+        else if (token.isBlank()) _state.update { it.copy(student = it.student?.copy(loadedAt = System.currentTimeMillis())) }
+        _state.update { it.copy(loading = false, error = errors.joinToString("\n").ifBlank { null }) }
     }
 
     private fun write(name: String, text: String) {
