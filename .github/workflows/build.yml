@@ -41,14 +41,19 @@ jobs:
       - name: Сборка релизных APK
         run: ./gradlew --no-daemon assembleRelease
 
-      - name: APK для релиза
+      # Подпись всеми схемами (v1+v2+v3) тем же ключом, что раньше: такой APK принимает любой установщик
+      # Android 10+, а обновление поверх работает. Проверка подписи — в лог.
+      - name: APK для релиза (подпись v1+v2+v3)
         run: |
-          cp app/build/outputs/apk/full/release/app-full-release.apk nastavnik.apk
-          cp app/build/outputs/apk/student/release/app-student-release.apk student.apk
-          cp parent/build/outputs/apk/release/parent-release.apk parent.apk
-          # Подпись: какие схемы и каким сертификатом (для проверки установки на любых телефонах).
           BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
-          "$BT/apksigner" verify -v nastavnik.apk | grep -E "Verified using" || true
+          KEY="--ks app/debug.keystore --ks-pass pass:android --ks-key-alias androiddebugkey --key-pass pass:android"
+          sign() {
+            "$BT/apksigner" sign $KEY --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true --out "$2" "$1"
+            echo "== $2"; "$BT/apksigner" verify -v "$2" | grep -E "Verified using v[123] "
+          }
+          sign app/build/outputs/apk/full/release/app-full-release.apk nastavnik.apk
+          sign app/build/outputs/apk/student/release/app-student-release.apk student.apk
+          sign parent/build/outputs/apk/release/parent-release.apk parent.apk
 
       - name: Отчёты тестов
         if: always()

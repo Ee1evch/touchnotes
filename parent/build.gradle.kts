@@ -28,10 +28,6 @@ android {
             storePassword = "android"
             keyAlias = "androiddebugkey"
             keyPassword = "android"
-            // Все схемы подписи — APK ставится на любые телефоны с Android 10+.
-            enableV1Signing = true
-            enableV2Signing = true
-            enableV3Signing = true
         }
     }
 
