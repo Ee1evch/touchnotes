@@ -399,9 +399,15 @@ class CampusFlowTest {
                     }
                 }
             }
-            AlarmShield.answer!!.toString().forEach { ch -> tap(ch); SystemClock.sleep(150) }
-            val offBy = System.currentTimeMillis() + 6000
-            while (WakeService.ringing && System.currentTimeMillis() < offBy) SystemClock.sleep(200)
+            // Две одинаковые цифры подряд («44») щит мог принять за одно касание — пауза между нажатиями, и если
+            // не выключилось — стереть и набрать ещё раз.
+            repeat(2) { attempt ->
+                if (!WakeService.ringing) return@repeat
+                if (attempt > 0) repeat(4) { device.findObject(By.desc("Стереть").pkg(ctx.packageName))?.click() ?: device.findObject(By.text("⌫").pkg(ctx.packageName))?.click(); SystemClock.sleep(300) }
+                AlarmShield.answer!!.toString().forEach { ch -> tap(ch); SystemClock.sleep(650) }
+                val offBy = System.currentTimeMillis() + 5000
+                while (WakeService.ringing && System.currentTimeMillis() < offBy) SystemClock.sleep(200)
+            }
             if (WakeService.ringing) screenshot("alarm_not_off")
             assertTrue("будильник не выключился решением примера", !WakeService.ringing)
         } finally {
