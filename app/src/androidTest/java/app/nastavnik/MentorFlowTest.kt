@@ -676,14 +676,16 @@ class MentorFlowTest {
         )
         try {
             assertNotNull("нет тумблера", device.wait(Until.findObject(By.text("Наставник")), 10000))
-            assertNotNull("нет кнопки наставника", device.wait(Until.findObject(By.desc("Показать наставника")), 5000))
+            // На планшете панель открыта сразу — кнопка «Скрыть наставника»; на узком — «Показать».
+            val mentorButton = By.desc(java.util.regex.Pattern.compile("(Показать|Скрыть) наставника"))
+            assertNotNull("нет кнопки наставника", device.wait(Until.findObject(mentorButton), 5000))
             device.findObject(By.checkable(true).checked(true))!!.click()
-            assertTrue("кнопка наставника осталась", device.wait(Until.gone(By.desc("Показать наставника")), 5000))
+            assertTrue("кнопка наставника осталась", device.wait(Until.gone(mentorButton), 5000))
             assertFalse(ctx.app.settings.notebookMentorOn())
             SystemClock.sleep(600)
             screenshot("notebook_mentor_off")
             device.findObject(By.checkable(true).checked(false))!!.click()
-            assertNotNull("кнопка не вернулась", device.wait(Until.findObject(By.desc("Показать наставника")), 5000))
+            assertNotNull("кнопка не вернулась", device.wait(Until.findObject(mentorButton), 5000))
             assertTrue(ctx.app.settings.notebookMentorOn())
         } finally {
             sc.close()
