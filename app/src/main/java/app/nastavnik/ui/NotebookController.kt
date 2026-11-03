@@ -138,6 +138,16 @@ class NotebookController(val app: NastavnikApp, val notebookId: Long, private va
 
     /** Сам проверять страницу, когда студент перестал писать. */
     var autoCheck by mutableStateOf(app.settings.notebookAutoCheck())
+
+    /** Наставник включён (тумблер в верхней панели тетради). */
+    var mentorOn by mutableStateOf(app.settings.notebookMentorOn())
+        private set
+
+    fun setMentor(on: Boolean) {
+        mentorOn = on
+        app.settings.setNotebookMentorOn(on)
+        if (!on) autoJob?.cancel()
+    }
         private set
 
     /** Контрольная: до какого момента идёт (0 — не идёт). Наставник молчит, пока её не сдадут. */
@@ -506,7 +516,7 @@ class NotebookController(val app: NastavnikApp, val notebookId: Long, private va
     // ---------------- наставник ----------------
 
     fun ask(question: String, kind: AskKind) {
-        if (app.settings.notReadyReason() != null) return
+        if (!mentorOn || app.settings.notReadyReason() != null) return
         autoJob?.cancel()
         val pages = when {
             kind == AskKind.WATCH -> WATCH_CONTEXT
@@ -545,7 +555,7 @@ class NotebookController(val app: NastavnikApp, val notebookId: Long, private va
     /** Студент перестал писать — через паузу тихо проверяем страницу (только если включено и не идёт контрольная). */
     private fun scheduleAutoCheck() {
         autoJob?.cancel()
-        if (!autoCheck || examActive || app.settings.notReadyReason() != null) return
+        if (!mentorOn || !autoCheck || examActive || app.settings.notReadyReason() != null) return
         autoJob = scope.launch {
             delay(AUTO_PAUSE_MS)
             if (System.currentTimeMillis() - lastAutoAt < AUTO_GAP_MS || mentor.isBusy) return@launch

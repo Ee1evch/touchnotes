@@ -147,7 +147,7 @@ fun NotebookScreen(notebookId: Long, onBack: () -> Unit, onCleanReady: () -> Uni
     val desk = Brand.Desk.toArgb()
     SideEffect { ctl.ink.setTheme(dark, desk) }
     // Ответ пришёл, а панель скрыта — показываем её сами, чтобы подсказка не потерялась.
-    LaunchedEffect(state.answer?.seq) { if (state.answer != null) panel = true }
+    LaunchedEffect(state.answer?.seq) { if (state.answer != null && ctl.mentorOn) panel = true }
 
     if (tips) EditorTips { tips = false; context.app.settings.setEditorTipsShown() }
     if (pagesOpen) PagesOverview(ctl, onAdd = { ctl.addPage(ctl.page?.paper ?: Paper.GRID) }) { pagesOpen = false }
@@ -201,7 +201,7 @@ fun NotebookScreen(notebookId: Long, onBack: () -> Unit, onCleanReady: () -> Uni
                 }
             }
             androidx.compose.animation.AnimatedVisibility(
-                visible = panel && wide,
+                visible = panel && wide && ctl.mentorOn,
                 enter = expandHorizontally(expandFrom = Alignment.Start, animationSpec = tween(360, easing = FastOutSlowInEasing)) + fadeIn(tween(280, delayMillis = 80)),
                 exit = shrinkHorizontally(shrinkTowards = Alignment.Start, animationSpec = tween(300, easing = FastOutSlowInEasing)) + fadeOut(tween(160)),
             ) {
@@ -212,7 +212,7 @@ fun NotebookScreen(notebookId: Long, onBack: () -> Unit, onCleanReady: () -> Uni
             }
         }
         androidx.compose.animation.AnimatedVisibility(
-            visible = panel && !wide,
+            visible = panel && !wide && ctl.mentorOn,
             modifier = Modifier.align(Alignment.BottomCenter),
             enter = slideInVertically(tween(340, easing = FastOutSlowInEasing)) { it } + fadeIn(),
             exit = slideOutVertically(tween(280, easing = FastOutSlowInEasing)) { it } + fadeOut(),
@@ -315,7 +315,16 @@ private fun NotebookTopBar(
                 MenuItem("Страницы из PDF", R.drawable.ic_pdf) { addMenu = false; importers.pdf() }
             }
         }
-        BarButton(R.drawable.ic_sparkle, if (panel) "Скрыть наставника" else "Показать наставника", active = panel, onClick = onTogglePanel)
+        // Тумблер наставника: выключен — ни панели, ни автопроверки, ни запросов к нейросети.
+        Row(
+            Modifier.glass(CircleShape, 4.dp, strong = true).padding(start = 12.dp, end = 6.dp, top = 2.dp, bottom = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text("Наставник", style = MaterialTheme.typography.labelLarge)
+            AppSwitch(ctl.mentorOn) { ctl.setMentor(it); if (!it && panel) onTogglePanel() }
+        }
+        if (ctl.mentorOn) BarButton(R.drawable.ic_sparkle, if (panel) "Скрыть наставника" else "Показать наставника", active = panel, onClick = onTogglePanel)
     }
     if (renaming && meta != null) {
         var text by remember { mutableStateOf(meta.title) }

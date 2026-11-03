@@ -661,6 +661,36 @@ class MentorFlowTest {
     }
 
     /** Редактор: все инструменты и жесты пером, как у человека. */
+    /** Тумблер «Наставник» в тетради: выключил — нет кнопки и панели наставника; включил — снова есть. */
+    @Test
+    fun notebookMentorToggle() {
+        val nbs = ctx.app.notebooks
+        val (meta, _) = nbs.store.create("Тумблер", app.nastavnik.ink.Paper.GRID)
+        ctx.app.settings.setEditorTipsShown()
+        ctx.app.settings.setNotebookMentorOn(true)
+        val sc = ActivityScenario.launch<MainActivity>(
+            Intent(ctx, MainActivity::class.java)
+                .putExtra(MainActivity.EXTRA_SCREEN, MainActivity.SCREEN_NOTEBOOK)
+                .putExtra(MainActivity.EXTRA_NOTEBOOK, meta.id),
+        )
+        try {
+            assertNotNull("нет тумблера", device.wait(Until.findObject(By.text("Наставник")), 10000))
+            assertNotNull("нет кнопки наставника", device.wait(Until.findObject(By.desc("Показать наставника")), 5000))
+            device.findObject(By.checkable(true).checked(true))!!.click()
+            assertTrue("кнопка наставника осталась", device.wait(Until.gone(By.desc("Показать наставника")), 5000))
+            assertFalse(ctx.app.settings.notebookMentorOn())
+            SystemClock.sleep(600)
+            screenshot("notebook_mentor_off")
+            device.findObject(By.checkable(true).checked(false))!!.click()
+            assertNotNull("кнопка не вернулась", device.wait(Until.findObject(By.desc("Показать наставника")), 5000))
+            assertTrue(ctx.app.settings.notebookMentorOn())
+        } finally {
+            sc.close()
+            ctx.app.settings.setNotebookMentorOn(true)
+            nbs.store.delete(meta.id)
+        }
+    }
+
     @Test
     fun editorToolsAndGestures() {
         val nbs = ctx.app.notebooks
