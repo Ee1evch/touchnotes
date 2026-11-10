@@ -195,9 +195,6 @@ class SettingsRepo(private val context: Context) {
     fun setExamsJson(json: String) = prefs.edit { putString(K_EXAMS, json) }
 
     fun notebookAutoCheck(): Boolean = prefs.getBoolean(K_NB_AUTO, false)
-    /** Наставник в тетради: выключен — ни панели, ни автопроверки, ни обращений к нейросети из тетради. */
-    fun notebookMentorOn(): Boolean = prefs.getBoolean(K_NB_MENTOR, true)
-    fun setNotebookMentorOn(on: Boolean) = prefs.edit { putBoolean(K_NB_MENTOR, on) }
     fun setNotebookAutoCheck(on: Boolean) = prefs.edit { putBoolean(K_NB_AUTO, on) }
 
     /** Подставить настройки, вставленные из прокси (Claudex и т.п.). */
@@ -423,7 +420,6 @@ class SettingsRepo(private val context: Context) {
         private const val K_LANG_TEACHER = "language_teacher"
         private const val K_LESSON_ALERT = "lesson_alert_min"
         private const val K_QUIET = "quiet_lessons"
-        private const val K_NB_MENTOR = "notebook_mentor_on"
         private const val K_TEACHER_PHOTOS = "teacher_photos"
         private const val K_QUIET_RULE = "quiet_rule_id"
         private const val K_ROLE = "device_role"

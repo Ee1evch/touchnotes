@@ -104,6 +104,8 @@ fun EveningScreen(resumeTick: Int, onBack: () -> Unit, go: (String) -> Unit) {
             if (s.locked) EmergencyLink { version++ }
         }
 
+        MistakePracticeSection(s.date, onSettings = { go(MainActivity.SCREEN_SETTINGS) })
+
         // 1. Карточки.
         Step(1, "Карточки на сегодня", s.cardsDone) {
             if (s.cardsDone) Text("Все повторены", style = MaterialTheme.typography.bodyMedium, color = Brand.InkSoft)

@@ -283,18 +283,17 @@ private fun AppPickerDialog(apps: List<NoteApps.App>, onDismiss: () -> Unit, onP
     )
 }
 
-/** Лицензии: расписание основано на Lecturial 2 (Apache 2.0) — показываем её текст. */
+/** Сведения о лицензиях сторонних компонентов. */
 @Composable
 private fun LicensesSection() {
     val context = LocalContext.current
     var open by remember { mutableStateOf(false) }
     SectionCard("О приложении") {
         Text(
-            "Расписание загружается кодом на основе Lecturial 2 (Apache License 2.0). " +
-                "Приложение неофициальное и не связано с Университетом «Сириус».",
+            "Приложение неофициальное и не связано с Университетом «Сириус».",
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        LinkText(if (open) "Скрыть лицензию" else "Лицензия Lecturial 2") { open = !open }
+        LinkText(if (open) "Скрыть лицензию" else "Лицензии компонентов") { open = !open }
         if (open) {
             val text = remember { runCatching { context.assets.open("licenses/lecturial-2.txt").bufferedReader().use { it.readText() } }.getOrDefault("") }
             Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

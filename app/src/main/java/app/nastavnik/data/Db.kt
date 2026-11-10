@@ -245,11 +245,14 @@ interface ActivityDao {
     @Insert
     suspend fun insert(a: ActivityEntity)
 
-    @Query("SELECT * FROM activity ORDER BY at")
+    @Query("SELECT * FROM activity WHERE kind NOT IN ('mistake_detail', 'mistake_reviewed') ORDER BY at")
     fun observeAll(): Flow<List<ActivityEntity>>
 
     @Query("SELECT * FROM activity")
     suspend fun all(): List<ActivityEntity>
+
+    @Query("SELECT * FROM activity WHERE kind IN ('mistake_detail', 'mistake_reviewed') AND at >= :since ORDER BY at DESC")
+    fun observeMistakes(since: Long): Flow<List<ActivityEntity>>
 
     @Query("SELECT COUNT(*) FROM activity WHERE uid = :uid")
     suspend fun countUid(uid: String): Int

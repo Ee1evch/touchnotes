@@ -95,6 +95,23 @@ class InkLinesTest {
     }
 
     @Test
+    fun errorBoxStaysOnOneDetectedLine() {
+        val map = InkLines.detect(page(listOf(Triple(60, 40, 700), Triple(140, 40, 900))), w, h)
+        val wholePage = map.resolveError(PlaceRef(lines = 2..2, box = IRect(0, 0, w, h)))!!
+        assertTrue("широкая рамка должна стать строкой: $wholePage", wholePage.top > 100 && wholePage.bottom < 190)
+        assertTrue("высота строки: $wholePage", wholePage.height < 65)
+        assertEquals(null, map.resolveError(PlaceRef(box = IRect(0, 0, w, h))))
+        assertEquals(null, map.resolveError(PlaceRef(lines = 1..2)))
+    }
+
+    @Test
+    fun errorBoxSelectsOneOfSeveralLines() {
+        val map = InkLines.detect(page(listOf(Triple(60, 40, 700), Triple(140, 40, 900))), w, h)
+        val mark = map.resolveError(PlaceRef(lines = 1..2, box = IRect(35, 138, 950, 166)))!!
+        assertTrue("ошибка во второй строке: $mark", mark.top > 100 && mark.bottom < 190)
+    }
+
+    @Test
     fun emptyPageHasNoLines() {
         val map = InkLines.detect(IntArray(w * h) { 250 }, w, h)
         assertTrue(map.lines.isEmpty())

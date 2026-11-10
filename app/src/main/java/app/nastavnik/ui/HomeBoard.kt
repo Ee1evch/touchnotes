@@ -109,7 +109,7 @@ fun HomeBoard(
     fun content(item: Item, m: Modifier) {
         val small = item.size == Size.S
         when (item.id) {
-            "evening" -> Box(m) { EveningCard(resumeTick, go) }
+            "evening" -> Box(m) { EveningCard(resumeTick, now, go) }
             "day" -> if (small) {
                 val st = remember(lessons, now) { ScheduleNow.at(lessons.orEmpty(), now) }
                 val l = st.current ?: st.next

@@ -53,6 +53,33 @@ class LineMap(
         return if (hintLike) box.clampInto(IRect(0, 0, width, height)) else snap(box)
     }
 
+    /** Ошибка относится к одной строке. Широкую или двусмысленную рамку не рисуем. */
+    fun resolveError(ref: PlaceRef): IRect? {
+        val candidates = ref.lines?.let { range -> lines.filter { it.number in range } } ?: lines
+        val box = ref.box
+        val target = when {
+            candidates.size == 1 && ref.lines != null -> candidates.first()
+            box == null -> return null
+            box.height > lineHeight * 2 -> return null
+            else -> candidates.filter { it.bottom > box.top && it.top < box.bottom }
+                .minByOrNull { abs(it.centerY - box.centerY) }
+        }
+        if (target == null) {
+            // На рисунке может не быть распознанной строки, но рамка должна быть локальной.
+            return box?.takeIf { it.width in 1..(width / 2) && it.height in 1..(lineHeight * 2) }
+                ?.clampInto(IRect(0, 0, width, height))
+        }
+        val xParts = if (box != null && box.width < width / 2) {
+            val slack = max(4, lineHeight / 3)
+            target.segments.filter { it.last >= box.left - slack && it.first <= box.right + slack }
+        } else emptyList()
+        val left = if (xParts.isEmpty()) target.left else xParts.minOf { it.first }
+        val right = if (xParts.isEmpty()) target.right else xParts.maxOf { it.last } + 1
+        val tightPad = max(2, (lineHeight * 0.1f).roundToInt())
+        return IRect(left - tightPad, target.top - tightPad, right + tightPad, target.bottom + tightPad)
+            .clampInto(IRect(0, 0, width, height))
+    }
+
     private fun byLines(range: IntRange, box: IRect?): IRect? {
         val ls = range.mapNotNull { line(it) }
         if (ls.isEmpty()) return null

@@ -191,7 +191,7 @@ fun ScheduleScreen(onBack: (() -> Unit)?) {
         }
         Spacer(Modifier.height(8.dp))
         Text(
-            "Расписание — с сайта schedule.siriusuniversity.ru (на основе Lecturial 2). Неофициально; сверяйся с сайтом при сомнениях.",
+            "Расписание загружается с сайта Университета «Сириус». Приложение неофициальное.",
             style = MaterialTheme.typography.bodySmall, color = Brand.InkSoft,
         )
     }

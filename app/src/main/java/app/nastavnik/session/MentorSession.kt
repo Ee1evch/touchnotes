@@ -89,7 +89,9 @@ data class ShotGeometry(
                 (it.right * sentW).toInt() - gutter, (it.bottom * imageH).toInt(),
             )
         }
-        val r = map.resolve(PlaceRef(m.lines, m.after, px), hintLike = m.kind == MarkKind.HINT)
+        val ref = PlaceRef(m.lines, m.after, px)
+        val r = (if (m.kind == MarkKind.ERROR) map.resolveError(ref)
+            else map.resolve(ref, hintLike = m.kind == MarkKind.HINT))
             ?: return m.copy(box = null, lines = null, after = null)
         val w = imageW.toFloat()
         val h = imageH.toFloat()
@@ -358,6 +360,13 @@ class MentorSession(
                 val at = System.currentTimeMillis()
                 val list = MistakeMemory.add(MistakeMemory.decode(app.settings.mistakesJson()), found.map { Mistake(it.text, topic, at) })
                 app.settings.setMistakesJson(MistakeMemory.encode(list))
+                try {
+                    app.study.saveMistakes(found.map { Mistake(it.detail ?: it.text, topic, at) })
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    // Запись в дневник не должна скрыть готовый ответ наставника.
+                }
             }
             app.study.record(
                 if (silent) Progress.KIND_WATCH else Progress.KIND_ASK,

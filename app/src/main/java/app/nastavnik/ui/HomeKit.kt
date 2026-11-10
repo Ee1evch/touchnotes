@@ -270,13 +270,17 @@ val TABLET_SECTIONS = listOf(
  * Вечерняя учёба на главной: видна вечером (с 16:00), пока не сделана, и всегда — пока замок закрыт.
  */
 @Composable
-fun EveningCard(resumeTick: Int, go: (String) -> Unit) {
+fun EveningCard(resumeTick: Int, now: LocalDateTime, go: (String) -> Unit) {
     val context = LocalContext.current
     val status by produceState<StudyLock.Status?>(null, resumeTick) {
         value = StudyLock.status(context)
     }
     val s = status ?: return
-    val show = s.locked || (!s.allDone && LocalDateTime.now().hour >= 16) || (s.configured && !s.allDone && s.date != java.time.LocalDate.now())
+    val mistakes by remember(context, s.date) { context.app.study.observeMistakes(s.date) }
+        .collectAsStateWithLifecycle(initialValue = emptyList())
+    val pendingMistakes = mistakes.count { !it.reviewed }
+    val show = s.locked || ((!s.allDone || pendingMistakes > 0) && now.hour >= 16) ||
+        (s.configured && !s.allDone && s.date != now.toLocalDate())
     if (!show) return
     val src = remember { MutableInteractionSource() }
     Row(
@@ -294,7 +298,8 @@ fun EveningCard(resumeTick: Int, go: (String) -> Unit) {
         Column(Modifier.weight(1f)) {
             Text(if (s.locked) "Приложения закрыты" else "Вечерняя учёба", style = MaterialTheme.typography.titleMedium)
             Text(
-                "${s.steps} из 4 · карточки, что было сегодня, подготовка и ДЗ к завтра",
+                if (pendingMistakes > 0) "К разбору · $pendingMistakes ${ruPlural(pendingMistakes, "ошибка", "ошибки", "ошибок")} за день"
+                else "${s.steps} из 4 · карточки, что было сегодня, подготовка и ДЗ к завтра",
                 style = MaterialTheme.typography.bodySmall, color = Brand.InkSoft, maxLines = 2, overflow = TextOverflow.Ellipsis,
             )
         }

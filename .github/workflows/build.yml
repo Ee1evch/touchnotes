@@ -16,7 +16,7 @@ jobs:
       contents: write
     timeout-minutes: 40
     env:
-      BUILD_NUMBER: ${{ github.ref_name == 'codex/nastavnik-150' && '150' || github.run_number }}
+      BUILD_NUMBER: ${{ github.ref_name == 'codex/nastavnik-151' && '151' || github.run_number }}
     steps:
       - uses: actions/checkout@v4
 
@@ -82,7 +82,7 @@ jobs:
       - name: Релиз для обновления из приложения
         if: github.event_name == 'push'
         # Нет прав на релизы (форк, ограничения организации) — сборка всё равно зелёная.
-        continue-on-error: ${{ github.ref_name != 'codex/nastavnik-150' }}
+        continue-on-error: ${{ github.ref_name != 'codex/nastavnik-151' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

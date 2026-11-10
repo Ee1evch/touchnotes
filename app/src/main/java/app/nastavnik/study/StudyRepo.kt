@@ -1,11 +1,17 @@
 package app.nastavnik.study
 
+import androidx.room.withTransaction
 import app.nastavnik.NastavnikApp
 import app.nastavnik.data.ActivityEntity
 import app.nastavnik.data.CardEntity
 import app.nastavnik.notes.CleanNote
 import app.nastavnik.notes.CleanNoteParser
 import app.nastavnik.notes.NoteStorage
+import kotlinx.coroutines.flow.map
+import kotlinx.serialization.json.Json
+import java.time.LocalDate
+import java.time.ZoneId
+import java.util.UUID
 
 /** Карточки повторения и учебные события поверх Room. */
 class StudyRepo(private val app: NastavnikApp) {
@@ -55,7 +61,56 @@ class StudyRepo(private val app: NastavnikApp) {
     }
 
     /** Все учебные события — для калибровки, срезов и плана на день. */
-    suspend fun events(): List<Event> = app.db.activity().all().map { Event(it.kind, it.topic, it.errors, it.at) }
+    suspend fun events(): List<Event> = app.db.activity().all()
+        .filterNot { it.kind == MISTAKE_DETAIL || it.kind == MISTAKE_REVIEWED }
+        .map { Event(it.kind, it.topic, it.errors, it.at) }
+
+    data class PracticeMistake(val id: String, val mistake: Mistake, val reviewed: Boolean)
+
+    /** Учебные события синхронизируются существующим протоколом, включая старые устройства. */
+    suspend fun saveMistakes(mistakes: List<Mistake>) {
+        val dao = app.db.activity()
+        val saved = app.db.withTransaction {
+            var added = false
+            for (raw in mistakes) {
+                val m = raw.copy(text = raw.text.trim().take(1000), topic = raw.topic.trim().take(120))
+                if (m.text.isBlank()) continue
+                val day = java.time.Instant.ofEpochMilli(m.at).atZone(ZoneId.systemDefault()).toLocalDate()
+                val key = listOf(day.toString(), m.topic, m.text).joinToString("\u0000").lowercase()
+                val uid = UUID.nameUUIDFromBytes(key.toByteArray(Charsets.UTF_8)).toString()
+                if (dao.countUid(uid) != 0) continue
+                dao.insert(ActivityEntity(kind = MISTAKE_DETAIL, topic = Json.encodeToString(m), errors = 0, at = m.at, uid = uid))
+                added = true
+            }
+            added
+        }
+        if (saved) app.sync.soon()
+    }
+
+    fun observeMistakes(date: LocalDate) = app.db.activity().observeMistakes(date.startMillis())
+        .map { rows -> practiceMistakes(date, rows) }
+
+    private fun practiceMistakes(date: LocalDate, rows: List<ActivityEntity>): List<PracticeMistake> {
+        val reviewed = rows.filter { it.kind == MISTAKE_REVIEWED }.mapTo(HashSet()) { it.topic }
+        val end = date.plusDays(1).startMillis()
+        return rows.filter { it.kind == MISTAKE_DETAIL && it.at < end }.mapNotNull { row ->
+            runCatching { Json.decodeFromString<Mistake>(row.topic) }.getOrNull()
+                ?.let { PracticeMistake(row.uid, it, row.uid in reviewed) }
+        }
+    }
+
+    suspend fun reviewMistake(item: PracticeMistake, retry: PracticeTask? = null) {
+        val uid = "review-${item.id}"
+        val dao = app.db.activity()
+        app.db.withTransaction {
+            if (dao.countUid(uid) != 0) return@withTransaction
+            if (retry != null) app.trainer.problemCard(retry, item.mistake.topic)
+            dao.insert(ActivityEntity(kind = MISTAKE_REVIEWED, topic = item.id, errors = 0, at = System.currentTimeMillis(), uid = uid))
+        }
+        app.sync.soon()
+    }
+
+    private fun LocalDate.startMillis() = atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
 
     suspend fun record(kind: String, topic: String, errors: Int = 0) {
         runCatching { app.db.activity().insert(ActivityEntity(kind = kind, topic = topic, errors = errors, at = System.currentTimeMillis())) }
@@ -74,6 +129,8 @@ class StudyRepo(private val app: NastavnikApp) {
     fun nextExam(now: Long = System.currentTimeMillis()): Exam? = exams().firstOrNull { it.at + Streaks.DAY_MS > now }
 
     companion object {
+        private const val MISTAKE_DETAIL = "mistake_detail"
+        private const val MISTAKE_REVIEWED = "mistake_reviewed"
         const val SAMPLE_PREFIX = "Пример: "
     }
 }
