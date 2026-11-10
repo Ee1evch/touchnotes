@@ -21,13 +21,12 @@
     JSON `{startPeriod, interval: "year", col, endPeriod, numPeriod: 0, search: "", lectures/seminars/practices/laboratories: false}`.
     Ответ: `lessons[]` (`title`, `avg_mark`, `rating`, `count_absent`, `items{"YYYY-MM-DD": [{marks[{mark_value_standard, color, second_mark}], absent, absent_valid, comment, hometask}]}`),
     `cacheBuilding` (повторять через 3 с).
-- Владелец сообщил: **в версии 1.76 успеваемость не работает**. Причину не выясняли — с настоящим сайтом
-  код ни разу не проверялся. Что сделать на компьютере владельца:
-  1. Повторить запросы `curl`-ом (с cookie-jar) под его логином: что реально отвечает `/login` (редирект?
-     ошибки? капча? другой путь входа — SSO?), что отдаёт `/journal/get` (формат, коды ответа, нужны ли
-     ещё заголовки/куки вроде XSRF-TOKEN).
-  2. Исправить `LksClient` под настоящие ответы, обновить тест, выложить новую сборку.
-  3. Пароль никуда не записывать: ни в код, ни в тесты, ни в коммиты.
+- **Причина поломки найдена (1 ноября 2026):** в форме `/login` стоит Яндекс SmartCaptcha, и запросом войти
+  нельзя. Вход перенесён во встроенное окно (человек проходит капчу, приложение забирает куки), подробности —
+  в `DECISIONS.md`, раздел «ЛКС: проверка с настоящим сайтом». На компьютере владельца работает VPN
+  (`happ-xray`): для запросов к ЛКС нужен `curl --interface wlp3s0`, иначе `418`.
+- Ещё не проверено вживую: ответ `POST /journal/get` (нужны куки сессии из браузера владельца) и вход
+  через окно на телефоне.
 - Если владелец решит убрать успеваемость: удалить пакет `grades`, `GradesScreen.kt`, `LksScreen.kt`, тесты
   `grades`, пункты «Успеваемость» в `PhoneShell.kt`/`HomeScreen.kt`, `GradesSettingsSection` в настройках,
   экраны `SCREEN_GRADES`/`SCREEN_LKS` и обновление в `MainActivity.onResume`, канал уведомлений `grades`,

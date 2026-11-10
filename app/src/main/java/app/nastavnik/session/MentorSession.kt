@@ -1,5 +1,8 @@
 package app.nastavnik.session
 
+import android.os.SystemClock
+import android.util.Log
+import app.nastavnik.BuildConfig
 import app.nastavnik.NastavnikApp
 import app.nastavnik.ai.AiErrors
 import app.nastavnik.ai.AiException
@@ -72,6 +75,13 @@ data class ShotGeometry(
      * рамку «на глаз» притягиваем к строкам, которые она задевает.
      */
     fun place(m: Mark): Mark {
+        if (m.drawing != null) {
+            val b = m.box ?: return m
+            val left = ((b.left * sentW - gutter) / imageW).coerceIn(0f, 1f)
+            val right = ((b.right * sentW - gutter) / imageW).coerceIn(0f, 1f)
+            val box = NBox(left, b.top, right, b.bottom)
+            return m.copy(box = box.takeIf { it.width > 0f && it.height > 0f })
+        }
         val map = lines ?: LineMap(emptyList(), imageW, imageH)
         val px = m.box?.let {
             IRect(
@@ -224,6 +234,7 @@ class MentorSession(
             fun set(a: AnswerUi?) = _state.update { it.copy(answer = a) }
             // Тихая проверка не трогает то, что уже на экране, пока не найдёт ошибку.
             if (kind != AskKind.WATCH) set(AnswerUi(id, kind, question, status = "Смотрю на экран…"))
+            val startedAt = SystemClock.elapsedRealtime()
             val r = try {
                 shot()
             } catch (e: CancellationException) {
@@ -244,11 +255,12 @@ class MentorSession(
             }
             val base = AnswerUi(id, kind, question, status = "Думаю…", geometry = ok.geometry, thumb = ok.thumb)
             if (kind != AskKind.WATCH) set(base)
-            run(base, ok)
+            if (BuildConfig.DEBUG) Log.d("MentorTiming", "capture_ms=${SystemClock.elapsedRealtime() - startedAt}")
+            run(base, ok, startedAt)
         }
     }
 
-    private suspend fun run(base: AnswerUi, shot: ShotResult.Ok) {
+    private suspend fun run(base: AnswerUi, shot: ShotResult.Ok, startedAt: Long) {
         val settings = app.settings.load()
         val silent = base.kind == AskKind.WATCH
         val now = System.currentTimeMillis()
@@ -283,12 +295,18 @@ class MentorSession(
                 turns = turns,
                 // Сначала страницы всего конспекта, последним — текущий экран с номерами строк.
                 images = shot.context.map { ImagePart(it) } + ImagePart(shot.jpeg),
-                maxTokens = MAX_TOKENS,
+                maxTokens = if (settings.fastAnswers && base.kind != AskKind.USER) FAST_MAX_TOKENS else MAX_TOKENS,
                 fast = settings.fastAnswers,
             )
+            val requestAt = SystemClock.elapsedRealtime()
+            var firstText = false
             val stop = app.ai(settings).stream(app.settings.apiKey(settings.provider), request) { update ->
                 when (update) {
                     is StreamUpdate.Text -> {
+                        if (!firstText && update.delta.isNotEmpty()) {
+                            firstText = true
+                            if (BuildConfig.DEBUG) Log.d("MentorTiming", "first_text_ms=${SystemClock.elapsedRealtime() - startedAt} network_ms=${SystemClock.elapsedRealtime() - requestAt}")
+                        }
                         raw.append(update.delta)
                         val t = System.currentTimeMillis()
                         if (t - lastEmit > 80) {
@@ -303,6 +321,7 @@ class MentorSession(
                     else -> Unit
                 }
             }
+            if (BuildConfig.DEBUG) Log.d("MentorTiming", "complete_ms=${SystemClock.elapsedRealtime() - startedAt}")
             var final = parse(false)
             if (final.marks.isEmpty() && !final.allGood) throw AiErrors.badResponse("пустой ответ")
             // На вопрос студента модель ответила одним «всё верно» — показываем это заметкой, а не пустотой.
@@ -406,6 +425,7 @@ class MentorSession(
     companion object {
         /** С запасом: adaptive thinking тоже тратит max_tokens, а сам ответ короткий. */
         const val MAX_TOKENS = 16000
+        private const val FAST_MAX_TOKENS = 4096
         private const val MAX_HISTORY = 12
         private const val NEW_TASK_AFTER_MS = 40 * 60 * 1000L
         private const val GENERIC_TITLE = "Задача · "

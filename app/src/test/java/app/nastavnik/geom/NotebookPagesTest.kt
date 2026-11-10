@@ -70,6 +70,18 @@ class NotebookPagesTest {
         assertEquals(listOf(1, 3, 9), ctx)
         // Не влезают все — берём ближайшие к текущей странице.
         assertEquals(listOf(1, 3), nb.context(exclude = mid.id, limit = 2).map { it[0].toInt() })
+        val selected = nb.pages.filter { it.small[0].toInt() in listOf(1, 9) }.map { it.id }.toSet()
+        assertEquals(listOf(1, 9), nb.context(exclude = mid.id, limit = Int.MAX_VALUE, selected = selected).map { it[0].toInt() })
+        assertTrue(nb.context(exclude = mid.id, limit = Int.MAX_VALUE, selected = emptySet()).isEmpty())
+    }
+
+    @Test
+    fun longNotebookRetainsEveryCollectedPage() {
+        val nb = NotebookPages(null)
+        val thumb = frame(0)
+        repeat(20) { nb.add(bytes(it), bytes(it), thumb, chain = 1, pos = it, at = it.toLong()) }
+        assertEquals(20, nb.size)
+        assertEquals((0 until 20).toList(), nb.context(null, Int.MAX_VALUE).map { it[0].toInt() })
     }
 
     @Test

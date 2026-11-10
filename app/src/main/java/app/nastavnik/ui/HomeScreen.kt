@@ -61,7 +61,6 @@ import app.nastavnik.overlay.BubbleService
 import app.nastavnik.study.Exam
 import app.nastavnik.schedule.Lesson
 import app.nastavnik.study.ExamPlan
-import app.nastavnik.study.Streaks
 import app.nastavnik.study.ruPlural
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -88,11 +87,6 @@ fun HomeScreen(resumeTick: Int, go: (String) -> Unit, openNotebook: (Long) -> Un
     val db = context.app.db
     val now = remember(resumeTick) { System.currentTimeMillis() }
     val due by remember(now) { db.cards().observeDueCount(now) }.collectAsStateWithLifecycle(initialValue = 0)
-    val events by remember { db.activity().observeAll() }.collectAsStateWithLifecycle(initialValue = emptyList())
-    val today = Streaks.day(now)
-    val perDay = remember(events) { events.groupingBy { Streaks.day(it.at) }.eachCount() }
-    val streak = remember(perDay, today) { Streaks.current(perDay.keys, today) }
-    val week = remember(perDay, today) { Streaks.lastDays(perDay, today, 7) }
     val exam = remember(resumeTick) { context.app.study.nextExam() }
 
     val enterOrder = remember { java.util.concurrent.atomic.AtomicInteger(0) }
@@ -127,7 +121,7 @@ fun HomeScreen(resumeTick: Int, go: (String) -> Unit, openNotebook: (Long) -> Un
                 if (notReady != null) Banner("$notReady — без этого наставник не ответит.", "Настроить") { go(MainActivity.SCREEN_SETTINGS) }
 
                 val lessonsPanel = @Composable { LessonsPanel(resumeTick, go, onRoom) }
-                val todayPanel = @Composable { TodayPanel(due, streak, week, exam, go) }
+                val todayPanel = @Composable { TodayPanel(due, exam, go) }
                 val sections = @Composable { SectionsList(go) }
                 val notebooks = @Composable { NotebooksSection(resumeTick, go, openNotebook) }
                 val mentor = @Composable { MentorStrip(resumeTick, tick, overlay) { tick++ } }
@@ -457,7 +451,7 @@ private fun LessonsPanel(resumeTick: Int, go: (String) -> Unit, onRoom: (String)
 
 /** «Сегодня»: карточки на повторение, серия за неделю и ближайший экзамен. */
 @Composable
-private fun TodayPanel(due: Int, streak: Int, week: List<Int>, exam: Exam?, go: (String) -> Unit) {
+private fun TodayPanel(due: Int, exam: Exam?, go: (String) -> Unit) {
     Column(
         Modifier
             .fillMaxWidth()
@@ -493,35 +487,6 @@ private fun TodayPanel(due: Int, streak: Int, week: List<Int>, exam: Exam?, go: 
         }
 
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-
-        // Серия: семь кружков — дни недели, когда занимался.
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(14.dp))
-                .clickable { go(MainActivity.SCREEN_PROGRESS) },
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Icon(painterResource(R.drawable.ic_flame), contentDescription = null, tint = if (streak > 0) Brand.Theory else Brand.InkSoft, modifier = Modifier.size(22.dp))
-            Text(
-                if (streak > 0) "$streak ${ruPlural(streak, "день", "дня", "дней")} подряд" else "Начни серию сегодня",
-                style = MaterialTheme.typography.titleSmall,
-                modifier = Modifier.weight(1f),
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                week.forEachIndexed { i, n ->
-                    val isToday = i == week.lastIndex
-                    Box(
-                        Modifier
-                            .size(12.dp)
-                            .clip(CircleShape)
-                            .background(if (n > 0) Brand.Accent else Brand.Line)
-                            .then(if (isToday && n == 0) Modifier.border(1.2.dp, Brand.InkSoft, CircleShape) else Modifier),
-                    )
-                }
-            }
-        }
 
         // Экзамен — или приглашение добавить.
         Row(
@@ -562,10 +527,9 @@ private fun SectionsList(go: (String) -> Unit) {
         val rows = listOf(
             Triple(R.drawable.ic_calendar, "Расписание", "Пары группы, окна, аудитории") to MainActivity.SCREEN_SCHEDULE,
             Triple(R.drawable.ic_map, "Карта кампуса", "Найти аудиторию и дойти") to MainActivity.SCREEN_MAP,
-            Triple(R.drawable.ic_bell, "Напоминания", "Дедлайны — и на телефоне тоже") to MainActivity.SCREEN_REMINDERS,
             Triple(R.drawable.ic_chart, "Успеваемость", "Оценки из личного кабинета") to MainActivity.SCREEN_GRADES,
             Triple(R.drawable.ic_target, "Тренировка", "Вариант контрольной, мини-тест") to MainActivity.SCREEN_TRAINING,
-            Triple(R.drawable.ic_chart, "Прогресс", "Серия и темы с ошибками") to MainActivity.SCREEN_PROGRESS,
+            Triple(R.drawable.ic_chart, "Прогресс", "Активность и темы с ошибками") to MainActivity.SCREEN_PROGRESS,
             Triple(R.drawable.ic_history, "История", "Задачи с наставником и чистовики") to MainActivity.SCREEN_HISTORY,
             Triple(R.drawable.ic_note, "Чистовик", "Записи → аккуратный PDF") to MainActivity.SCREEN_CLEAN,
         )

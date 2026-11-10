@@ -300,9 +300,10 @@ class SettingsRepo(private val context: Context) {
     fun lksPassword(): String = secure?.getString(K_LKS_PASSWORD, null).orEmpty()
     /** Адрес страницы успеваемости, которую человек показал один раз. */
     fun lksPage(): String = prefs.getString(K_LKS_PAGE, "").orEmpty()
+    /** Почта и пароль — только чтобы заполнить форму во встроенном окне; пустой пароль оставляет прежний. */
     fun setLks(login: String, password: String) {
         prefs.edit { putString(K_LKS_LOGIN, login.trim()) }
-        secure?.edit { putString(K_LKS_PASSWORD, password) }
+        if (password.isNotEmpty()) secure?.edit { putString(K_LKS_PASSWORD, password) }
     }
     fun setLksPage(url: String) = prefs.edit { putString(K_LKS_PAGE, url) }
     /** Куки сессии ЛКС (зашифрованно) — чтобы не входить при каждом открытии. */
@@ -312,7 +313,8 @@ class SettingsRepo(private val context: Context) {
         prefs.edit { remove(K_LKS_LOGIN); remove(K_LKS_PAGE) }
         secure?.edit { remove(K_LKS_PASSWORD); remove(K_LKS_COOKIES) }
     }
-    val lksConfigured: Boolean get() = lksLogin().isNotEmpty() && lksPassword().isNotEmpty()
+    /** Подключён — есть куки сессии: войти можно только в окне сайта (там капча), пароль для этого не обязателен. */
+    val lksConfigured: Boolean get() = lksCookies().isNotEmpty()
 
     // ---------- устройство ----------
     /** "auto", "phone" или "tablet": как вести себя — с тетрадями для стилуса или без. */

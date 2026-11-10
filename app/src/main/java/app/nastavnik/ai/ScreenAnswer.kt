@@ -34,6 +34,10 @@ data class NBox(val left: Float, val top: Float, val right: Float, val bottom: F
     val height: Float get() = bottom - top
 }
 
+enum class DrawingKind { ARROW, LINE, ELLIPSE }
+
+data class Drawing(val kind: DrawingKind, val reverseX: Boolean = false, val reverseY: Boolean = false)
+
 /**
  * Заметка наставника. Место задаётся номером строки ([lines]), «под строкой» ([after]) и/или рамкой [box]
  * (в долях присланного снимка). Приложение потом переводит всё это в точную рамку по чернилам.
@@ -47,6 +51,7 @@ data class Mark(
     val after: Int? = null,
     /** Полная подсказка — открывается кнопкой «Подробнее» (null — модель её не дала). */
     val detail: String? = null,
+    val drawing: Drawing? = null,
 )
 
 data class ScreenAnswer(
@@ -74,6 +79,7 @@ object ScreenAnswerParser {
     const val ALL_GOOD_MARKER = "[[ВЕРНО]]"
 
     private val header = Regex("""^\s*@@\s*([\p{L}_]+)(.*)$""")
+    private val drawingRe = Regex("""^\s*@@\s*(arrow|line|ellipse)\s*:?\s*(.*)$""", RegexOption.IGNORE_CASE)
     private val afterRe = Regex("""(?:после|под|after|below)\s*(?:стр\p{L}*\.?|line)?\s*(\d+)""", RegexOption.IGNORE_CASE)
     private val linesRe = Regex("""(?:стр\p{L}*\.?|lines?|L)\s*(\d+)(?:\s*[-–—]\s*(\d+))?""", RegexOption.IGNORE_CASE)
     private val rangeAtStart = Regex("""^[\s:\-]*(\d+)\s*[-–—]\s*(\d+)(?![\d.,])""")
@@ -130,19 +136,35 @@ object ScreenAnswerParser {
         // Текст заметки до строки «@@ подробнее» — короткая подсказка, после — полная.
         val detail = StringBuilder()
         var inDetail = false
+        var drawing: Drawing? = null
         fun flush() {
             val t = body.toString().trim()
             val d = detail.toString().trim().ifEmpty { null }
             if (kind != null || t.isNotEmpty() || d != null) {
                 // Модель забыла короткую часть — показываем начало полной.
                 val short = t.ifEmpty { d?.let(::firstSentence).orEmpty() }
-                if (short.isNotEmpty() || streaming) marks += Mark(kind ?: MarkKind.NOTE, box, short, lines, after, d?.takeIf { it != short })
+                if (short.isNotEmpty() || streaming) marks += Mark(kind ?: MarkKind.NOTE, box, short, lines, after, d?.takeIf { it != short }, drawing)
             }
             body.setLength(0)
             detail.setLength(0)
             inDetail = false
         }
         for (line in text.lines()) {
+            val drawingHeader = drawingRe.matchEntire(line)
+            if (drawingHeader != null) {
+                val values = numberRe.findAll(drawingHeader.groupValues[2]).mapNotNull { it.value.toFloatOrNull() }.toList()
+                val drawingBox = if (values.size == 4 && values.all { it.isFinite() }) toBox(values, mode, imageW, imageH) else null
+                if (drawingBox != null) {
+                    flush()
+                    kind = MarkKind.HINT
+                    box = drawingBox
+                    lines = null
+                    after = null
+                    val xy = if (mode == CoordMode.NORM_YX) listOf(values[1], values[0], values[3], values[2]) else values
+                    drawing = Drawing(DrawingKind.valueOf(drawingHeader.groupValues[1].uppercase()), xy[0] > xy[2], xy[1] > xy[3])
+                    continue
+                }
+            }
             val t = topicRe.matchEntire(line)
             if (t != null) {
                 topic = t.groupValues[1].trim().trim('«', '»', '"', '.').take(80).ifBlank { null }
@@ -154,6 +176,7 @@ object ScreenAnswerParser {
             if (k != null && spec != null) {
                 flush()
                 kind = k
+                drawing = null
                 box = spec.coords?.let { toBox(it, mode, imageW, imageH) }
                 lines = spec.lines
                 after = spec.after

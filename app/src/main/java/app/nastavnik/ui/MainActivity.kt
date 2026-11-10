@@ -148,7 +148,6 @@ class MainActivity : ComponentActivity() {
                         SCREEN_VIEWER -> NotebookViewer(notebookId, onBack = { go(SCREEN_NOTEBOOKS) })
                         SCREEN_SCHEDULE -> ScheduleScreen(onBack = home, onRoom = showRoom)
                         SCREEN_MAP -> MapScreen(initialRoom = mapRoom, onBack = home)
-                        SCREEN_REMINDERS -> RemindersScreen(onBack = home)
                         SCREEN_GRADES -> GradesScreen(onBack = home, onSettings = { go(SCREEN_SETTINGS) }, onLks = { go(SCREEN_LKS) })
                         SCREEN_LKS -> LksScreen(onBack = { go(SCREEN_GRADES) }, onDone = { go(SCREEN_GRADES) })
                         SCREEN_NOTEBOOK -> if (notebookId != 0L) {
@@ -293,7 +292,6 @@ class MainActivity : ComponentActivity() {
         const val SCREEN_NOTEBOOK = "notebook"
         const val SCREEN_SCHEDULE = "schedule"
         const val SCREEN_MAP = "map"
-        const val SCREEN_REMINDERS = "reminders"
         const val SCREEN_VIEWER = "viewer"
         const val SCREEN_GRADES = "grades"
         const val SCREEN_LKS = "lks"

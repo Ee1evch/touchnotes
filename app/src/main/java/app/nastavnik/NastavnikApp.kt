@@ -17,7 +17,6 @@ import app.nastavnik.data.AppUsage
 import app.nastavnik.data.SettingsRepo
 import app.nastavnik.ink.Notebooks
 import app.nastavnik.session.CleanSession
-import app.nastavnik.study.Reminders
 import app.nastavnik.study.Alarms
 import app.nastavnik.ui.Palettes
 import app.nastavnik.schedule.ScheduleRepo
@@ -103,7 +102,7 @@ class NastavnikApp : Application() {
         WebView.enableSlowWholeDocumentDraw()
         createChannels()
         Palettes.installWallpaper(this)
-        Reminders.schedule(this)
+        Alarms.cancelRemovedReminders(this)
         Alarms.rescheduleAll(this)
     }
 
@@ -119,16 +118,6 @@ class NastavnikApp : Application() {
         }
         nm.createNotificationChannel(channel)
         nm.createNotificationChannel(
-            NotificationChannel(CHANNEL_REMINDERS, "Повторение карточек", NotificationManager.IMPORTANCE_DEFAULT).apply {
-                description = "Раз в день вечером, если есть карточки к повторению и ты ещё не занимался"
-            },
-        )
-        nm.createNotificationChannel(
-            NotificationChannel(CHANNEL_PERSONAL, "Мои напоминания", NotificationManager.IMPORTANCE_HIGH).apply {
-                description = "Напоминания, которые ты создал сам — на любом из своих устройств"
-            },
-        )
-        nm.createNotificationChannel(
             NotificationChannel(CHANNEL_GRADES, "Новые оценки", NotificationManager.IMPORTANCE_DEFAULT).apply {
                 description = "Когда в личном кабинете появляется новая оценка"
             },
@@ -142,8 +131,6 @@ class NastavnikApp : Application() {
 
     companion object {
         const val CHANNEL_SERVICE = "service"
-        const val CHANNEL_REMINDERS = "reminders"
-        const val CHANNEL_PERSONAL = "personal"
         const val CHANNEL_LESSONS = "lessons"
         const val CHANNEL_GRADES = "grades"
     }

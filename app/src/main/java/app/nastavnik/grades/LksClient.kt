@@ -18,7 +18,6 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
 import okhttp3.Cookie
 import okhttp3.CookieJar
-import okhttp3.FormBody
 import okhttp3.HttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -55,9 +54,11 @@ data class LksLesson(
 data class LksJournal(val lessons: List<LksLesson>, val period: String = "", val loadedAt: Long = 0)
 
 /**
- * ЛКС Сириуса (lks.siriusuniversity.ru, платформа «Тандем» на Laravel). Вход — обычная форма `/login`
- * (_token, login, password), оценки — `POST /journal/get` (JSON, с CSRF-токеном со страницы журнала).
- * Сайт пускает только с российских адресов — запросы идут прямо с телефона.
+ * ЛКС Сириуса (lks.siriusuniversity.ru, платформа «Тандем» на Laravel). Оценки — `POST /journal/get` (JSON,
+ * с CSRF-токеном со страницы журнала). Войти запросом нельзя: в форме `/login` стоит Яндекс SmartCaptcha
+ * (без `smart-token` сайт возвращает на /login с «Подтвердите, что вы не робот»), поэтому вход — во встроенном
+ * окне сайта, а сюда приходят его куки ([SessionCookies.fromWebView]).
+ * Сайт пускает только с российских адресов (иначе 418) — запросы идут прямо с телефона.
  */
 class LksClient(
     baseUrl: String = BASE,
@@ -83,37 +84,26 @@ class LksClient(
         val r = runCatching { http.newCall(Request.Builder().url(base + path).get().build()).execute() }
             .getOrElse { throw GradesException("ЛКС не отвечает. Проверь интернет (сайт открывается только из России).") }
         r.use {
-            if (it.code == 418 || it.code == 403) throw GradesException("ЛКС не пускает с этого адреса — нужен российский интернет")
+            if (it.code == 418 || it.code == 403) throw GradesException(BLOCKED)
             if (!it.isSuccessful) throw GradesException("ЛКС ответил ошибкой ${it.code}")
             return it.request.url.encodedPath to it.body?.string().orEmpty()
         }
     }
 
-    /** Вход по почте и паролю. После него куки сессии лежат в [cookies]. */
-    suspend fun login(email: String, password: String) = withContext(Dispatchers.IO) {
-        val (_, page) = get("/login")
-        val token = tokenRe.find(page)?.groupValues?.get(1) ?: metaRe.find(page)?.groupValues?.get(1)
-            ?: throw GradesException("Не нашёл форму входа ЛКС")
-        val body = FormBody.Builder().add("_token", token).add("login", email.trim()).add("password", password).add("remember", "on").build()
-        val r = runCatching { http.newCall(Request.Builder().url("$base/login").post(body).header("Referer", "$base/login").build()).execute() }
-            .getOrElse { throw GradesException("ЛКС не отвечает. Проверь интернет.") }
-        r.use {
-            if (it.code == 419) throw GradesException("ЛКС сбросил сессию — попробуй ещё раз")
-            val path = it.request.url.encodedPath
-            val text = it.body?.string().orEmpty()
-            if (path.startsWith("/login") || text.contains("name=\"password\"")) {
-                throw LoginException(if (text.contains("throttle", true) || text.contains("Слишком много", true)) "Слишком много попыток входа — подожди минуту" else "ЛКС не принял почту или пароль")
-            }
-        }
-    }
-
     /** Журнал: дисциплины, средний балл, рейтинг, пропуски и оценки по датам за [interval] ("term" — семестр, "year" — год). */
-    suspend fun journal(interval: String = "year", now: Long = System.currentTimeMillis()): LksJournal = withContext(Dispatchers.IO) {
+    suspend fun journal(
+        interval: String = "year",
+        now: Long = System.currentTimeMillis(),
+        retryDelay: Long = 3000,
+    ): LksJournal = withContext(Dispatchers.IO) {
         val (path, page) = get("/journal")
-        if (path.startsWith("/login")) throw LoginException("Сессия ЛКС закончилась")
+        if (path.startsWith("/login")) throw LoginException(EXPIRED)
         val csrf = metaRe.find(page)?.groupValues?.get(1) ?: throw GradesException("На странице журнала нет токена")
-        val start = Regex("""startPeriod:\s*'?(\d{4}-\d{2}-\d{2})""").find(page)?.groupValues?.get(1).orEmpty()
-        val end = Regex("""endPeriod:\s*'?(\d{4}-\d{2}-\d{2})""").find(page)?.groupValues?.get(1).orEmpty()
+        // Неделя из x-data страницы; если разметка поменялась — текущая неделя, как её считает сайт.
+        val week = java.time.Instant.ofEpochMilli(now).atZone(java.time.ZoneId.of("Europe/Moscow")).toLocalDate()
+            .with(java.time.DayOfWeek.MONDAY)
+        val start = periodRe("startPeriod").find(page)?.groupValues?.get(1) ?: week.toString()
+        val end = periodRe("endPeriod").find(page)?.groupValues?.get(1) ?: week.plusDays(6).toString()
         var tries = 0
         var result: LksJournal? = null
         while (result == null) {
@@ -126,13 +116,19 @@ class LksClient(
                 .header("X-CSRF-TOKEN", csrf).header("X-Requested-With", "XMLHttpRequest").header("Accept", "application/json")
                 .header("Referer", "$base/journal").build()
             val text = runCatching { http.newCall(req).execute() }.getOrElse { throw GradesException("ЛКС не отвечает") }.use { r ->
-                if (r.code == 401 || r.code == 419) throw LoginException("Сессия ЛКС закончилась")
+                if (r.code == 401 || r.code == 419 || r.request.url.encodedPath.startsWith("/login")) throw LoginException(EXPIRED)
+                if (r.code == 418 || r.code == 403) throw GradesException(BLOCKED)
                 if (!r.isSuccessful) throw GradesException("Журнал ЛКС ответил ошибкой ${r.code}")
                 r.body?.string().orEmpty()
             }
             val o = runCatching { json.parseToJsonElement(text).jsonObject }.getOrElse { throw GradesException("ЛКС прислал непонятный ответ") }
-            // Сайт ещё собирает журнал — так же, как страница, ждём и спрашиваем снова.
-            if ((o["cacheBuilding"] as? JsonPrimitive)?.booleanOrNull == true && tries++ < 12) { delay(3000); continue }
+            // Сайт ещё собирает журнал — так же, как страница (через 3 с, до 30 раз), ждём и спрашиваем снова.
+            // Пустой недособранный журнал не отдаём: он затёр бы сохранённые оценки.
+            if ((o["cacheBuilding"] as? JsonPrimitive)?.booleanOrNull == true) {
+                if (++tries >= 30) throw GradesException("ЛКС ещё собирает журнал — попробуй через минуту")
+                delay(retryDelay); continue
+            }
+            if ("lessons" !in o) throw GradesException("ЛКС прислал непонятный ответ")
             result = parse(o, now)
         }
         result
@@ -140,9 +136,12 @@ class LksClient(
 
     companion object {
         const val BASE = "https://lks.siriusuniversity.ru"
+        const val EXPIRED = "Вход в ЛКС истёк — войди заново"
+        private const val BLOCKED = "ЛКС не пускает с этого адреса — нужен российский интернет (если включён VPN, выключи его)"
         private val shared by lazy { OkHttpClient.Builder().connectTimeout(20, TimeUnit.SECONDS).readTimeout(60, TimeUnit.SECONDS).build() }
-        private val tokenRe = Regex("""name="_token"\s+value="([^"]+)"""")
         private val metaRe = Regex("""<meta name="csrf-token" content="([^"]+)"""")
+        /** `startPeriod: 2026-10-26`, `startPeriod: '2026-10-26'` или `&quot;startPeriod&quot;:&quot;2026-10-26`. */
+        private fun periodRe(name: String) = Regex(name + """\W{0,12}(\d{4}-\d{2}-\d{2})""")
 
         private fun JsonElement?.text(): String? = when (this) {
             null, is JsonNull -> null
@@ -245,5 +244,19 @@ class SessionCookies(initial: List<Cookie> = emptyList()) : CookieJar {
     companion object {
         fun parse(stored: String, url: HttpUrl): SessionCookies =
             SessionCookies(stored.lines().filter { it.isNotBlank() }.mapNotNull { Cookie.parse(url, it) })
+
+        /**
+         * Куки из встроенного окна (`CookieManager.getCookie`: «a=1; b=2», без сроков). Срок им даём долгий:
+         * сайт сам пришлёт настоящий при первом ответе, а кука «Запомнить меня» живёт годами.
+         */
+        fun fromWebView(header: String, url: HttpUrl, now: Long = System.currentTimeMillis()): SessionCookies =
+            SessionCookies(header.split(';').mapNotNull { part ->
+                val name = part.substringBefore('=', "").trim()
+                if (name.isEmpty()) return@mapNotNull null
+                runCatching {
+                    Cookie.Builder().name(name).value(part.substringAfter('=').trim()).hostOnlyDomain(url.host).path("/")
+                        .expiresAt(now + 400L * 24 * 3600 * 1000).build()
+                }.getOrNull()
+            })
     }
 }

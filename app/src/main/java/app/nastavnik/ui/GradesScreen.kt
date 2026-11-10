@@ -79,6 +79,7 @@ fun GradesScreen(onBack: (() -> Unit)?, onSettings: () -> Unit, onLks: () -> Uni
     val loading by repo.loading.collectAsStateWithLifecycle()
     val app = context.app
     val journal by repo.journal.collectAsStateWithLifecycle()
+    val needsLogin by repo.lksNeedsLogin.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { repo.load(); repo.loadJournal(); repo.refresh(); repo.refreshLks() }
 
     ScreenScaffold(title = "", onBack = null) {
@@ -108,16 +109,18 @@ fun GradesScreen(onBack: (() -> Unit)?, onSettings: () -> Unit, onLks: () -> Uni
         if (!repo.configured) {
             Column(Modifier.fillMaxWidth().enter().glass(RoundedCornerShape(28.dp), 10.dp).padding(22.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("Подключи личный кабинет", style = MaterialTheme.typography.titleMedium)
-                Text("Введи логин и пароль от ЛКС в настройках — оценки появятся здесь, а о новых придёт уведомление.", style = MaterialTheme.typography.bodyMedium, color = Brand.InkSoft)
+                Text("Войди в ЛКС в настройках — оценки появятся здесь, а о новых придёт уведомление.", style = MaterialTheme.typography.bodyMedium, color = Brand.InkSoft)
                 InkButton("Открыть настройки", onClick = onSettings)
             }
             return@ScreenScaffold
         }
         error?.let { StatusLine(it, Tone.ERROR) }
         if (repo.viaLks) {
+            // Вход истёк: войти заново можно только в окне сайта — там капча.
+            if (needsLogin) InkButton("Войти в ЛКС", onClick = onLks)
             val j = journal
             if (j == null) {
-                Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Brand.Accent) }
+                if (!needsLogin) Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Brand.Accent) }
                 return@ScreenScaffold
             }
             LksJournalView(j)
@@ -238,7 +241,7 @@ fun GradesCard(onOpen: () -> Unit) {
     }
 }
 
-/** Настройки: ЛКС — логин и пароль, вход во встроенном окне; Moodle — запасной вариант. */
+/** Настройки: ЛКС — вход во встроенном окне сайта (почта и пароль подставляются, капчу проходит человек); Moodle — запасной вариант. */
 @Composable
 fun GradesSettingsSection(onLks: () -> Unit = {}) {
     val context = LocalContext.current
@@ -256,33 +259,29 @@ fun GradesSettingsSection(onLks: () -> Unit = {}) {
     var error by remember { mutableStateOf<String?>(null) }
     SectionCard("Успеваемость (ЛКС)") {
         if (lks) {
-            Text("ЛКС: ${app.settings.lksLogin()}", style = MaterialTheme.typography.titleSmall)
+            Text(app.settings.lksLogin().ifEmpty { null }?.let { "ЛКС: $it" } ?: "ЛКС подключён", style = MaterialTheme.typography.titleSmall)
             Text("Оценки обновляются сами при открытии", style = MaterialTheme.typography.bodySmall, color = Brand.InkSoft)
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 LinkText("Открыть сайт ЛКС", onClick = onLks)
-                LinkText("Отключить") { app.grades.disconnectLks(); lks = false }
+                LinkText("Отключить") { app.grades.disconnectLks(); clearLksWebCookies(); lks = false }
             }
         } else {
-            FieldLabel("Вход в ЛКС", "Почта и пароль от lks.siriusuniversity.ru. Хранятся зашифрованными только на этом устройстве и уходят только на сайт ЛКС.")
+            FieldLabel(
+                "Вход в ЛКС",
+                "Вход — в окне сайта lks.siriusuniversity.ru: почту и пароль подставлю сам, останется отметить «Я не робот». " +
+                    "Пароль необязателен, хранится зашифрованным только на этом устройстве и вписывается только в форму ЛКС.",
+            )
             AppTextField(login, { login = it }, label = "Почта", keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email))
             AppTextField(
-                password, { password = it }, label = "Пароль",
+                password, { password = it }, label = if (app.settings.lksPassword().isNotEmpty()) "Пароль (сохранён)" else "Пароль",
                 visualTransformation = PasswordVisualTransformation(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
             )
-            AnimatedVisibility(error != null && !showMoodle, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) { StatusLine(error.orEmpty(), Tone.ERROR) }
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                InkButton("Подключить", enabled = !busy && login.isNotBlank() && password.isNotBlank()) {
-                    busy = true; error = null
-                    scope.launch {
-                        // Вход прямо запросом к ЛКС — без окна сайта; пароль сохраняется, только если ЛКС его принял.
-                        runCatching { app.grades.connectLks(login, password) }
-                            .onSuccess { lks = true; password = "" }
-                            .onFailure { error = it.message ?: "Не удалось войти в ЛКС" }
-                        busy = false
-                    }
-                }
-                if (busy) CircularProgressIndicator(Modifier.size(22.dp), color = Brand.Accent, strokeWidth = 2.dp)
+            // Запросом войти нельзя: в форме ЛКС капча. Окно сайта само заберёт сессию и вернёт в «Успеваемость».
+            InkButton("Войти в ЛКС", enabled = login.isNotBlank()) {
+                app.settings.setLks(login, password)
+                password = ""
+                onLks()
             }
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)

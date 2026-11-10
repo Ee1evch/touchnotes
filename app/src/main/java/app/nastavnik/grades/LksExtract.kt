@@ -111,7 +111,11 @@ object LksExtract {
 })()
 """
 
-    /** Вход: заполнить поля login/password (так, чтобы увидели React/Vue) и нажать «Войти». */
+    /**
+     * Вход: заполнить поля login/password (так, чтобы увидели Alpine/Livewire), отметить «Запомнить меня»
+     * и нажать «Войти», как только человек пройдёт Яндекс SmartCaptcha (появится непустой `smart-token`).
+     * Пустые значения не трогаем — человек вводит их сам.
+     */
     fun loginJs(login: String, password: String): String {
         fun q(s: String) = kotlinx.serialization.json.JsonPrimitive(s).toString()
         return """
@@ -120,11 +124,18 @@ object LksExtract {
   var p=document.querySelector("input[name='password'],input[type='password']");
   if(!l||!p)return 'no-form';
   function set(el,v){var d=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value');d.set.call(el,v);el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));}
-  set(l,${q(login)});set(p,${q(password)});
-  var b=document.querySelector("button[type='submit']")||Array.from(document.querySelectorAll('button')).find(function(x){return /войти/i.test(x.innerText);});
-  if(b){b.click();return 'submitted';}
-  var f=p.form; if(f){f.submit();return 'submitted';}
-  return 'no-button';
+  if(${q(login)})set(l,${q(login)});
+  if(${q(password)})set(p,${q(password)});
+  var r=document.querySelector("input[name='remember']"); if(r&&!r.checked)r.click();
+  if(!l.value||!p.value)return 'filled';
+  function submit(){var b=(p.form&&p.form.querySelector("button[type='submit']"))||document.querySelector("button[type='submit']");if(b)b.click();else if(p.form)p.form.submit();}
+  if(!document.getElementById('captcha-container')&&!document.querySelector("input[name='smart-token']")){submit();return 'submitted';}
+  if(window.__nastavnikWait)return 'waiting';
+  window.__nastavnikWait=setInterval(function(){
+    var t=document.querySelector("input[name='smart-token']");
+    if(t&&t.value){clearInterval(window.__nastavnikWait);submit();}
+  },400);
+  return 'waiting';
 })()
 """
     }

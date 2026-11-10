@@ -42,29 +42,34 @@ class GradesRepo(private val context: Context, private val settings: SettingsRep
     /** Журнал ЛКС: дисциплины, средний балл, рейтинг, пропуски, оценки по датам. */
     val journal: StateFlow<LksJournal?> = _journal
 
+    private val lksUrl = okhttp3.HttpUrl.Builder().scheme("https").host("lks.siriusuniversity.ru").build()
+    private val _lksNeedsLogin = MutableStateFlow(false)
+    /** Вход в ЛКС истёк: заново войти можно только в окне сайта (там капча) — показываем кнопку «Войти». */
+    val lksNeedsLogin: StateFlow<Boolean> = _lksNeedsLogin
+
     private fun lksClient(): Pair<LksClient, SessionCookies> {
-        val jar = SessionCookies.parse(settings.lksCookies(), okhttp3.HttpUrl.Builder().scheme("https").host("lks.siriusuniversity.ru").build())
+        val jar = SessionCookies.parse(settings.lksCookies(), lksUrl)
         return LksClient(cookies = jar) to jar
     }
 
-    /** Подключить ЛКС: войти и сразу забрать журнал. Пароль сохраняется, только если вход удался. */
-    suspend fun connectLks(email: String, password: String) {
-        val (client, jar) = lksClient()
-        jar.clear()
-        client.login(email, password)
-        settings.setLks(email, password)
-        settings.setLksCookies(jar.serialize())
-        refreshLksNow(client, jar)
+    /**
+     * Подключить ЛКС по кукам встроенного окна, где человек вошёл сам (форма с капчей), и сразу забрать журнал.
+     * Куки сохраняются, только если журнал открылся.
+     */
+    suspend fun connectLksWeb(cookieHeader: String) {
+        val jar = SessionCookies.fromWebView(cookieHeader, lksUrl)
+        refreshLksNow(LksClient(cookies = jar), jar)
+        _error.value = null
     }
 
     private suspend fun refreshLksNow(client: LksClient, jar: SessionCookies) {
         val j = try {
             client.journal()
         } catch (e: LksClient.LoginException) {
-            // Сессия закончилась — тихо входим заново тем же паролем.
-            client.login(settings.lksLogin(), settings.lksPassword())
-            client.journal()
+            _lksNeedsLogin.value = true
+            throw e
         }
+        _lksNeedsLogin.value = false
         settings.setLksCookies(jar.serialize())
         withContext(Dispatchers.IO) {
             journalFile.parentFile?.mkdirs()
@@ -128,6 +133,7 @@ class GradesRepo(private val context: Context, private val settings: SettingsRep
 
     fun disconnectLks() {
         settings.clearLks()
+        _lksNeedsLogin.value = false
         file.delete()
         journalFile.delete()
         _snapshot.value = null

@@ -58,7 +58,7 @@ jobs:
       # Каждая сборка из push — релиз build-<номер> с APK: по нему приложение находит обновление
       # («Настройки → Обновления») и ставит поверх, а по ссылке releases/latest всегда свежий APK.
       - name: Релиз для обновления из приложения
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' && github.ref_name != 'codex/nastavnik-updates'
         # Нет прав на релизы (форк, ограничения организации) — сборка всё равно зелёная.
         continue-on-error: true
         env:

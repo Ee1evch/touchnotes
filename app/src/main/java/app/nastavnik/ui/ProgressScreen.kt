@@ -71,14 +71,13 @@ fun ProgressScreen(onBack: () -> Unit, onReview: () -> Unit) {
                 Text("Здесь появится твой прогресс", style = MaterialTheme.typography.titleLarge)
                 Text(
                     "Каждый вопрос наставнику, найденная ошибка, чистовик и повторённая карточка считаются. " +
-                        "Занимайся хотя бы немного каждый день — и смотри, как растёт серия.",
+                        "Здесь можно посмотреть активность и темы с ошибками.",
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             return@ScreenScaffold
         }
-        StreakCard(s, todayActive = s.days.last() > 0)
         ActivityChart(s.days, now)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Stat(s.questions.toString(), ruPlural(s.questions, "вопрос наставнику", "вопроса наставнику", "вопросов наставнику"), R.drawable.ic_bulb, Modifier.weight(1f))
@@ -87,35 +86,6 @@ fun ProgressScreen(onBack: () -> Unit, onReview: () -> Unit) {
             Stat("$learned/$allCards", "карточек выучено", R.drawable.ic_cards, Modifier.weight(1f), onClick = onReview)
         }
         if (s.weakTopics.isNotEmpty()) WeakTopics(s.weakTopics)
-    }
-}
-
-@Composable
-private fun StreakCard(s: ProgressSummary, todayActive: Boolean) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .enter().glass(RoundedCornerShape(28.dp), 14.dp)
-            .padding(26.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(20.dp),
-    ) {
-        IconBadge(R.drawable.ic_flame, 64)
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(
-                if (s.streak > 0) "${s.streak} ${ruPlural(s.streak, "день", "дня", "дней")} подряд" else "Начни новую серию",
-                style = MaterialTheme.typography.headlineMedium,
-            )
-            Text(
-                when {
-                    s.streak == 0 -> "Один вопрос наставнику или пара карточек — и серия начнётся."
-                    !todayActive -> "Сегодня ещё не занимался — пара карточек сохранит серию."
-                    else -> "Сегодня уже занимался. Так держать!"
-                } + if (s.bestStreak > 1) " Лучшая серия: ${s.bestStreak} ${ruPlural(s.bestStreak, "день", "дня", "дней")}." else "",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
     }
 }
 

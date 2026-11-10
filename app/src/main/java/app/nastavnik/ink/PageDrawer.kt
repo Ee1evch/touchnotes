@@ -11,11 +11,12 @@ import android.graphics.RectF
 import android.graphics.Typeface
 import android.text.StaticLayout
 import android.text.TextPaint
+import app.nastavnik.ai.Drawing
 import app.nastavnik.ai.MarkKind
 import java.util.WeakHashMap
 
 /** Отметка наставника на странице: номер (как у заметки в панели), вид и место в единицах страницы. */
-data class PageMark(val number: Int, val kind: MarkKind, val rect: RectF)
+data class PageMark(val number: Int, val kind: MarkKind, val rect: RectF, val drawing: Drawing? = null)
 
 /**
  * Рисует страницу тетради в единицах страницы (ширина [PAGE_W]): бумагу, подложку, штрихи и отметки.
@@ -254,6 +255,13 @@ class PageDrawer {
             val color = kindColor(m.kind)
             val r = RectF(m.rect).apply { inset(-4 * px, -3 * px) }
             val strong = selected == m.number
+            if (m.drawing != null) {
+                markLine.color = color
+                markLine.strokeWidth = 2.5f * px
+                markLine.pathEffect = null
+                MentorDrawing.draw(c, m.rect, m.drawing, markLine, px)
+                continue
+            }
             markFill.color = color
             markFill.alpha = if (strong) 70 else when (m.kind) {
                 MarkKind.ERROR -> 42

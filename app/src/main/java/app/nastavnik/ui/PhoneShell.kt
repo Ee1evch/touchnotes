@@ -57,7 +57,6 @@ import app.nastavnik.R
 import app.nastavnik.app
 import app.nastavnik.schedule.Lesson
 import app.nastavnik.schedule.ScheduleNow
-import app.nastavnik.study.Streaks
 import app.nastavnik.study.ruPlural
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -147,10 +146,8 @@ private fun TodayTab(resumeTick: Int, go: (String) -> Unit, onRoom: (String) -> 
     val now by produceState(LocalDateTime.now(), resumeTick) { while (true) { value = LocalDateTime.now(); delay(30_000) } }
     val lessons by produceState<List<Lesson>?>(null, version, resumeTick, now.toLocalDate()) { value = app.schedule.day(LocalDate.now()) }
     val tomorrow by produceState<List<Lesson>>(emptyList(), version, resumeTick) { value = app.schedule.day(LocalDate.now().plusDays(1)) }
-    val reminders by remember { app.db.reminders().observeAll() }.collectAsStateWithLifecycle(initialValue = emptyList())
     val nowMs = remember(resumeTick) { System.currentTimeMillis() }
     val due by remember(nowMs) { app.db.cards().observeDueCount(nowMs) }.collectAsStateWithLifecycle(initialValue = 0)
-    val events by remember { app.db.activity().observeAll() }.collectAsStateWithLifecycle(initialValue = emptyList())
     val sync by app.sync.status.collectAsStateWithLifecycle()
 
     ScreenScaffold(title = "", onBack = null) {
@@ -171,29 +168,8 @@ private fun TodayTab(resumeTick: Int, go: (String) -> Unit, onRoom: (String) -> 
 
         NowCard(lessons, tomorrow, now, hasGroup = app.settings.scheduleGroup().isNotBlank(), onRoom = onRoom, onSchedule = { onTab(PhoneTab.SCHEDULE) })
 
-        // Напоминания: ближайшие три и «добавить».
-        val open = reminders.filter { !it.done }.take(3)
-        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Напоминания", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f).padding(start = 4.dp))
-                LinkText(if (open.isEmpty()) "Добавить" else "Все", onClick = { go(MainActivity.SCREEN_REMINDERS) })
-            }
-            if (open.isEmpty()) {
-                Text("Пусто. Дедлайны и дела — сюда, напомню вовремя.", style = MaterialTheme.typography.bodyMedium, color = Brand.InkSoft, modifier = Modifier.padding(start = 4.dp))
-            }
-            open.forEach { r ->
-                ReminderRow(r, onToggle = {
-                    app.appScope.launch { app.db.reminders().put(r.copy(done = true)); remindersChanged(context) }
-                }, onClick = { go(MainActivity.SCREEN_REMINDERS) })
-            }
-        }
-
         GradesCard(onOpen = { go(MainActivity.SCREEN_GRADES) })
 
-        // Карточки и серия.
-        val today = Streaks.day(nowMs)
-        val perDay = remember(events) { events.groupingBy { Streaks.day(it.at) }.eachCount() }
-        val streak = remember(perDay, today) { Streaks.current(perDay.keys, today) }
         Row(
             Modifier.fillMaxWidth().enter().glass(RoundedCornerShape(24.dp), 10.dp).clickable { go(MainActivity.SCREEN_REVIEW) }.padding(18.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -205,13 +181,6 @@ private fun TodayTab(resumeTick: Int, go: (String) -> Unit, onRoom: (String) -> 
                     Text(ruPlural(due, "карточка ждёт", "карточки ждут", "карточек ждут"), style = MaterialTheme.typography.bodyMedium, color = Brand.InkSoft)
                 } else {
                     Text("Всё повторено", style = MaterialTheme.typography.titleMedium)
-                }
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 6.dp)) {
-                    Icon(painterResource(R.drawable.ic_flame), contentDescription = null, tint = if (streak > 0) Brand.Theory else Brand.InkSoft, modifier = Modifier.size(16.dp))
-                    Text(
-                        if (streak > 0) " $streak ${ruPlural(streak, "день", "дня", "дней")} подряд" else " начни серию сегодня",
-                        style = MaterialTheme.typography.labelMedium, color = Brand.InkSoft,
-                    )
                 }
             }
             if (due > 0) InkButton("Повторить", icon = R.drawable.ic_cards) { go(MainActivity.SCREEN_REVIEW) }
@@ -303,8 +272,7 @@ private fun StudyTab(resumeTick: Int, go: (String) -> Unit) {
         Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             val rows = listOf(
                 Triple(R.drawable.ic_chart, "Успеваемость", "Оценки из личного кабинета") to MainActivity.SCREEN_GRADES,
-                Triple(R.drawable.ic_flame, "Прогресс", "Серия и темы с ошибками") to MainActivity.SCREEN_PROGRESS,
-                Triple(R.drawable.ic_bell, "Напоминания", "Дедлайны и дела на всех устройствах") to MainActivity.SCREEN_REMINDERS,
+                Triple(R.drawable.ic_chart, "Прогресс", "Активность и темы с ошибками") to MainActivity.SCREEN_PROGRESS,
                 Triple(R.drawable.ic_notebook, "Конспекты", "Тетради с планшета — посмотреть") to MainActivity.SCREEN_NOTEBOOKS,
                 Triple(R.drawable.ic_history, "Чистовики", "PDF аккуратных конспектов") to MainActivity.SCREEN_HISTORY,
             )
