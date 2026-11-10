@@ -15,6 +15,8 @@ jobs:
     permissions:
       contents: write
     timeout-minutes: 40
+    env:
+      BUILD_NUMBER: ${{ github.ref_name == 'codex/nastavnik-updates' && startsWith(github.event.head_commit.message, 'Опубликовать сборку 145') && '145' || github.run_number }}
     steps:
       - uses: actions/checkout@v4
 
@@ -38,7 +40,7 @@ jobs:
         run: ./gradlew --no-daemon testDebugUnitTest
 
       - name: Сборка debug APK
-        run: ./gradlew --no-daemon assembleDebug
+        run: GITHUB_RUN_NUMBER="$BUILD_NUMBER" ./gradlew --no-daemon assembleDebug
 
       - name: Отчёты тестов
         if: always()
@@ -58,17 +60,17 @@ jobs:
       # Каждая сборка из push — релиз build-<номер> с APK: по нему приложение находит обновление
       # («Настройки → Обновления») и ставит поверх, а по ссылке releases/latest всегда свежий APK.
       - name: Релиз для обновления из приложения
-        if: github.event_name == 'push' && github.ref_name != 'codex/nastavnik-updates'
+        if: github.event_name == 'push' && (github.ref_name != 'codex/nastavnik-updates' || env.BUILD_NUMBER == '145')
         # Нет прав на релизы (форк, ограничения организации) — сборка всё равно зелёная.
-        continue-on-error: true
+        continue-on-error: ${{ github.ref_name != 'codex/nastavnik-updates' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           cp app/build/outputs/apk/debug/app-debug.apk nastavnik.apk
-          gh release create "build-${{ github.run_number }}" nastavnik.apk \
+          gh release create "build-$BUILD_NUMBER" nastavnik.apk \
             --repo "${{ github.repository }}" \
             --target "${{ github.sha }}" \
-            --title "Наставник, сборка ${{ github.run_number }}" \
+            --title "Наставник, сборка $BUILD_NUMBER" \
             --notes "Ветка ${{ github.ref_name }}, коммит ${{ github.sha }}" \
             --latest
 
