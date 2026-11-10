@@ -61,13 +61,13 @@ class ContextPageMenu(base: Context, private val wm: WindowManager) {
         })
         container.addView(row)
         val area = OverlayWindows.contentRect(context)
-        container.addView(ScrollView(context).apply { addView(list) }, LinearLayout.LayoutParams(dp(300f), minOf(dp(320f), area.height / 2)))
+        container.addView(ScrollView(context).apply { addView(list) }, LinearLayout.LayoutParams(dp(300f), minOf(dp(320f), area.height() / 2)))
         container.addView(Button(context).apply {
             text = "Готово"
             setOnClickListener { onSave(if (all) null else chosen.toSet()); dismiss() }
         })
         val params = OverlayWindows.params(
-            minOf(dp(340f), area.width), WindowManager.LayoutParams.WRAP_CONTENT,
+            minOf(dp(340f), area.width()), WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
         ).apply { gravity = Gravity.CENTER }
         runCatching { wm.addView(container, params); root = container }
