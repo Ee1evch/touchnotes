@@ -47,8 +47,6 @@ class StudyWidget : AppWidgetProvider() {
             val app = context.app
             val now = System.currentTimeMillis()
             val due = app.db.cards().observeDueCount(now).first()
-            val days = app.db.activity().observeAll().first().map { Streaks.day(it.at) }.toSet()
-            val streak = Streaks.current(days, Streaks.day(now))
             val exam = app.study.nextExam(now)
 
             val views = RemoteViews(context.packageName, R.layout.widget_study)
@@ -56,7 +54,6 @@ class StudyWidget : AppWidgetProvider() {
                 R.id.widget_due,
                 if (due > 0) "$due ${ruPlural(due, "карточка ждёт", "карточки ждут", "карточек ждут")}" else "На сегодня всё повторено",
             )
-            views.setTextViewText(R.id.widget_streak, if (streak > 0) "$streak ${ruPlural(streak, "день", "дня", "дней")} подряд" else "")
             views.setTextViewText(
                 R.id.widget_exam,
                 exam?.let {

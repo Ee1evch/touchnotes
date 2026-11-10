@@ -128,7 +128,6 @@ object Homeworks {
     fun save(c: Context, hw: Homework) {
         write(File(dir(c), "${hw.id}.json"), json.encodeToString(Homework.serializer(), hw))
         _version.value++
-        runCatching { HomeworkReminder.schedule(c) }
     }
 
     fun delete(c: Context, hw: Homework) {
@@ -506,21 +505,10 @@ object Homeworks {
         return true
     }
 
-    /** ДЗ изменилось — пересчитать замок и сирену. */
+    /** ДЗ изменилось — пересчитать учебный замок. */
     private fun afterChange(c: Context) {
         val app = c.applicationContext as? NastavnikApp ?: return
-        app.appScope.launch {
-            runCatching { StudyLock.status(app) }
-            runCatching { Siren.check(app) }
-            // ДЗ закрыто на 100%, а задача дня уже решена — сирена замолкает сразу.
-            runCatching {
-                val date = StudyLockRules.sessionDate(java.time.LocalDateTime.now())
-                if (SirenService.ringing && SirenPrefs.of(app).solved(date) > 0 && openFor(app, date).isEmpty()) {
-                    app.stopService(android.content.Intent(app, SirenService::class.java))
-                }
-            }
-            runCatching { HomeworkReminder.schedule(app) }
-        }
+        app.appScope.launch { runCatching { StudyLock.status(app) } }
     }
 
     // ---------------- карточки ----------------

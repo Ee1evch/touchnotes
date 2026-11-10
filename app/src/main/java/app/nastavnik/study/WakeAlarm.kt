@@ -156,6 +156,22 @@ object WakeAlarm {
         }
     }
 
+    /** Снять будильники и защиту, оставшиеся после обновления приложения. */
+    fun cancelRemovedAlarm(context: Context) {
+        val w = prefs(context)
+        w.on = false
+        w.guardUntil = 0
+        val manager = am(context)
+        manager?.cancel(broadcast(context, ACTION_RING, REQ_RING))
+        manager?.cancel(broadcast(context, ACTION_BEDTIME, REQ_BEDTIME))
+        manager?.cancel(broadcast(context, ACTION_CHECK, REQ_CHECK))
+        manager?.cancel(broadcast(context, ACTION_RING, REQ_BACKUP))
+        val notifications = context.getSystemService(NotificationManager::class.java)
+        notifications?.cancel(NOTIFY_RING)
+        notifications?.cancel(NOTIFY_CHECK)
+        notifications?.cancel(NOTIFY_BEDTIME)
+    }
+
     /** Поставить заново: при запуске, после смены расписания, настроек, «Ложусь», перезагрузки. */
     suspend fun reschedule(context: Context) {
         val am = am(context) ?: return

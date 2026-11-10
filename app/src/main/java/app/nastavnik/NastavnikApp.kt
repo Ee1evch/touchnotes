@@ -17,8 +17,9 @@ import app.nastavnik.data.AppUsage
 import app.nastavnik.data.SettingsRepo
 import app.nastavnik.ink.Notebooks
 import app.nastavnik.session.CleanSession
-import app.nastavnik.study.Reminders
 import app.nastavnik.study.Alarms
+import app.nastavnik.study.Siren
+import app.nastavnik.study.WakeAlarm
 import app.nastavnik.study.WakePrefs
 import app.nastavnik.ui.Palettes
 import app.nastavnik.schedule.ScheduleRepo
@@ -97,8 +98,9 @@ class NastavnikApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        // До первой разблокировки после перезагрузки обычные настройки и база недоступны —
-        // запускается только будильник (его состояние в отдельном хранилище). Остальное — после разблокировки.
+        WakeAlarm.cancelRemovedAlarm(this)
+        Siren.cancelRemovedSiren(this)
+        // Обычные настройки и база доступны после первой разблокировки.
         if (!WakePrefs.unlocked(this)) {
             createChannels()
             androidx.core.content.ContextCompat.registerReceiver(
@@ -125,8 +127,7 @@ class NastavnikApp : Application() {
         settings.forgetLksPassword()
         settings.migrateToParentDesign()
         Palettes.installWallpaper(this)
-        // Лёгкая версия: без своих напоминаний (только расписание, оценки, живое уведомление).
-        if (!BuildConfig.STUDENT) Reminders.schedule(this)
+        if (!BuildConfig.STUDENT) Alarms.cancelRemovedReminders(this)
         Alarms.rescheduleAll(this)
         GradesJob.schedule(this)
     }
@@ -142,38 +143,15 @@ class NastavnikApp : Application() {
             setShowBadge(false)
         }
         nm.createNotificationChannel(channel)
-        nm.createNotificationChannel(
-            NotificationChannel(CHANNEL_REMINDERS, "Повторение карточек", NotificationManager.IMPORTANCE_DEFAULT).apply {
-                description = "Раз в день вечером, если есть карточки к повторению и ты ещё не занимался"
-            },
-        )
-        nm.createNotificationChannel(
-            NotificationChannel(CHANNEL_PERSONAL, "Мои напоминания", NotificationManager.IMPORTANCE_HIGH).apply {
-                description = "Напоминания, которые ты создал сам — на любом из своих устройств"
-            },
-        )
+        listOf("wake", "sleep", "reminders", "personal").forEach(nm::deleteNotificationChannel)
         nm.createNotificationChannel(
             NotificationChannel(CHANNEL_GRADES, "Новые оценки", NotificationManager.IMPORTANCE_DEFAULT).apply {
                 description = "Когда в личном кабинете появляется новая оценка"
             },
         )
         nm.createNotificationChannel(
-            NotificationChannel(CHANNEL_WAKE, "Будильник", NotificationManager.IMPORTANCE_HIGH).apply {
-                description = "Будильник к первой паре и проверка «Ты встал?». Звук играет сам будильник"
-                setSound(null, null)
-                enableVibration(false)
-                lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
-                setBypassDnd(true)
-            },
-        )
-        nm.createNotificationChannel(
             NotificationChannel(CHANNEL_LOCK, "Вечерняя учёба", NotificationManager.IMPORTANCE_HIGH).apply {
                 description = "Предупреждение за 30 минут и замок приложений до вечерней учёбы"
-            },
-        )
-        nm.createNotificationChannel(
-            NotificationChannel(CHANNEL_SLEEP, "Сон", NotificationManager.IMPORTANCE_DEFAULT).apply {
-                description = "Вечером: когда лечь, чтобы проснуться в конце цикла сна"
             },
         )
         nm.createNotificationChannel(
@@ -185,8 +163,6 @@ class NastavnikApp : Application() {
 
     companion object {
         const val CHANNEL_SERVICE = "service"
-        const val CHANNEL_REMINDERS = "reminders"
-        const val CHANNEL_PERSONAL = "personal"
         const val CHANNEL_LESSONS = "lessons"
         const val CHANNEL_GRADES = "grades"
         const val CHANNEL_WAKE = "wake"

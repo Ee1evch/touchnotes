@@ -30,14 +30,7 @@
         <activity android:name=".ui.ProjectionPermissionActivity" tools:node="remove" />
         <service android:name=".overlay.BubbleService" tools:node="remove" />
         <receiver android:name=".study.StudyWidget" tools:node="remove" />
-        <receiver android:name=".study.WakeReceiver" tools:node="remove" />
-        <receiver android:name=".study.WakeBootReceiver" tools:node="remove" />
-        <service android:name=".study.WakeService" tools:node="remove" />
-        <receiver android:name=".study.SirenReceiver" tools:node="remove" />
-        <service android:name=".study.SirenService" tools:node="remove" />
-        <activity android:name=".ui.SirenActivity" tools:node="remove" />
         <receiver android:name=".study.StudyLockReceiver" tools:node="remove" />
         <service android:name=".study.WakeGuard" tools:node="remove" />
-        <activity android:name=".ui.WakeActivity" tools:node="remove" />
     </application>
 </manifest>

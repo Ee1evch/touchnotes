@@ -48,11 +48,8 @@ import app.nastavnik.schedule.ScheduleNow
 import app.nastavnik.study.Exam
 import app.nastavnik.study.ExamPlan
 import app.nastavnik.study.DayPlan
-import app.nastavnik.study.SirenPrefs
 import app.nastavnik.study.StudyLock
 import app.nastavnik.study.StudyLockRules
-import app.nastavnik.study.WakeAlarm
-import app.nastavnik.study.WakePrefs
 import app.nastavnik.study.ruPlural
 import kotlinx.coroutines.launch
 import java.time.LocalDateTime
@@ -221,74 +218,17 @@ fun CardsTile(modifier: Modifier, due: Int, go: (String) -> Unit) = HomeTile(
     onClick = { go(MainActivity.SCREEN_REVIEW) },
 )
 
-/** Плитка «Серия»: дни подряд и неделя точками. */
+/** Ближайший экзамен. */
 @Composable
-fun StreakTile(modifier: Modifier, streak: Int, week: List<Int>, go: (String) -> Unit) = HomeTile(
-    modifier = modifier,
-    icon = R.drawable.ic_flame,
-    big = streak.toString(),
-    caption = if (streak > 0) ruPlural(streak, "день подряд", "дня подряд", "дней подряд") else "начни серию",
-    accent = false,
-    onClick = { go(MainActivity.SCREEN_PROGRESS) },
-) {
-    Row(horizontalArrangement = Arrangement.spacedBy(3.dp), modifier = Modifier.padding(top = 6.dp)) {
-        week.forEach { n -> Box(Modifier.size(8.dp).clip(CircleShape).background(if (n > 0) Brand.Theory else Brand.Line)) }
+fun ExamTile(modifier: Modifier, exam: Exam?, go: (String) -> Unit) {
+    val onClick = { go(MainActivity.SCREEN_EXAMS) }
+    if (exam == null) {
+        HomeTile(modifier, R.drawable.ic_target, "+", "добавь экзамен", false, onClick)
+        return
     }
-}
-
-/** Плитка «Будильник»: время подъёма и «лечь до»; без будильника — экзамен (или приглашение). */
-@Composable
-fun AlarmTile(modifier: Modifier, exam: Exam?, resumeTick: Int, promoteAlarm: Boolean, go: (String) -> Unit) {
-    val context = LocalContext.current
-    val wakeOn = remember(resumeTick) { WakePrefs.of(context).on }
-    val plan by produceState<WakeAlarm.Plan?>(null, resumeTick, wakeOn) { value = if (wakeOn) WakeAlarm.plan(context) else null }
-    val p = plan
-    when {
-        wakeOn && p != null -> HomeTile(modifier, R.drawable.ic_bell, WakeAlarm.hm(p.wake), "лечь до ${WakeAlarm.hm(p.bedtime)}", false, { go(MainActivity.SCREEN_SETTINGS) })
-        exam != null -> {
-            val days = ExamPlan.daysLeft(exam.at, System.currentTimeMillis())
-            HomeTile(
-                modifier, R.drawable.ic_target,
-                if (days == 0) "сегодня" else "$days ${ruPlural(days, "день", "дня", "дней")}",
-                exam.subject, days <= 3, { go(MainActivity.SCREEN_EXAMS) },
-            )
-        }
-        promoteAlarm -> HomeTile(modifier, R.drawable.ic_bell, "—", if (wakeOn) "пар на неделе нет" else "будильник к паре", false, { go(MainActivity.SCREEN_SETTINGS) })
-        else -> HomeTile(modifier, R.drawable.ic_target, "+", "добавь экзамен", false, { go(MainActivity.SCREEN_EXAMS) })
-    }
-}
-
-/** Напоминания одной карточкой: заголовок с «+», ближайшие три. */
-@Composable
-fun RemindersCard(go: (String) -> Unit) {
-    val context = LocalContext.current
-    val app = context.app
-    val reminders by remember { app.db.reminders().observeAll() }.collectAsStateWithLifecycle(initialValue = emptyList())
-    val open = reminders.filter { !it.done }.take(3)
-    Column(
-        Modifier.fillMaxWidth().enter().glass(RoundedCornerShape(26.dp), 10.dp).padding(horizontal = 16.dp, vertical = 14.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(painterResource(R.drawable.ic_bell), contentDescription = null, tint = Brand.Accent, modifier = Modifier.size(18.dp))
-            Text("Напоминания", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f).padding(start = 8.dp))
-            if (reminders.any { !it.done }) LinkText("Все", onClick = { go(MainActivity.SCREEN_REMINDERS) })
-            Spacer(Modifier.width(8.dp))
-            Box(
-                Modifier.size(32.dp).clip(CircleShape).background(Brand.Accent).clickable { go(MainActivity.SCREEN_REMINDERS) }
-                    .semantics { contentDescription = "Добавить напоминание" },
-                contentAlignment = Alignment.Center,
-            ) { Icon(painterResource(R.drawable.ic_plus), contentDescription = null, tint = Brand.OnAccent, modifier = Modifier.size(17.dp)) }
-        }
-        if (open.isEmpty()) {
-            Text("Пусто. Дедлайны и дела — сюда, напомню вовремя.", style = MaterialTheme.typography.bodyMedium, color = Brand.InkSoft)
-        }
-        open.forEach { r ->
-            ReminderRow(r, onToggle = {
-                app.appScope.launch { app.db.reminders().put(r.copy(done = true)); remindersChanged(context) }
-            }, onClick = { go(MainActivity.SCREEN_REMINDERS) })
-        }
-    }
+    val days = ExamPlan.daysLeft(exam.at, System.currentTimeMillis())
+    val label = if (days == 0) "сегодня" else "$days ${ruPlural(days, "день", "дня", "дней")}"
+    HomeTile(modifier, R.drawable.ic_target, label, exam.subject, days <= 3, onClick)
 }
 
 /** Разделы сеткой из компактных плиток — не длинным списком. */
@@ -320,11 +260,10 @@ val TABLET_SECTIONS = listOf(
     Triple(R.drawable.ic_calendar, "Расписание", MainActivity.SCREEN_SCHEDULE),
     Triple(R.drawable.ic_chart, "Оценки", MainActivity.SCREEN_GRADES),
     Triple(R.drawable.ic_target, "Тренировка", MainActivity.SCREEN_TRAINING),
-    Triple(R.drawable.ic_flame, "Прогресс", MainActivity.SCREEN_PROGRESS),
+    Triple(R.drawable.ic_chart, "Прогресс", MainActivity.SCREEN_PROGRESS),
     Triple(R.drawable.ic_calendar, "Экзамены", MainActivity.SCREEN_EXAMS),
     Triple(R.drawable.ic_history, "История", MainActivity.SCREEN_HISTORY),
     Triple(R.drawable.ic_note, "Чистовик", MainActivity.SCREEN_CLEAN),
-    Triple(R.drawable.ic_bell, "Напоминания", MainActivity.SCREEN_REMINDERS),
 )
 
 /**
@@ -395,30 +334,3 @@ fun PlanCard(resumeTick: Int) {
         }
     }
 }
-
-/** «Задача дня» на главной: в день с парами, пока не решена, — можно решить заранее, до сирены в 20:00. */
-@Composable
-fun SirenCard(resumeTick: Int) {
-    val context = LocalContext.current
-    val show by produceState(false, resumeTick) {
-        val s = SirenPrefs.of(context)
-        val date = StudyLockRules.sessionDate(LocalDateTime.now())
-        value = s.on && s.solved(date) == 0 && StudyLockRules.disciplines(context.app.schedule.day(date)).isNotEmpty()
-    }
-    if (!show) return
-    Row(
-        Modifier.fillMaxWidth().enter().glass(RoundedCornerShape(24.dp), 10.dp)
-            .clickable { context.startActivity(android.content.Intent(context, SirenActivity::class.java)) }
-            .padding(16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-        Icon(painterResource(R.drawable.ic_target), contentDescription = null, tint = Brand.Error, modifier = Modifier.size(22.dp))
-        Column(Modifier.weight(1f)) {
-            Text("Задача дня", style = MaterialTheme.typography.titleMedium)
-            Text("Реши до 20:00 — иначе сирена", style = MaterialTheme.typography.bodySmall, color = Brand.InkSoft)
-        }
-        InkButton("Решить") { context.startActivity(android.content.Intent(context, SirenActivity::class.java)) }
-    }
-}
-

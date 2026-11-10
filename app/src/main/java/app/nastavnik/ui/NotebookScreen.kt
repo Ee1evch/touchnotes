@@ -60,6 +60,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -521,6 +522,11 @@ private fun AnswerView(ctl: NotebookController, answer: AnswerUi, onBack: () -> 
             Icon(painterResource(R.drawable.ic_chevron_left), contentDescription = null, tint = Brand.Ink, modifier = Modifier.size(20.dp))
             Text("Вопросы", style = MaterialTheme.typography.labelLarge)
         }
+        if (answer.marks.any { it.box != null }) {
+            SoftButton(if (ctl.marksVisible) "Скрыть выделение" else "Показать выделение", icon = if (ctl.marksVisible) R.drawable.ic_eye_off else R.drawable.ic_eye) {
+                ctl.toggleMarks()
+            }
+        }
         Column(
             Modifier
                 .weight(1f)
@@ -563,6 +569,7 @@ private fun AskView(
     var question by remember { mutableStateOf("") }
     var listening by remember { mutableStateOf(false) }
     var speechProblem by remember { mutableStateOf<String?>(null) }
+    var selectPages by remember { mutableStateOf(false) }
     val speech = remember {
         SpeechInput(context, object : SpeechInput.Callback {
             override fun onListening(active: Boolean) { listening = active }
@@ -630,6 +637,7 @@ private fun AskView(
                 }
             }
         }
+        SoftButton("Страницы для наставника", icon = R.drawable.ic_note) { selectPages = true }
         // Плитки вопросов: два столбца, понятные подписи.
         ASKS.chunked(2).forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -650,6 +658,33 @@ private fun AskView(
                 question = ""
             }
         }
+    }
+    if (selectPages) {
+        AlertDialog(
+            onDismissRequest = { selectPages = false },
+            title = { Text("Страницы для наставника") },
+            text = {
+                Column {
+                    Text("Текущая страница отправляется всегда.")
+                    Row {
+                        LinkText("Все", onClick = { ctl.selectAllContextPages() })
+                        Spacer(Modifier.width(24.dp))
+                        LinkText("Снять все", onClick = { ctl.selectNoContextPages() })
+                    }
+                    Column(Modifier.height(240.dp).verticalScroll(rememberScrollState())) {
+                        ctl.pages.forEachIndexed { i, p ->
+                            val current = i == ctl.index
+                            val checked = current || ctl.selectedContextPages?.contains(p.id) != false
+                            Row(Modifier.fillMaxWidth().clickable(enabled = !current) { ctl.selectContextPage(p.id, !checked) }, verticalAlignment = Alignment.CenterVertically) {
+                                Checkbox(checked = checked, enabled = !current, onCheckedChange = { ctl.selectContextPage(p.id, it) })
+                                Text("Страница ${i + 1}" + if (current) " · текущая" else "")
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = { LinkText("Готово", onClick = { selectPages = false }) },
+        )
     }
 }
 

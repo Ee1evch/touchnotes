@@ -121,7 +121,7 @@ class AnswerOverlay(baseContext: Context, private val wm: WindowManager, private
         val e = Entry(m, anchor)
         val area = contentArea()
         if (shifted != null) {
-            val mv = MarkView(ctx, m.kind)
+            val mv = MarkView(ctx, m.kind, m.drawing)
             val p = OverlayWindows.absParams(
                 shifted.left - mv.pad, shifted.top - mv.pad, shifted.width + 2 * mv.pad, shifted.height + 2 * mv.pad,
                 WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,

@@ -76,6 +76,8 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
     private lateinit var wm: WindowManager
     private lateinit var bubble: BubbleView
     private lateinit var menu: BubbleMenu
+    private lateinit var contextPageMenu: ContextPageMenu
+    private var selectedContextPages: Set<Long>? = null
     private lateinit var bar: BubbleBar
     private lateinit var askBar: AskBar
     private lateinit var overlay: AnswerOverlay
@@ -172,6 +174,7 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
         bubble = BubbleView(ContextWrapperOverlay(this), this)
         menu = BubbleMenu(this, wm)
         bar = BubbleBar(this, wm).apply { onDismiss = { barOwner = BarOwner.NONE; barText = null } }
+        contextPageMenu = ContextPageMenu(this, wm)
         askBar = AskBar(this, wm, this)
         overlay = AnswerOverlay(this, wm, this).apply { bubbleRect = { this@BubbleService.bubbleRect() } }
         mentor = MentorSession(napp, lifecycleScope)
@@ -264,6 +267,7 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
         if (ready) {
             speech.destroy()
             menu.dismiss()
+            contextPageMenu.dismiss()
             bar.dismiss()
             askBar.dismiss()
             overlay.clear()
@@ -459,6 +463,7 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
         items += BarItem(QuickAction.SIMILAR.short, R.drawable.ic_refresh) { quick(QuickAction.SIMILAR) }
         items += BarItem("Спросить голосом", R.drawable.ic_mic) { askByVoice() }
         items += BarItem("Спросить текстом", R.drawable.ic_pen) { askBar.show(anchor()) }
+        items += BarItem("Страницы конспекта", R.drawable.ic_book) { chooseContextPages() }
         items += BarItem("Чистовик", R.drawable.ic_note) { startClean() }
         if (overlay.isShowing) {
             items += BarItem("Убрать заметки", R.drawable.ic_close) { mentor.dismiss() }
@@ -495,6 +500,7 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
                 MenuEntry(if (readingMode) "Закончить чтение конспекта" else "Пролистать весь конспект", R.drawable.ic_book) {
                     if (readingMode) stopReading() else startReading()
                 },
+                MenuEntry("Страницы конспекта", R.drawable.ic_book) { chooseContextPages() },
                 MenuEntry("Забыть конспект", R.drawable.ic_trash) { forgetNotebook() },
                 MenuEntry("История", R.drawable.ic_history) { openScreen(MainActivity.SCREEN_HISTORY) },
                 MenuEntry("Повторить карточки", R.drawable.ic_cards) { openScreen(MainActivity.SCREEN_REVIEW) },
@@ -785,8 +791,7 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
     /** Снимок без наших окон, без системных панелей, не больше 1500 px и 1,15 Мп, JPEG 85%. [contextPages] — сколько страниц конспекта приложить. */
     private suspend fun takeShot(
         numberLines: Boolean = true,
-        // Быстрые ответы: меньше соседних страниц — запрос легче, ответ раньше.
-        contextPages: Int = if (napp.settings.load().fastAnswers) FAST_CONTEXT_PAGES else CONTEXT_PAGES,
+        contextPages: Int = Int.MAX_VALUE,
     ): ShotResult {
         if (!ensureProjection()) {
             return ShotResult.Failed(
@@ -935,6 +940,7 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
     private suspend fun rememberAskedPage(full: android.graphics.Bitmap, thumb: Thumb, limit: Int): List<ByteArray> {
         val s = settings ?: return emptyList()
         if (!s.seeNotebook || !notebookReady) return emptyList()
+        val selected = selectedContextPages
         val area = OverlayWindows.contentRect(this)
         return withContext(nb) {
             runCatching {
@@ -960,7 +966,7 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
                 pageCheckPending = false
                 jumped = false
                 notebookPages = notebook.size
-                notebook.context(page.id, limit)
+                notebook.context(page.id, limit, selected)
             }.getOrDefault(emptyList())
         }
     }
@@ -1072,7 +1078,21 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
         )
     }
 
+    private fun chooseContextPages() {
+        if (!notebookReady) { notice("Конспект ещё загружается."); return }
+        bar.dismiss()
+        lifecycleScope.launch {
+            val ids = withContext(nb) { notebook.pages.map { it.id } }
+            if (ids.isEmpty()) {
+                notice("Пока нет сохранённых страниц. Пролистай конспект или задай вопрос.")
+            } else {
+                contextPageMenu.show(ids, selectedContextPages) { selectedContextPages = it }
+            }
+        }
+    }
+
     private fun forgetNotebook() {
+        selectedContextPages = null
         lifecycleScope.launch {
             withContext(nb) {
                 notebook.clear()
@@ -1168,7 +1188,7 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
         ) {
             dirty = false
             lastWatchAt = now
-            mentor.ask(Prompts.WATCH_PROMPT, AskKind.WATCH) { takeShot(contextPages = WATCH_CONTEXT_PAGES) }
+            mentor.ask(Prompts.WATCH_PROMPT, AskKind.WATCH) { takeShot(contextPages = Int.MAX_VALUE) }
         }
     }
 
@@ -1271,10 +1291,6 @@ class BubbleService : LifecycleService(), BubbleView.Listener, SpeechInput.Callb
         private const val NUDGE_B = 0x02FFFFFF
         private const val READING_TICK_MS = 900L
 
-        /** Сколько других страниц конспекта прикладывать к вопросу и к тихой проверке. */
-        private const val CONTEXT_PAGES = 8
-        private const val FAST_CONTEXT_PAGES = 3
-        private const val WATCH_CONTEXT_PAGES = 4
         private const val MIN_WATCH_GAP_MS = 45_000L
 
         /** Если изменилось больше этой доли экрана, а сдвига нет — страницу увеличили или сменили. */

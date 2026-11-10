@@ -12,6 +12,21 @@ class ScreenAnswerParserTest {
     private fun near(expected: Float, actual: Float) = assertEquals(expected, actual, 0.002f)
 
     @Test
+    fun drawingHeadersKeepShapeAndDirection() {
+        val answer = ScreenAnswerParser.parse("@@ arrow 800 700 200 300\nПосмотри сюда.\n@@ ellipse 100 200 400 500\nОбласть.", CoordMode.NORM_XY, 1000, 1000)
+        assertEquals(2, answer.marks.size)
+        assertEquals(DrawingKind.ARROW, answer.marks[0].drawing?.kind)
+        assertTrue(answer.marks[0].drawing!!.reverseX)
+        assertTrue(answer.marks[0].drawing!!.reverseY)
+        assertEquals(DrawingKind.ELLIPSE, answer.marks[1].drawing?.kind)
+        near(0.2f, answer.marks[0].box!!.left)
+        near(0.8f, answer.marks[0].box!!.right)
+        val gemini = ScreenAnswerParser.parse("@@ line 100 900 500 300\nЛиния.", CoordMode.NORM_YX, 1000, 1000)
+        assertTrue(gemini.marks.single().drawing!!.reverseX)
+        assertFalse(gemini.marks.single().drawing!!.reverseY)
+    }
+
+    @Test
     fun pixelsMarksAreParsedAndNormalized() {
         val raw = "@@ error 100 200 500 260\nПроверь знак: $-(x-3)$.\n\n@@ hint 100 300 900 360\nЧто будет, если приравнять к нулю?\n[[ГОТОВО]]"
         val a = ScreenAnswerParser.parse(raw, CoordMode.PIXELS_XY, 1000, 800)

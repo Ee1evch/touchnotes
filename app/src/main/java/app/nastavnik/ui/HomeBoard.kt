@@ -42,7 +42,6 @@ import app.nastavnik.home.HomeLayout.Item
 import app.nastavnik.home.HomeLayout.Size
 import app.nastavnik.schedule.Lesson
 import app.nastavnik.schedule.ScheduleNow
-import app.nastavnik.study.Streaks
 import kotlinx.coroutines.delay
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -52,13 +51,10 @@ private data class Widget(val id: String, val title: String, val icon: Int, val 
 
 private val WIDGETS = listOf(
     Widget("evening", "Вечерняя учёба", R.drawable.ic_cards, listOf(Size.M, Size.L)),
-    Widget("siren", "Задача дня", R.drawable.ic_target, listOf(Size.S, Size.M, Size.L)),
     Widget("day", "Пары", R.drawable.ic_calendar, listOf(Size.S, Size.M, Size.L)),
     Widget("plan", "План на день", R.drawable.ic_sparkle, listOf(Size.M, Size.L)),
     Widget("cards", "Карточки", R.drawable.ic_cards, listOf(Size.S, Size.M, Size.L)),
-    Widget("streak", "Серия", R.drawable.ic_flame, listOf(Size.S, Size.M, Size.L)),
-    Widget("alarm", "Будильник", R.drawable.ic_bell, listOf(Size.S, Size.M, Size.L)),
-    Widget("reminders", "Напоминания", R.drawable.ic_bell, listOf(Size.S, Size.M, Size.L)),
+    Widget("alarm", "Экзамен", R.drawable.ic_target, listOf(Size.S, Size.M, Size.L)),
     Widget("grades", "Успеваемость", R.drawable.ic_chart, listOf(Size.S, Size.M, Size.L)),
     Widget("notebooks", "Тетради", R.drawable.ic_notebook, listOf(Size.M, Size.L), tabletOnly = true),
     Widget("mentor", "Наставник", R.drawable.ic_sparkle, listOf(Size.M, Size.L), tabletOnly = true),
@@ -66,13 +62,13 @@ private val WIDGETS = listOf(
 )
 
 private fun defaults(tablet: Boolean) = if (tablet) listOf(
-    Item("evening", Size.L), Item("siren", Size.L), Item("day", Size.M), Item("plan", Size.M),
-    Item("cards", Size.S), Item("streak", Size.S), Item("alarm", Size.S), Item("reminders", Size.S),
+    Item("evening", Size.L), Item("day", Size.M), Item("plan", Size.M),
+    Item("cards", Size.S), Item("alarm", Size.S),
     Item("notebooks", Size.L), Item("mentor", Size.M), Item("sections", Size.M),
 ) else listOf(
-    Item("evening", Size.L), Item("siren", Size.L), Item("day", Size.L), Item("plan", Size.L),
-    Item("cards", Size.S), Item("streak", Size.S), Item("alarm", Size.S),
-    Item("reminders", Size.L), Item("grades", Size.L),
+    Item("evening", Size.L), Item("day", Size.L), Item("plan", Size.L),
+    Item("cards", Size.S), Item("alarm", Size.S),
+    Item("grades", Size.L),
 )
 
 /**
@@ -106,21 +102,14 @@ fun HomeBoard(
     val tomorrow by produceState<List<Lesson>>(emptyList(), version, resumeTick) { value = app.schedule.day(LocalDate.now().plusDays(1)) }
     val nowMs = remember(resumeTick) { System.currentTimeMillis() }
     val due by remember(nowMs) { app.db.cards().observeDueCount(nowMs) }.collectAsStateWithLifecycle(initialValue = 0)
-    val events by remember { app.db.activity().observeAll() }.collectAsStateWithLifecycle(initialValue = emptyList())
-    val reminders by remember { app.db.reminders().observeAll() }.collectAsStateWithLifecycle(initialValue = emptyList())
     val hasGroup = app.settings.scheduleGroup().isNotBlank()
     val exam = remember(resumeTick) { app.study.nextExam() }
-    val today = Streaks.day(nowMs)
-    val perDay = remember(events) { events.groupingBy { Streaks.day(it.at) }.eachCount() }
-    val streak = remember(perDay, today) { Streaks.current(perDay.keys, today) }
-    val week = remember(perDay, today) { Streaks.lastDays(perDay, today, 7) }
 
     @Composable
     fun content(item: Item, m: Modifier) {
         val small = item.size == Size.S
         when (item.id) {
             "evening" -> Box(m) { EveningCard(resumeTick, go) }
-            "siren" -> Box(m) { SirenCard(resumeTick) }
             "day" -> if (small) {
                 val st = remember(lessons, now) { ScheduleNow.at(lessons.orEmpty(), now) }
                 val l = st.current ?: st.next
@@ -128,12 +117,7 @@ fun HomeBoard(
             } else Box(m) { DayCard(lessons, tomorrow, now, hasGroup, onSchedule = onSchedule) }
             "plan" -> Box(m) { PlanCard(resumeTick) }
             "cards" -> CardsTile(m, due, go)
-            "streak" -> StreakTile(m, streak, week, go)
-            "alarm" -> AlarmTile(m, exam, resumeTick, promoteAlarm = !tablet, go = go)
-            "reminders" -> if (small) {
-                val open = reminders.count { !it.done }
-                HomeTile(m, R.drawable.ic_bell, open.toString(), "напоминаний", false, { go(MainActivity.SCREEN_REMINDERS) })
-            } else Box(m) { RemindersCard(go) }
+            "alarm" -> ExamTile(m, exam, go)
             "grades" -> if (small) {
                 HomeTile(m, R.drawable.ic_chart, "Оценки", "успеваемость", false, { go(MainActivity.SCREEN_GRADES) })
             } else Box(m) { GradesCard(onOpen = { go(MainActivity.SCREEN_GRADES) }) }

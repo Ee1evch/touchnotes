@@ -18,6 +18,8 @@ import android.graphics.drawable.Drawable
 import android.view.MotionEvent
 import android.view.View
 import android.widget.FrameLayout
+import app.nastavnik.ai.Drawing
+import app.nastavnik.ink.MentorDrawing
 import app.nastavnik.ai.MarkKind
 import app.nastavnik.geom.Side
 
@@ -74,7 +76,7 @@ object NoteColors {
  * поэтому поверх отметки можно спокойно писать.
  */
 @SuppressLint("ViewConstructor")
-class MarkView(context: Context, val kind: MarkKind) : View(context) {
+class MarkView(context: Context, val kind: MarkKind, private val drawing: Drawing? = null) : View(context) {
     private val d = resources.displayMetrics.density
 
     /** Поле вокруг самой отметки: под значок и волну. */
@@ -115,6 +117,10 @@ class MarkView(context: Context, val kind: MarkKind) : View(context) {
     override fun onDraw(canvas: Canvas) {
         rect.set(pad.toFloat(), pad.toFloat(), width - pad.toFloat(), height - pad.toFloat())
         val r = 8 * d
+        if (drawing != null) {
+            MentorDrawing.draw(canvas, rect, drawing, line, d)
+            return
+        }
         when (kind) {
             MarkKind.ERROR -> {
                 canvas.drawRoundRect(rect, r, r, fill)

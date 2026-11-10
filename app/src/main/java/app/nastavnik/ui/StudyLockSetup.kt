@@ -37,7 +37,6 @@ import androidx.core.graphics.drawable.toBitmap
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import app.nastavnik.study.Alarms
 import app.nastavnik.study.LockPrefs
-import app.nastavnik.study.SirenPrefs
 import app.nastavnik.study.StudyLock
 import app.nastavnik.study.WakeGuard
 import kotlinx.coroutines.Dispatchers
@@ -198,46 +197,3 @@ fun StudyLockSection(go: (String) -> Unit) {
         }
     }
 }
-
-/**
- * Учебная сирена в настройках: включается один раз и навсегда. В дни с парами к 20:00 — решить задачу дня,
- * иначе звук, который снимает только мини-задача (5 минут тишины на основную).
- */
-@Composable
-fun SirenSection() {
-    val context = LocalContext.current
-    val s = remember { SirenPrefs.of(context) }
-    var on by remember { mutableStateOf(s.on) }
-    var confirm by remember { mutableStateOf(false) }
-    var service by remember { mutableStateOf(WakeGuard.enabled(context)) }
-    LifecycleResumeEffect(Unit) { service = WakeGuard.enabled(context); onPauseOrDispose { } }
-    SectionCard("Сирена в 20:00") {
-        FieldLabel(
-            if (on) "Включена навсегда" else "Задача дня — или звук",
-            "В дни с парами к 20:00 реши одну задачу по слабым темам. Не решил — звук на максимуме, убавить нельзя. " +
-                "Мини-задача даёт 5 минут тишины на основную. Решил основную — тишина до завтра.",
-        )
-        if (on && !service) StatusLine("Служба защиты выключена — кнопки громкости и меню выключения не заблокированы.", Tone.ERROR)
-        if (!on) InkButton("Включить навсегда") { confirm = true }
-    }
-    if (confirm) {
-        var wait by remember { mutableIntStateOf(5) }
-        LaunchedEffect(Unit) { while (wait > 0) { delay(1000); wait-- } }
-        AlertDialog(
-            onDismissRequest = { confirm = false },
-            title = { Text("Включить сирену навсегда?") },
-            text = { Text("Выключить её из приложения будет нельзя. Пока звучит — нельзя убавить громкость, выключить телефон через меню, открыть настройки.") },
-            confirmButton = {
-                LinkText(if (wait > 0) "Включить ($wait)" else "Включить") {
-                    if (wait > 0) return@LinkText
-                    s.on = true
-                    on = true
-                    confirm = false
-                    Alarms.rescheduleAll(context)
-                }
-            },
-            dismissButton = { LinkText("Отмена") { confirm = false } },
-        )
-    }
-}
-

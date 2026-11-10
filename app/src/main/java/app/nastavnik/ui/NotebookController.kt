@@ -513,16 +513,23 @@ class NotebookController(val app: NastavnikApp, val notebookId: Long, private va
         app.appScope.launch(Dispatchers.IO) { nbs.store.saveMeta(nm) }
     }
 
+    /** null означает все страницы, включая добавленные позже. */
+    var selectedContextPages by mutableStateOf<Set<Long>?>(null)
+        private set
+
+    fun selectAllContextPages() { selectedContextPages = null }
+    fun selectNoContextPages() { selectedContextPages = emptySet() }
+    fun selectContextPage(id: Long, selected: Boolean) {
+        val ids = selectedContextPages ?: pages.map { it.id }.toSet()
+        selectedContextPages = if (selected) ids + id else ids - id
+    }
+
     // ---------------- наставник ----------------
 
     fun ask(question: String, kind: AskKind) {
         if (!mentorOn || app.settings.notReadyReason() != null) return
         autoJob?.cancel()
-        val pages = when {
-            kind == AskKind.WATCH -> WATCH_CONTEXT
-            app.settings.load().fastAnswers -> FAST_CONTEXT
-            else -> CONTEXT_PAGES
-        }
+        val pages = this.pages.size
         mentor.ask(question, kind) { shot(pages) }
     }
 
@@ -567,7 +574,29 @@ class NotebookController(val app: NastavnikApp, val notebookId: Long, private va
         }
     }
 
-    /** Снимок текущей страницы (с номерами строк) и уменьшенные соседние страницы тетради. */
+    private data class CachedContextPage(val page: InkPage, val version: Long, val jpeg: ByteArray)
+    private val contextCache = LinkedHashMap<Long, CachedContextPage>(16, 0.75f, true)
+    private var contextCacheBytes = 0
+
+    private suspend fun contextImage(page: InkPage): ByteArray {
+        val cached = contextCache[page.id]
+        if (cached != null && cached.page === page && cached.version == page.version) return cached.jpeg
+        val version = page.version
+        val jpeg = nbs.renderJpeg(notebookId, page, ImageUtils.SMALL_PIXELS, 78)
+        contextCache.remove(page.id)?.let { contextCacheBytes -= it.jpeg.size }
+        if (version == page.version && jpeg.size <= CONTEXT_CACHE_BYTES) {
+            while (contextCacheBytes + jpeg.size > CONTEXT_CACHE_BYTES && contextCache.isNotEmpty()) {
+                val oldest = contextCache.entries.iterator()
+                contextCacheBytes -= oldest.next().value.jpeg.size
+                oldest.remove()
+            }
+            contextCache[page.id] = CachedContextPage(page, version, jpeg)
+            contextCacheBytes += jpeg.size
+        }
+        return jpeg
+    }
+
+    /** Снимок текущей страницы и все остальные страницы тетради. */
     private suspend fun shot(contextLimit: Int): ShotResult {
         val p = page ?: return ShotResult.Failed("Страница не открыта")
         flushSaveNow()
@@ -583,23 +612,31 @@ class NotebookController(val app: NastavnikApp, val notebookId: Long, private va
         val geometry = ShotGeometry(IRect(r.left, r.top, r.right, r.bottom), prepared.width, prepared.height, prepared.gutter, prepared.lines, prepared.luma)
         ShotGeometry.last = geometry
         // Остальные страницы — по близости к текущей, в порядке тетради.
-        val others = pages.withIndex().filter { it.index != index }
+        val others = pages.withIndex().filter { it.index != index && (selectedContextPages == null || it.value.id in selectedContextPages!!) }
             .sortedBy { abs(it.index - index) }.take(contextLimit).sortedBy { it.index }
-        val context = others.map { nbs.renderJpeg(notebookId, it.value, ImageUtils.SMALL_PIXELS, 78) }
+        val context = others.map { contextImage(it.value) }
         return ShotResult.Ok(prepared.jpeg, geometry, null, context)
+    }
+
+    var marksVisible by mutableStateOf(true)
+        private set
+
+    fun toggleMarks() {
+        marksVisible = !marksVisible
+        refreshMarks()
     }
 
     /** Отметки ответа — на странице, к которой он относится. */
     fun refreshMarks(a: AnswerUi? = mentor.state.value.answer) {
         val p = page
-        ink.marks = if (a == null || p == null || p.id != answerPageId) {
+        ink.marks = if (!marksVisible || a == null || p == null || p.id != answerPageId) {
             emptyList()
         } else {
             val g = a.geometry
             a.marks.mapIndexedNotNull { i, m ->
                 val b = m.box ?: return@mapIndexedNotNull null
                 val s = g?.toScreen(b) ?: return@mapIndexedNotNull null
-                PageMark(i + 1, m.kind, RectF(s.left * answerScale, s.top * answerScale, s.right * answerScale, s.bottom * answerScale))
+                PageMark(i + 1, m.kind, RectF(s.left * answerScale, s.top * answerScale, s.right * answerScale, s.bottom * answerScale), m.drawing)
             }
         }
     }
@@ -630,8 +667,6 @@ class NotebookController(val app: NastavnikApp, val notebookId: Long, private va
         private const val SAVE_DELAY_MS = 800L
         private const val AUTO_PAUSE_MS = 7_000L
         private const val AUTO_GAP_MS = 40_000L
-        private const val CONTEXT_PAGES = 8
-        private const val WATCH_CONTEXT = 3
-        private const val FAST_CONTEXT = 2
+        private const val CONTEXT_CACHE_BYTES = 24 * 1024 * 1024
     }
 }

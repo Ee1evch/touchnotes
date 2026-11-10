@@ -15,6 +15,8 @@ jobs:
     permissions:
       contents: write
     timeout-minutes: 40
+    env:
+      BUILD_NUMBER: ${{ github.ref_name == 'codex/nastavnik-150' && '150' || github.run_number }}
     steps:
       - uses: actions/checkout@v4
 
@@ -39,7 +41,7 @@ jobs:
 
       # Релизные сборки (не отладочные) — их ставит любой телефон с Android 10+.
       - name: Сборка релизных APK
-        run: ./gradlew --no-daemon assembleRelease
+        run: GITHUB_RUN_NUMBER="$BUILD_NUMBER" ./gradlew --no-daemon assembleRelease
 
       # Подпись всеми схемами (v1+v2+v3) тем же ключом, что раньше: такой APK принимает любой установщик
       # Android 10+, а обновление поверх работает. Проверка подписи — в лог.
@@ -80,14 +82,14 @@ jobs:
       - name: Релиз для обновления из приложения
         if: github.event_name == 'push'
         # Нет прав на релизы (форк, ограничения организации) — сборка всё равно зелёная.
-        continue-on-error: true
+        continue-on-error: ${{ github.ref_name != 'codex/nastavnik-150' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "build-${{ github.run_number }}" nastavnik.apk student.apk parent.apk \
+          gh release create "build-$BUILD_NUMBER" nastavnik.apk student.apk parent.apk \
             --repo "${{ github.repository }}" \
             --target "${{ github.sha }}" \
-            --title "Наставник 1.5, сборка ${{ github.run_number }}" \
+            --title "Наставник 1.5, сборка $BUILD_NUMBER" \
             --notes "Ветка ${{ github.ref_name }}, коммит ${{ github.sha }}" \
             --latest
 

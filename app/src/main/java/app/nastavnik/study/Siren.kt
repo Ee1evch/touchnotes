@@ -111,6 +111,13 @@ object Siren {
         return StudyLockRules.disciplines(context.app.schedule.day(date)).isNotEmpty()
     }
 
+    /** Снять сирену, поставленную предыдущей версией. */
+    fun cancelRemovedSiren(context: Context) {
+        SirenPrefs.of(context).on = false
+        context.getSystemService(AlarmManager::class.java)?.cancel(pending(context))
+        context.getSystemService(android.app.NotificationManager::class.java)?.cancel(SirenService.NOTIFY)
+    }
+
     /** Пересчитать: звонить сейчас или поставить будильник на 20:00 ближайшего учебного дня / конец тишины. */
     suspend fun check(context: Context) {
         val s = SirenPrefs.of(context)
