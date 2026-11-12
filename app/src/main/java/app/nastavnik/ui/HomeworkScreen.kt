@@ -49,7 +49,6 @@ import app.nastavnik.study.HomeworkRules
 import app.nastavnik.study.HomeworkRules.Status
 import app.nastavnik.study.Homeworks
 import app.nastavnik.study.HwTask
-import app.nastavnik.study.StudyLockRules
 import app.nastavnik.study.Textbook
 import app.nastavnik.study.ruPlural
 import kotlinx.coroutines.Dispatchers
@@ -248,7 +247,7 @@ private fun AddHomework(sharedFile: Uri?, onBack: () -> Unit, onAdded: (Homework
     val today = LocalDate.now()
     // Предметы и пары на две недели вперёд — для выбора предмета и срока «к следующей паре».
     val lessons by produceState(emptyList<Pair<LocalDate, String>>()) {
-        value = (1L..14L).flatMap { d -> val day = today.plusDays(d); StudyLockRules.disciplines(app.schedule.day(day)).map { day to it } }
+        value = (1L..14L).flatMap { d -> val day = today.plusDays(d); app.schedule.day(day).map { day to it.discipline } }
     }
     val subjects = (lessons.map { it.second } + books.map { it.subject }).distinct()
     var subject by remember { mutableStateOf("") }
@@ -260,9 +259,9 @@ private fun AddHomework(sharedFile: Uri?, onBack: () -> Unit, onAdded: (Homework
     var due by remember { mutableStateOf<LocalDate?>(null) }
     var busy by remember { mutableStateOf<String?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
-    val subjectBooks = books.filter { subject.isNotBlank() && (StudyLockRules.sameSubject(it.subject, subject) || it.subject.equals(subject.trim(), ignoreCase = true)) }
+    val subjectBooks = books.filter { subject.isNotBlank() && (sameSubject(it.subject, subject) || it.subject.equals(subject.trim(), ignoreCase = true)) }
     val book = subjectBooks.firstOrNull { it.id == bookId } ?: subjectBooks.singleOrNull()
-    val defaultDue = if (subject.isBlank()) null else HomeworkRules.defaultDue(subject, today, lessons) { a, b -> StudyLockRules.sameSubject(a, b) || a == b }
+    val defaultDue = if (subject.isBlank()) null else HomeworkRules.defaultDue(subject, today, lessons) { a, b -> sameSubject(a, b) || a == b }
     val pickPdf = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) file = uri }
     val pickBook = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null && subject.isNotBlank()) scope.launch {
@@ -445,4 +444,13 @@ fun HomeworkBar(ctl: NotebookController, modifier: Modifier = Modifier) {
             }
         }
     }
+}
+
+/** Один и тот же предмет в расписании и у учебника (названия бывают чуть разные). */
+private fun sameSubject(a: String, b: String): Boolean {
+    fun norm(s: String) = s.lowercase().replace('ё', 'е').replace(Regex("[^a-zа-я0-9]+"), " ").trim()
+    val x = norm(a)
+    val y = norm(b)
+    if (x.isEmpty() || y.isEmpty()) return false
+    return x == y || x.startsWith(y) || y.startsWith(x)
 }

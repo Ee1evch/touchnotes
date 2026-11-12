@@ -10,12 +10,6 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
-    <!-- Будильник к первой паре: экран поверх блокировки, звонок сервисом, вибрация. -->
-    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
-    <uses-permission android:name="android.permission.VIBRATE" />
-    <uses-permission android:name="android.permission.WAKE_LOCK" />
-    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <!-- План на день: сколько минут в каких приложениях (человек даёт доступ в настройках сам). -->
     <uses-permission
         android:name="android.permission.PACKAGE_USAGE_STATS"
@@ -53,7 +47,7 @@
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />
         </intent>
-        <!-- Рабочий стол: во время учебного замка он открыт всегда -->
+        <!-- Рабочий стол: время в нём не считается временем в приложениях (план на день) -->
         <intent>
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.HOME" />
@@ -186,24 +180,6 @@
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Живое уведомление учебного дня: отсчёт до конца пары и следующая пара, обновление раз в минуту по выбору пользователя" />
-        </service>
-        <!-- Учебный замок: предупреждение за 30 минут и начало вечером. -->
-        <receiver
-            android:name=".study.StudyLockReceiver"
-            android:exported="false" />
-        <!-- Служба защиты учебного замка. -->
-        <service
-            android:name=".study.WakeGuard"
-            android:directBootAware="true"
-            android:exported="true"
-            android:label="@string/wake_guard_label"
-            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
-            <intent-filter>
-                <action android:name="android.accessibilityservice.AccessibilityService" />
-            </intent-filter>
-            <meta-data
-                android:name="android.accessibilityservice"
-                android:resource="@xml/wake_guard" />
         </service>
         <provider
             android:name="androidx.core.content.FileProvider"

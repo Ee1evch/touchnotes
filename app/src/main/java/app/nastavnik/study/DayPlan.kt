@@ -33,13 +33,19 @@ object DayPlan {
 
     fun usageIntent(): Intent = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)
 
+    /** Рабочие столы: время в них — не «время в приложениях». */
+    private fun homePackages(context: Context): Set<String> = runCatching {
+        val home = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
+        context.packageManager.queryIntentActivities(home, 0).map { it.activityInfo.packageName }.toSet()
+    }.getOrDefault(emptySet())
+
     /** Минуты в приложениях за последние сутки, самые долгие первыми (без «Наставника» и рабочего стола). */
     fun screenTime(context: Context): List<Pair<String, Int>> {
         if (!usageAccess(context)) return emptyList()
         val usm = context.getSystemService(UsageStatsManager::class.java) ?: return emptyList()
         val now = System.currentTimeMillis()
         val pm = context.packageManager
-        val skip = StudyLock.homePackages(context) + context.packageName + "com.android.systemui"
+        val skip = homePackages(context) + context.packageName + "com.android.systemui"
         return runCatching {
             usm.queryAndAggregateUsageStats(now - 24 * 3_600_000L, now).values
                 .filter { it.packageName !in skip && it.totalTimeInForeground >= 5 * 60_000L }
@@ -72,7 +78,7 @@ object DayPlan {
             noHint = Learning.noHintShare(events, now),
             checkpoints = Learning.checkpoints(events).map { it.second },
             checkpointDue = Learning.checkpointDue(events, now),
-            tomorrow = StudyLockRules.disciplines(app.schedule.day(LocalDate.now().plusDays(1))),
+            tomorrow = app.schedule.day(LocalDate.now().plusDays(1)).map { it.discipline },
             screen = screenTime(context),
         )
         val r = app.trainer.dayPlan(summary)

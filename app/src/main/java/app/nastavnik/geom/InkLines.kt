@@ -46,15 +46,36 @@ class LineMap(
      * Где на снимке рисовать рамку. [hintLike] — подсказка следующего шага: если модель дала только рамку,
      * её не притягиваем к чернилам (подсказка указывает на пустое место).
      */
-    fun resolve(ref: PlaceRef, hintLike: Boolean = false): IRect? {
+    fun resolve(ref: PlaceRef, hintLike: Boolean = false): IRect? = localOnly(resolveAny(ref, hintLike), ref.box)
+
+    private fun resolveAny(ref: PlaceRef, hintLike: Boolean): IRect? {
         ref.lines?.let { range -> byLines(range, ref.box)?.let { return it } }
         ref.after?.let { n -> line(n)?.let { return below(it) } }
         val box = ref.box ?: return null
         return if (hintLike) box.clampInto(IRect(0, 0, width, height)) else snap(box)
     }
 
+    /**
+     * Отметка — небольшое место (строка, формула, кусок рисунка), а не весь лист:
+     * не выше нескольких строк и не больше трети снимка по высоте.
+     */
+    fun isLocal(r: IRect): Boolean {
+        val maxH = min(max(lineHeight * 6, height / 8), (height * 0.35f).roundToInt())
+        val maxW = (width * 0.95f).roundToInt()
+        return r.width in 1..maxW && r.height in 1..maxH
+    }
+
+    /** Слишком большую рамку (весь экран, полстраницы) не рисуем: берём рамку модели, если она сама небольшая. */
+    private fun localOnly(r: IRect?, modelBox: IRect?): IRect? = when {
+        r == null -> null
+        isLocal(r) -> r
+        else -> modelBox?.clampInto(IRect(0, 0, width, height))?.takeIf(::isLocal)
+    }
+
     /** Ошибка относится к одной строке. Широкую или двусмысленную рамку не рисуем. */
-    fun resolveError(ref: PlaceRef): IRect? {
+    fun resolveError(ref: PlaceRef): IRect? = localOnly(resolveErrorAny(ref), ref.box)
+
+    private fun resolveErrorAny(ref: PlaceRef): IRect? {
         val candidates = ref.lines?.let { range -> lines.filter { it.number in range } } ?: lines
         val box = ref.box
         val target = when {
@@ -76,12 +97,12 @@ class LineMap(
         val left = if (xParts.isEmpty()) target.left else xParts.minOf { it.first }
         val right = if (xParts.isEmpty()) target.right else xParts.maxOf { it.last } + 1
         val tightPad = max(2, (lineHeight * 0.1f).roundToInt())
-        return IRect(left - tightPad, target.top - tightPad, right + tightPad, target.bottom + tightPad)
-            .clampInto(IRect(0, 0, width, height))
+        return clampToPiece(left, target.top, right, target.bottom, box, tightPad)
     }
 
     private fun byLines(range: IntRange, box: IRect?): IRect? {
-        val ls = range.mapNotNull { line(it) }
+        // Отметка — это строка, а не блок: длинный диапазон от модели обрезаем до трёх строк.
+        val ls = range.take(3).mapNotNull { line(it) }
         if (ls.isEmpty()) return null
         val top = ls.minOf { it.top }
         val bottom = ls.maxOf { it.bottom }
@@ -89,14 +110,53 @@ class LineMap(
         var right = ls.maxOf { it.right }
         // Модель уточнила часть строки — берём только куски строк, которые попали в её рамку.
         if (box != null) {
-            val slack = max(lineHeight, box.width / 6)
+            val slack = max(lineHeight / 2, box.width / 8)
             val parts = ls.flatMap { it.segments }.filter { it.last >= box.left - slack && it.first <= box.right + slack }
             if (parts.isNotEmpty()) {
                 left = parts.minOf { it.first }
                 right = parts.maxOf { it.last } + 1
+            } else {
+                left = box.left
+                right = box.right
             }
         }
-        return IRect(left - pad, top - pad, right + pad, bottom + pad).clampInto(IRect(0, 0, width, height))
+        return clampToPiece(left, top, right, bottom, box, pad)
+    }
+
+    /**
+     * Если модель выделила конкретный кусок внутри длинной строки или высокого блока
+     * (например, одну формулу, слагаемое или слово), выделяем именно этот единый кусок,
+     * а не растягиваем выделение на всю строку или полстраницы.
+     */
+    private fun clampToPiece(left: Int, top: Int, right: Int, bottom: Int, box: IRect?, p: Int): IRect {
+        var l = left
+        var t = top
+        var r = right
+        var b = bottom
+        if (box != null && box.width > 0 && box.height > 0) {
+            val minPiece = max(10, lineHeight / 3)
+            // По горизонтали: ограничиваем единым куском модели
+            val cl = max(l, box.left)
+            val cr = min(r, box.right)
+            if (cr - cl >= minPiece) {
+                l = cl
+                r = cr
+            } else if (box.width >= minPiece) {
+                l = box.left
+                r = box.right
+            }
+            // По вертикали: не даём строке или блоку захватывать лишнее
+            val ct = max(t, box.top)
+            val cb = min(b, box.bottom)
+            if (cb - ct >= minPiece) {
+                t = ct
+                b = cb
+            } else if (box.height >= minPiece) {
+                t = box.top
+                b = box.bottom
+            }
+        }
+        return IRect(l - p, t - p, r + p, b + p).clampInto(IRect(0, 0, width, height))
     }
 
     /** Место под строкой: туда студент пишет следующий шаг. */
@@ -110,20 +170,24 @@ class LineMap(
 
     /** Рамка модели «на глаз» → по строкам, которые она задевает, и по чернилам внутри неё. */
     fun snap(box: IRect): IRect {
-        val hit = lines.filter { l ->
+        val hitAll = lines.filter { l ->
             val overlap = min(l.bottom, box.bottom) - max(l.top, box.top)
             overlap >= l.height * 0.3f || overlap >= box.height * 0.4f || (l.centerY in box.top..box.bottom)
         }
-        if (hit.isEmpty()) return box
+        if (hitAll.isEmpty()) return box.clampInto(IRect(0, 0, width, height))
+        // Одна отметка — одна строка: широкая рамка «на глаз» не должна захватывать полстраницы.
+        val hit = if (hitAll.size > 2) listOf(hitAll.minBy { abs(it.centerY - box.centerY) }) else hitAll
         val slack = max(lineHeight / 2, box.width / 10)
         val parts = hit.flatMap { it.segments }.filter { it.last >= box.left - slack && it.first <= box.right + slack }
-        if (parts.isEmpty()) return box
-        return IRect(
-            parts.minOf { it.first } - pad,
-            hit.minOf { it.top } - pad,
-            parts.maxOf { it.last } + 1 + pad,
-            hit.maxOf { it.bottom } + pad,
-        ).clampInto(IRect(0, 0, width, height))
+        if (parts.isEmpty()) return box.clampInto(IRect(0, 0, width, height))
+        return clampToPiece(
+            parts.minOf { it.first },
+            hit.minOf { it.top },
+            parts.maxOf { it.last } + 1,
+            hit.maxOf { it.bottom },
+            box,
+            pad,
+        )
     }
 
     companion object {
@@ -155,8 +219,8 @@ object InkLines {
         }
 
         // Полосы строк: подряд идущие строки пикселей с чернилами, маленькие разрывы склеиваем.
-        val minInk = max(2, w / 700)
-        val smallGap = max(2, h / 250)
+        val minInk = max(3, (w / 400).coerceAtLeast(2))
+        val smallGap = max(2, (h / 250).coerceAtLeast(2))
         val bands = mutableListOf<IntArray>() // [top, bottom)
         var y = 0
         while (y < h) {
@@ -177,13 +241,16 @@ object InkLines {
         if (bands.isEmpty()) return LineMap(emptyList(), w, h, bg)
 
         // Склеиваем индексы, степени, дробные черты и точки с соседней строкой.
+        // Ограничиваем предельную высоту склеенной строки, чтобы строки не объединялись в полстраницы.
         val mh = bands.map { it[1] - it[0] }.sorted()[bands.size / 2].coerceAtLeast(4)
+        val maxMergedH = max(mh * 2.2f, h * 0.10f).toInt()
         var merged = true
         while (merged && bands.size > 1) {
             merged = false
             for (i in 0 until bands.size - 1) {
                 val a = bands[i]
                 val b = bands[i + 1]
+                if (b[1] - a[0] > maxMergedH) continue
                 val gap = b[0] - a[1]
                 val small = min(a[1] - a[0], b[1] - b[0]) < mh * 0.45
                 if (gap < mh * 0.22 || (small && gap < mh * 0.6)) {
@@ -196,7 +263,7 @@ object InkLines {
         }
 
         val lines = mutableListOf<TextLine>()
-        val split = max((mh * 2.5f).roundToInt(), w / 16)
+        val split = max((mh * 1.5f).roundToInt(), min(w / 20, 60))
         for (b in bands) {
             val cols = IntArray(w)
             for (yy in b[0] until b[1]) for (x in 0 until w) if (ink[yy * w + x]) cols[x]++

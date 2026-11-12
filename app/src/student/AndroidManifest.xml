@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   «Наставник · Студент»: только расписание, оценки ЛКС, живое уведомление, «Тихо на парах» и темы.
-  Всё, что нужно наставнику, замку, будильнику и сирене, из манифеста убрано.
+  Всё, что нужно наставнику, из манифеста убрано.
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
@@ -9,9 +9,6 @@
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" tools:node="remove" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" tools:node="remove" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" tools:node="remove" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" tools:node="remove" />
-    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" tools:node="remove" />
-    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" tools:node="remove" />
     <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" tools:node="remove" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" tools:node="remove" />
 
@@ -30,7 +27,5 @@
         <activity android:name=".ui.ProjectionPermissionActivity" tools:node="remove" />
         <service android:name=".overlay.BubbleService" tools:node="remove" />
         <receiver android:name=".study.StudyWidget" tools:node="remove" />
-        <receiver android:name=".study.StudyLockReceiver" tools:node="remove" />
-        <service android:name=".study.WakeGuard" tools:node="remove" />
     </application>
 </manifest>

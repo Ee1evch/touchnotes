@@ -163,7 +163,7 @@ class ScreenCapturer(private val context: Context) {
 
     /** Приёмник кадров: держит последний кадр открытым, прошлый сразу отпускает. */
     private fun newReader(w: Int, h: Int): ImageReader =
-        ImageReader.newInstance(w, h, PixelFormat.RGBA_8888, 3).apply {
+        ImageReader.newInstance(w.coerceAtLeast(1), h.coerceAtLeast(1), PixelFormat.RGBA_8888, 3).apply {
             setOnImageAvailableListener({ rr ->
                 val img = runCatching { rr.acquireLatestImage() }.getOrNull() ?: return@setOnImageAvailableListener
                 synchronized(frameLock) {
@@ -185,7 +185,12 @@ class ScreenCapturer(private val context: Context) {
     @Suppress("DEPRECATION")
     private fun realMetrics(): DisplayMetrics {
         val m = DisplayMetrics()
-        displayManager.getDisplay(Display.DEFAULT_DISPLAY).getRealMetrics(m)
+        val display = displayManager.getDisplay(Display.DEFAULT_DISPLAY) ?: displayManager.displays.firstOrNull()
+        if (display != null) {
+            display.getRealMetrics(m)
+        } else {
+            m.setTo(context.resources.displayMetrics)
+        }
         return m
     }
 

@@ -8,6 +8,7 @@ import app.nastavnik.ai.AiErrors
 import app.nastavnik.ai.AiException
 import app.nastavnik.ai.ChatRequest
 import app.nastavnik.ai.ChatTurn
+import app.nastavnik.ai.DrawingKind
 import app.nastavnik.ai.ImagePart
 import app.nastavnik.ai.Mark
 import app.nastavnik.ai.MarkKind
@@ -65,6 +66,9 @@ data class ShotGeometry(
         /** Последний снимок для наставника — по нему тесты узнают номера строк. */
         @Volatile
         var last: ShotGeometry? = null
+
+        /** Овал-рисунок выше этой доли снимка — уже не «вокруг места», а вокруг всего листа. */
+        private const val MAX_ELLIPSE = 0.3f
     }
 
     /** Ширина всего снимка, который видит модель (с полем). */
@@ -80,7 +84,9 @@ data class ShotGeometry(
             val left = ((b.left * sentW - gutter) / imageW).coerceIn(0f, 1f)
             val right = ((b.right * sentW - gutter) / imageW).coerceIn(0f, 1f)
             val box = NBox(left, b.top, right, b.bottom)
-            return m.copy(box = box.takeIf { it.width > 0f && it.height > 0f })
+            // Овал вокруг всего экрана ничего не показывает — такой рисунок не рисуем.
+            val tooBig = m.drawing.kind == DrawingKind.ELLIPSE && (box.height > MAX_ELLIPSE || box.width * box.height > MAX_ELLIPSE * MAX_ELLIPSE * 2)
+            return m.copy(box = box.takeIf { it.width > 0f && it.height > 0f && !tooBig })
         }
         val map = lines ?: LineMap(emptyList(), imageW, imageH)
         val px = m.box?.let {

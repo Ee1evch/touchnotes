@@ -24,21 +24,14 @@ import app.nastavnik.sync.AppSyncSource
 import app.nastavnik.sync.LocalItem
 import app.nastavnik.sync.SyncRecord
 import app.nastavnik.sync.SyncEngine
-import app.nastavnik.study.AlarmShield
 import app.nastavnik.study.Learning
 import app.nastavnik.study.HomeworkRules
 import app.nastavnik.study.Homeworks
 import app.nastavnik.study.LiveNotifications
 import app.nastavnik.study.PageProblem
 import app.nastavnik.study.Textbook
-import app.nastavnik.study.LockPrefs
-import app.nastavnik.study.StudyLock
-import app.nastavnik.study.StudyLockRules
-import app.nastavnik.study.WakeGuard
 import app.nastavnik.ui.Brand
 import app.nastavnik.ui.MainActivity
-import app.nastavnik.ui.SirenActivity
-import app.nastavnik.ui.WakeActivity
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -157,107 +150,6 @@ class CampusFlowTest {
         }
     }
 
-    /** Вечерняя учёба: конспекты сегодняшних пар становятся карточками, подготовка к завтрашней паре. */
-    @Test
-    fun eveningSessionSummariesAndPrep() {
-        seedSchedule()
-        val today = LocalDate.now()
-        val sc = ActivityScenario.launch<MainActivity>(Intent(ctx, MainActivity::class.java).putExtra(MainActivity.EXTRA_SCREEN, MainActivity.SCREEN_EVENING))
-        try {
-            assertNotNull(device.wait(Until.findObject(By.text("Карточки на сегодня")), 15000))
-            assertNotNull(device.findObject(By.text("Физика")))
-            SystemClock.sleep(800)
-            screenshot("evening_start")
-            // До 5 утра «день» ещё вчерашний — тогда проверять нечего.
-            if (runBlocking { StudyLock.status(ctx).date } != today) return
-            runBlocking {
-                StudyLock.saveSummary(ctx, today, "Математический анализ", "Пределы: замечательный предел sin x / x стремится к 1, разбирали эквивалентности и примеры.")
-                StudyLock.saveSummary(ctx, today, "Физика", "Законы Ньютона: второй закон F = ma, разбирали задачи на наклонную плоскость и силу трения.")
-                val st = StudyLock.status(ctx)
-                assertTrue("конспекты не засчитаны: ${st.summaries}", st.summariesDone)
-                // Английский — не основной предмет: ни подготовки, ни карточек.
-                assertTrue("английский в подготовке", st.prep.none { it.first == "Иностранный язык" })
-                assertTrue(StudyLock.status(ctx).prepDone)
-                val physics = ctx.app.db.cards().all().filter { it.subject == "Физика" }
-                assertTrue(physics.any { it.front.contains("Вспомни главное") })
-                // Из конспекта — ещё и карточки «заполни пропуск».
-                assertTrue("мало карточек из конспекта: ${physics.size}", physics.count { it.front.startsWith("Заполни пропуск") } >= 2)
-            }
-        } finally {
-            sc.close()
-        }
-    }
-
-    /**
-     * Учебный замок по-настоящему: включаем службу защиты, замок закрывает системные настройки и открывает
-     * вечернюю учёбу; «Наставник» не мигает (6 секунд остаётся на экране); рабочий стол открыт.
-     */
-    @Test
-    fun studyLockClosesAppsWithoutFlicker() {
-        val lp = LockPrefs.of(ctx)
-        // Без пар замок начинается в выбранное время — 00:00, то есть уже идёт. Одна карточка ждёт повторения.
-        ctx.app.settings.setScheduleGroup("")
-        runBlocking { ctx.app.db.cards().insertAll(listOf(CardEntity(noteId = null, subject = "Замок", topic = "Замок", front = "2 + 2", back = "4", dueAt = 0, createdAt = 0))) }
-        lp.configureOnce(0, emptySet(), LocalDate.now())
-        // UiAutomator сам — служба спец. возможностей и по умолчанию глушит остальные, в том числе нашу защиту.
-        // На телефоне его нет; в тесте просим не глушить.
-        Configurator.getInstance().uiAutomationFlags = UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES
-        instr.getUiAutomation(UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES)
-        val guard = "${ctx.packageName}/${WakeGuard::class.java.name}"
-        device.executeShellCommand("settings put secure enabled_accessibility_services $guard")
-        device.executeShellCommand("settings put secure accessibility_enabled 1")
-        try {
-            assertTrue("замок не закрыт", runBlocking { StudyLock.status(ctx).locked })
-            SystemClock.sleep(3000)
-            // Рабочий стол — настоящий лаунчер, а не запасной «рабочий стол» системных настроек.
-            assertTrue("настройки считаются рабочим столом", StudyLock.homePackages(ctx).none { "settings" in it })
-            ctx.startActivity(Intent(android.provider.Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-            val blocked = device.wait(Until.findObject(By.text("Карточки на сегодня")), 15000)
-            if (blocked == null) {
-                println("LOCKDIAG pkg=${device.currentPackageName} guard=${WakeGuard.enabled(ctx)} locked=${StudyLock.locked}")
-                screenshot("lock_not_blocked")
-            }
-            assertNotNull("настройки не закрылись", blocked)
-            screenshot("lock_blocked")
-            // Без мигания: «Наставник» остаётся на экране.
-            repeat(6) {
-                SystemClock.sleep(1000)
-                assertEquals("мигает: на экране ${device.currentPackageName}", ctx.packageName, device.currentPackageName)
-            }
-            // Рабочий стол открыт: после «Домой» на нём и остаёмся.
-            // Лаунчер при первом запуске на эмуляторе бывает медленным — ждём его до 10 секунд, потом 3 секунды
-            // проверяем, что «Наставник» не открылся поверх снова.
-            device.pressHome()
-            val homeBy = System.currentTimeMillis() + 10_000
-            while (System.currentTimeMillis() < homeBy && device.currentPackageName.let { it == ctx.packageName || it == "com.android.settings" }) SystemClock.sleep(250)
-            SystemClock.sleep(3000)
-            val home = device.currentPackageName
-            if (home == ctx.packageName || home == "com.android.settings") screenshot("lock_home_fail")
-            assertTrue("рабочий стол закрыт: $home", home != ctx.packageName && home != "com.android.settings")
-            screenshot("lock_home")
-
-            // Разрешение «будильник на заблокированном экране», открытое из «Наставника», — не закрывается даже в замок.
-            val pkgUri = android.net.Uri.parse("package:${ctx.packageName}")
-            StudyLock.openSettings(ctx, Intent("android.settings.MANAGE_APP_USE_FULL_SCREEN_INTENT", pkgUri))
-            SystemClock.sleep(5000)
-            screenshot("lock_permission_page")
-            assertEquals("страницу разрешения закрыло", "com.android.settings", device.currentPackageName)
-            // А «Сведения о приложении» с «Удалить» и «Остановить» — закрываются.
-            StudyLock.openSettings(ctx, Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, pkgUri))
-            SystemClock.sleep(5000)
-            screenshot("lock_app_info")
-            assertTrue("сведения о приложении не закрылись", device.currentPackageName != "com.android.settings")
-        } finally {
-            device.executeShellCommand("settings delete secure enabled_accessibility_services")
-            Configurator.getInstance().uiAutomationFlags = 0
-            lp.markDone(StudyLockRules.sessionDate(java.time.LocalDateTime.now()))
-            runBlocking {
-                ctx.app.db.cards().all().filter { it.subject == "Замок" }.forEach { ctx.app.db.cards().update(it.copy(dueAt = Long.MAX_VALUE / 2)) }
-                StudyLock.status(ctx)
-            }
-        }
-    }
-
     /**
      * Живое уведомление: на паре — предмет, тип, аудитория, преподаватель, отсчёт до конца; на перемене — крупно
      * «ПЕРЕМЕНА» и что дальше. Системный шаблон с просьбой о «живом» (без своих макетов) — снимок каждого.
@@ -345,16 +237,12 @@ class CampusFlowTest {
                 book.copy(index = mapOf(0 to listOf(PageProblem("245", 0.1f, 0.3f), PageProblem("246", 0.32f, 0.5f)))),
             ),
         )
-        // «Завтра» — от учебного дня (он начинается в 5:00), как считает вечерняя учёба.
-        val tomorrow = StudyLockRules.sessionDate(java.time.LocalDateTime.now()).plusDays(1)
+        val tomorrow = LocalDate.now().plusDays(1)
         val hw = Homeworks.fromBook(ctx, Homeworks.book(ctx, book.id)!!, HomeworkRules.parseNumbers("245–246"), tomorrow)
         assertTrue(runBlocking { Homeworks.locate(ctx, hw.id) }.isSuccess)
         val located = Homeworks.get(ctx, hw.id)!!
         assertTrue("условия не нашлись", located.tasks.all { it.parts.isNotEmpty() })
         assertEquals(0.32f, located.tasks.first().parts.first().bottom, 0.001f)
-        // ДЗ на завтра не сделано — вечер не закрыт.
-        val before = runBlocking { StudyLock.status(ctx) }
-        assertTrue("ДЗ не в вечерней учёбе", before.homework.any { it.first.startsWith("Математический анализ") && !it.second })
 
         ctx.app.settings.setEditorTipsShown()
         val sc = ActivityScenario.launch<MainActivity>(Intent(ctx, MainActivity::class.java).putExtra(MainActivity.EXTRA_SCREEN, MainActivity.SCREEN_HOMEWORK))
@@ -384,8 +272,6 @@ class CampusFlowTest {
         Homeworks.save(ctx, cur.copy(tasks = listOf(cur.tasks[0].copy(status = HomeworkRules.Status.DONE), cur.tasks[1].copy(status = HomeworkRules.Status.WRONG, failed = 2))))
         assertTrue("спорную не дали", Homeworks.dispute(ctx, hw.id, cur.tasks[1].id))
         assertTrue(Homeworks.get(ctx, hw.id)!!.complete)
-        val after = runBlocking { StudyLock.status(ctx) }
-        assertTrue("засчитанное ДЗ держит вечер", after.homeworkDone)
         // Убрать за собой всё, включая тетрадь ДЗ, — следующие тесты берут «первую тетрадь».
         val nbId = Homeworks.get(ctx, hw.id)!!.tasks.first().notebookId
         Homeworks.delete(ctx, Homeworks.get(ctx, hw.id)!!)
@@ -406,13 +292,13 @@ class CampusFlowTest {
             assertNotNull("нет режима правки", device.wait(Until.findObject(By.text("Добавить блок")), 8000))
             SystemClock.sleep(800)
             screenshot("home_edit")
-            // Убрать первый блок (вечерняя учёба) — он появляется в «Добавить».
+            // Убрать первый блок (карточки) — он появляется в «Добавить».
             device.findObject(By.desc("Убрать")).click()
-            assertNotNull(device.wait(Until.findObject(By.text("+ Вечерняя учёба")), 5000))
-            assertFalse("evening" in ctx.app.settings.homeLayout(false))
-            device.findObject(By.text("+ Вечерняя учёба")).click()
+            assertNotNull(device.wait(Until.findObject(By.text("+ Карточки")), 5000))
+            assertFalse("cards" in ctx.app.settings.homeLayout(false))
+            device.findObject(By.text("+ Карточки")).click()
             SystemClock.sleep(500)
-            assertTrue("evening:L" in ctx.app.settings.homeLayout(false))
+            assertTrue("cards:L" in ctx.app.settings.homeLayout(false))
             // Размер первого блока: L → (M или S, по кругу) — сохраняется.
             val before = ctx.app.settings.homeLayout(false)
             device.findObject(By.descStartsWith("Размер")).click()

@@ -500,13 +500,18 @@ class InkView(context: Context) : View(context) {
     private fun renderCache(): Bitmap? {
         if (width <= 0 || height <= 0) return null
         var b = cache
-        if (b == null || b.width != width || b.height != height) {
-            b?.recycle()
-            b = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        if (b == null || b.isRecycled || b.width != width || b.height != height) {
+            if (b != null && !b.isRecycled) b.recycle()
+            b = try {
+                Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+            } catch (_: OutOfMemoryError) {
+                return null
+            }
             cache = b
             cacheCanvas = Canvas(b)
         }
-        drawScene(cacheCanvas!!)
+        val cv = cacheCanvas ?: return null
+        drawScene(cv)
         cacheMatrix.set(pageMatrix)
         cacheValid = true
         return b
@@ -662,19 +667,36 @@ class InkView(context: Context) : View(context) {
     private class Turn(val old: Bitmap, val direction: Int, var t: Float = 0f)
 
     private var turning: Turn? = null
+    private var turnAnim: ValueAnimator? = null
+
+    private fun cancelTurn() {
+        turnAnim?.cancel()
+        turnAnim = null
+        turning?.old?.let { if (!it.isRecycled) it.recycle() }
+        turning = null
+    }
 
     private fun snapshot(): Bitmap? {
         if (width <= 0 || height <= 0) return null
-        val b = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-        val c = Canvas(b)
-        if (cacheValid && cacheMatrix == pageMatrix && cache != null) c.drawBitmap(cache!!, 0f, 0f, null) else drawScene(c)
-        return b
+        return try {
+            val b = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+            val c = Canvas(b)
+            if (cacheValid && cacheMatrix == pageMatrix && cache != null && !cache!!.isRecycled) {
+                c.drawBitmap(cache!!, 0f, 0f, null)
+            } else {
+                drawScene(c)
+            }
+            b
+        } catch (_: OutOfMemoryError) {
+            null
+        }
     }
 
     private fun animatePageTurn(old: Bitmap, direction: Int) {
+        cancelTurn()
         val turn = Turn(old, direction)
         turning = turn
-        ValueAnimator.ofFloat(0f, 1f).apply {
+        turnAnim = ValueAnimator.ofFloat(0f, 1f).apply {
             duration = 300
             interpolator = PathInterpolator(0.2f, 0f, 0f, 1f)
             addUpdateListener {
@@ -683,8 +705,11 @@ class InkView(context: Context) : View(context) {
             }
             addListener(object : AnimatorListenerAdapter() {
                 override fun onAnimationEnd(animation: Animator) {
-                    if (turning === turn) turning = null
-                    old.recycle()
+                    if (turning === turn) {
+                        turning = null
+                        turnAnim = null
+                    }
+                    if (!old.isRecycled) old.recycle()
                     invalidate()
                 }
             })
@@ -696,7 +721,9 @@ class InkView(context: Context) : View(context) {
 
     /** Старая страница уходит в сторону, чуть уменьшаясь и тая; новая въезжает следом. */
     private fun drawTurn(canvas: Canvas, turn: Turn) {
-        val b = (if (cacheValid && cacheMatrix == pageMatrix) cache else renderCache()) ?: return
+        if (turn.old.isRecycled) return
+        val b = (if (cacheValid && cacheMatrix == pageMatrix && cache != null && !cache!!.isRecycled) cache else renderCache()) ?: return
+        if (b.isRecycled) return
         val shift = width * 0.22f
         canvas.drawColor(desk)
         canvas.save()
@@ -753,6 +780,31 @@ class InkView(context: Context) : View(context) {
         }
         invalidate()
         return true
+    }
+
+    override fun onGenericMotionEvent(e: MotionEvent): Boolean {
+        if (e.action == MotionEvent.ACTION_BUTTON_PRESS || e.action == MotionEvent.ACTION_BUTTON_RELEASE) {
+            val btn = e.actionButton
+            if (btn == MotionEvent.BUTTON_STYLUS_PRIMARY ||
+                btn == MotionEvent.BUTTON_STYLUS_SECONDARY ||
+                btn == MotionEvent.BUTTON_SECONDARY ||
+                btn == MotionEvent.BUTTON_BACK
+            ) {
+                // Поглощаем нажатия кнопок пера, чтобы система не превращала их в «Назад»
+                return true
+            }
+        }
+        return super.onGenericMotionEvent(e)
+    }
+
+    override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
+        super.onLayout(changed, left, top, right, bottom)
+        if (changed && Build.VERSION.SDK_INT >= 29 && width > 0 && height > 0) {
+            val edgeW = (32 * density).toInt()
+            val leftRect = android.graphics.Rect(0, 0, edgeW, height)
+            val rightRect = android.graphics.Rect((width - edgeW).coerceAtLeast(0), 0, width, height)
+            systemGestureExclusionRects = listOf(leftRect, rightRect)
+        }
     }
 
     // ---------------- ввод ----------------
@@ -927,7 +979,13 @@ class InkView(context: Context) : View(context) {
 
     /** Что делает перо (или палец, если им можно писать) при касании. */
     private fun penMode(e: MotionEvent, i: Int, pen: Boolean): Mode {
-        val eraserEnd = pen && (e.getToolType(i) == MotionEvent.TOOL_TYPE_ERASER || e.buttonState and MotionEvent.BUTTON_STYLUS_PRIMARY != 0)
+        val eraserBtn = (e.buttonState and (
+            MotionEvent.BUTTON_STYLUS_PRIMARY or
+            MotionEvent.BUTTON_STYLUS_SECONDARY or
+            MotionEvent.BUTTON_SECONDARY or
+            MotionEvent.BUTTON_BACK
+        )) != 0
+        val eraserEnd = pen && (e.getToolType(i) == MotionEvent.TOOL_TYPE_ERASER || eraserBtn)
         if (eraserEnd) return Mode.ERASE
         val q = toPage(e.getX(i), e.getY(i))
         return when (editTool) {
@@ -1094,7 +1152,7 @@ class InkView(context: Context) : View(context) {
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(e: MotionEvent): Boolean {
         val p = page ?: return false
-        if (turning != null && e.actionMasked == MotionEvent.ACTION_DOWN) turning = null
+        if (turning != null && e.actionMasked == MotionEvent.ACTION_DOWN) cancelTurn()
         when (e.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 parent?.requestDisallowInterceptTouchEvent(true)
@@ -1375,6 +1433,8 @@ class InkView(context: Context) : View(context) {
 
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
+        cancelTurn()
+        if (cache != null && !cache!!.isRecycled) { cache!!.recycle(); cache = null }
         removeCallbacks(flingStep)
         removeCallbacks(holdEraser)
         removeCallbacks(snapShape)

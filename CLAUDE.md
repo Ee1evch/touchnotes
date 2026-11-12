@@ -72,8 +72,6 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 - Ключи и пароли — только в EncryptedSharedPreferences. **Никогда не логировать ключ.** Пароль ЛКС не хранится.
 - По мелочам не спрашивать: принимать разумное решение и записывать его в `DECISIONS.md`.
 - Проверка перед пушем: JVM-тесты (`app/src/test`), сборка и тесты на эмуляторе в CI (`.github/workflows/build.yml`,
-  задания `build` и `smoke`). Новая логика без Android — в отдельный файл с тестами (как `SleepPlan`, `StudyLockRules`).
+  задания `build` и `smoke`). Новая логика без Android — в отдельный файл с тестами (как `HomeworkRules`, `DayTimeline`).
 - Внутри функций и классов, где есть переменная `app`, не писать полные имена `app.nastavnik.…` — только импорты
   (иначе Kotlin ищет `nastavnik` у переменной и сборка падает).
-- Будильник, учебный замок и служба защиты работают и до разблокировки после перезагрузки: их состояние — только
-  в хранилище устройства (`WakePrefs`, `LockPrefs`), не в обычных настройках и не в базе.

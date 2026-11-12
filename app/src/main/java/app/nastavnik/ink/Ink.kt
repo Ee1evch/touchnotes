@@ -15,10 +15,20 @@ enum class Tool { PEN, HIGHLIGHTER, SHAPE }
 
 /** Напечатанный текст на странице: левый верхний угол, ширина строки, размер шрифта — в единицах страницы. */
 class TextBox(val x: Float, val y: Float, val width: Float, val text: String, val size: Float, val color: Int) {
+    private var defaultBounds: FloatArray? = null
+
     fun moved(dx: Float, dy: Float) = TextBox(x + dx, y + dy, width, text, size, color)
 
     /** Примерная рамка (точная высота известна только после вёрстки на экране). */
-    fun bounds(lines: Int = estimateLines()): FloatArray = floatArrayOf(x, y, x + width, y + lines * size * LINE_K)
+    fun bounds(lines: Int = -1): FloatArray {
+        if (lines < 0) {
+            defaultBounds?.let { return it }
+            val b = floatArrayOf(x, y, x + width, y + estimateLines() * size * LINE_K)
+            defaultBounds = b
+            return b
+        }
+        return floatArrayOf(x, y, x + width, y + lines * size * LINE_K)
+    }
 
     fun estimateLines(): Int {
         val perLine = (width / (size * 0.52f)).toInt().coerceAtLeast(1)
@@ -38,6 +48,7 @@ enum class Paper(val label: String) { GRID("Клетка"), LINED("Линейк�
  */
 class Stroke(val tool: Tool, val color: Int, val width: Float, val points: FloatArray) {
     val size: Int get() = points.size / 3
+    private var cachedBounds: FloatArray? = null
 
     /** Тот же штрих, сдвинутый на (dx, dy). */
     fun moved(dx: Float, dy: Float) = Stroke(tool, color, width, FloatArray(points.size) { i ->
@@ -49,14 +60,25 @@ class Stroke(val tool: Tool, val color: Int, val width: Float, val points: Float
     fun y(i: Int) = points[i * 3 + 1]
     fun p(i: Int) = points[i * 3 + 2]
 
-    /** Рамка штриха с запасом на толщину. */
+    /** Рамка штриха с запасом на толщину (кэшируется, так как точки штриха неизменны). */
     fun bounds(): FloatArray {
+        cachedBounds?.let { return it }
         var l = Float.MAX_VALUE; var t = Float.MAX_VALUE; var r = -Float.MAX_VALUE; var b = -Float.MAX_VALUE
-        for (i in 0 until size) {
-            l = minOf(l, x(i)); r = maxOf(r, x(i)); t = minOf(t, y(i)); b = maxOf(b, y(i))
+        var i = 0
+        val len = points.size
+        while (i + 1 < len) {
+            val px = points[i]
+            val py = points[i + 1]
+            if (px < l) l = px
+            if (px > r) r = px
+            if (py < t) t = py
+            if (py > b) b = py
+            i += 3
         }
         val pad = width
-        return floatArrayOf(l - pad, t - pad, r + pad, b + pad)
+        val res = floatArrayOf(l - pad, t - pad, r + pad, b + pad)
+        cachedBounds = res
+        return res
     }
 }
 
@@ -202,20 +224,26 @@ object StrokeGeometry {
     fun thin(points: FloatArray, minDist: Float): FloatArray {
         val n = points.size / 3
         if (n <= 2) return points
-        val out = ArrayList<Float>(points.size)
-        out += points[0]; out += points[1]; out += points[2]
+        val out = FloatArray(points.size)
+        out[0] = points[0]; out[1] = points[1]; out[2] = points[2]
+        var count = 3
         var lx = points[0]
         var ly = points[1]
         for (i in 1 until n - 1) {
             val x = points[i * 3]
             val y = points[i * 3 + 1]
             if (hypot(x - lx, y - ly) >= minDist) {
-                out += x; out += y; out += points[i * 3 + 2]
+                out[count++] = x
+                out[count++] = y
+                out[count++] = points[i * 3 + 2]
                 lx = x; ly = y
             }
         }
-        out += points[(n - 1) * 3]; out += points[(n - 1) * 3 + 1]; out += points[(n - 1) * 3 + 2]
-        return out.toFloatArray()
+        val last = (n - 1) * 3
+        out[count++] = points[last]
+        out[count++] = points[last + 1]
+        out[count++] = points[last + 2]
+        return if (count == out.size) out else out.copyOf(count)
     }
 }
 
@@ -234,6 +262,8 @@ class StrokeLines(
 )
 
 object InkCurve {
+    private const val MAX_BUCKET = 64
+
     /**
      * Плавная кривая через точки пера: между серединами соседних отрезков — квадратичная кривая
      * с вершиной в точке пера. Концы штриха не сдвигаются; нажим сглаживается по соседям.
@@ -247,8 +277,14 @@ object InkCurve {
             val c = points[(minOf(i + 1, n - 1)) * 3 + 2]
             (a + 2 * b + c) / 4f
         }
-        val out = ArrayList<Float>(points.size * 2)
-        fun add(x: Float, y: Float, pr: Float) { out += x; out += y; out += pr }
+        var out = FloatArray(maxOf(points.size * 3, 24))
+        var outSize = 0
+        fun add(x: Float, y: Float, pr: Float) {
+            if (outSize + 3 > out.size) out = out.copyOf(out.size * 2)
+            out[outSize++] = x
+            out[outSize++] = y
+            out[outSize++] = pr
+        }
         add(points[0], points[1], p[0])
         var sx = points[0]
         var sy = points[1]
@@ -273,10 +309,10 @@ object InkCurve {
             sx = ex; sy = ey; sp = ep
         }
         add(points[(n - 1) * 3], points[(n - 1) * 3 + 1], p[n - 1])
-        return out.toFloatArray()
+        return if (outSize == out.size) out else out.copyOf(outSize)
     }
 
-    /** Отрезки штриха ручки, сгруппированные по толщине (шаг — 4 % базовой). */
+    /** Отрезки штриха ручки, сгруппированные по толщине (шаг — 4 % базовой) без аллокации боксированных Float. */
     fun lines(s: Stroke): StrokeLines {
         val n0 = s.size
         if (n0 == 0) return StrokeLines(FloatArray(0), emptyArray(), FloatArray(0))
@@ -292,22 +328,39 @@ object InkCurve {
             return StrokeLines(FloatArray(0), emptyArray(), floatArrayOf(pts[0], pts[1], r))
         }
         val quantum = maxOf(s.width * 0.04f, 0.04f)
-        val groups = HashMap<Int, ArrayList<Float>>()
+        val buckets = arrayOfNulls<FloatArray>(MAX_BUCKET)
+        val sizes = IntArray(MAX_BUCKET)
+        var activeBuckets = 0
         for (i in 0 until n - 1) {
             val x0 = pts[i * 3]; val y0 = pts[i * 3 + 1]
             val x1 = pts[(i + 1) * 3]; val y1 = pts[(i + 1) * 3 + 1]
             if (x0 == x1 && y0 == y1) continue
             val w = StrokeGeometry.widthAt(s.width, (pts[i * 3 + 2] + pts[(i + 1) * 3 + 2]) / 2, s.tool)
-            val key = Math.round(w / quantum)
-            val g = groups.getOrPut(key) { ArrayList() }
-            g += x0; g += y0; g += x1; g += y1
+            val key = Math.round(w / quantum).coerceIn(0, MAX_BUCKET - 1)
+            var b = buckets[key]
+            val sz = sizes[key]
+            if (b == null) {
+                b = FloatArray(64)
+                buckets[key] = b
+                activeBuckets++
+            } else if (sz + 4 > b.size) {
+                b = b.copyOf(b.size * 2)
+                buckets[key] = b
+            }
+            b[sz] = x0; b[sz + 1] = y0; b[sz + 2] = x1; b[sz + 3] = y1
+            sizes[key] = sz + 4
         }
-        val keys = groups.keys.sorted()
-        return StrokeLines(
-            FloatArray(keys.size) { keys[it] * quantum },
-            Array(keys.size) { groups.getValue(keys[it]).toFloatArray() },
-            FloatArray(0),
-        )
+        val widths = FloatArray(activeBuckets)
+        val lineArrays = Array(activeBuckets) { FloatArray(0) }
+        var idx = 0
+        for (key in 0 until MAX_BUCKET) {
+            val b = buckets[key] ?: continue
+            val sz = sizes[key]
+            widths[idx] = key * quantum
+            lineArrays[idx] = if (sz == b.size) b else b.copyOf(sz)
+            idx++
+        }
+        return StrokeLines(widths, lineArrays, FloatArray(0))
     }
 }
 
@@ -381,19 +434,30 @@ object InkFormat {
     private const val MAGIC2 = 0x4E4B4932 // «NKI2» — с напечатанным текстом
 
     fun write(page: InkPage, out: OutputStream) {
-        val o = DataOutputStream(out.buffered())
+        val o = DataOutputStream(out.buffered(16384))
         o.writeInt(MAGIC2)
         o.writeLong(page.id)
         o.writeUTF(page.paper.name)
         o.writeUTF(page.background.orEmpty())
         o.writeFloat(page.height)
         o.writeInt(page.strokes.size)
+        val byteBuf = ByteArray(8192)
+        val floatBuf = java.nio.ByteBuffer.wrap(byteBuf).asFloatBuffer()
+        val chunkFloats = byteBuf.size / 4
         for (s in page.strokes) {
             o.writeByte(s.tool.ordinal)
             o.writeInt(s.color)
             o.writeFloat(s.width)
             o.writeInt(s.size)
-            for (v in s.points) o.writeFloat(v)
+            val pts = s.points
+            var off = 0
+            while (off < pts.size) {
+                val count = minOf(chunkFloats, pts.size - off)
+                floatBuf.clear()
+                floatBuf.put(pts, off, count)
+                o.write(byteBuf, 0, count * 4)
+                off += count
+            }
         }
         o.writeInt(page.texts.size)
         for (t in page.texts) {
@@ -405,7 +469,7 @@ object InkFormat {
     }
 
     fun read(input: InputStream): InkPage {
-        val i = DataInputStream(input.buffered())
+        val i = DataInputStream(input.buffered(16384))
         val magic = i.readInt()
         require(magic == MAGIC || magic == MAGIC2) { "не страница тетради" }
         val id = i.readLong()
@@ -414,12 +478,24 @@ object InkFormat {
         val height = i.readFloat()
         val count = i.readInt()
         val strokes = ArrayList<Stroke>(count)
+        val byteBuf = ByteArray(8192)
+        val floatBuf = java.nio.ByteBuffer.wrap(byteBuf).asFloatBuffer()
+        val chunkFloats = byteBuf.size / 4
         repeat(count) {
             val tool = Tool.entries.getOrElse(i.readUnsignedByte()) { Tool.PEN }
             val color = i.readInt()
             val width = i.readFloat()
             val n = i.readInt()
-            val pts = FloatArray(n * 3) { i.readFloat() }
+            val totalFloats = n * 3
+            val pts = FloatArray(totalFloats)
+            var off = 0
+            while (off < totalFloats) {
+                val chunk = minOf(chunkFloats, totalFloats - off)
+                i.readFully(byteBuf, 0, chunk * 4)
+                floatBuf.position(0)
+                floatBuf.get(pts, off, chunk)
+                off += chunk
+            }
             strokes += Stroke(tool, color, width, pts)
         }
         val texts = ArrayList<TextBox>()

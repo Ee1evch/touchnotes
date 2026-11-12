@@ -32,10 +32,7 @@ object Alarms {
         app.appScope.launch(Dispatchers.IO) {
             runCatching { scheduleNextLesson(context) }
             runCatching { LiveNotifications.updateLesson(context) }
-            runCatching { LessonQuiet.update(context) }
             // Лёгкая версия («Наставник · Студент»): только пары, живое уведомление и «Тихо на парах».
-            if (BuildConfig.STUDENT) return@launch
-            runCatching { StudyLock.schedule(context) }
         }
     }
 

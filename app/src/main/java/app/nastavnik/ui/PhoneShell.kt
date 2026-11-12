@@ -126,15 +126,19 @@ fun TabRowBar(items: List<Triple<String, Int, Boolean>>, onClick: (Int) -> Unit,
         items.forEachIndexed { i, (title, icon, sel) ->
             val fg by animateColorAsState(if (sel) Brand.Accent else Brand.InkSoft, tween(220), label = "tabColor")
             val pill by animateColorAsState(if (sel) Brand.Accent.copy(alpha = 0.14f) else Color.Transparent, tween(220), label = "tabPill")
+            val iconScale by animateFloatAsState(if (sel) 1.08f else 1f, spring(dampingRatio = 0.6f, stiffness = 500f), label = "tabIconScale")
+            val pillWidth by animateDpAsState(if (sel) 56.dp else 44.dp, spring(dampingRatio = 0.75f, stiffness = 450f), label = "pillWidth")
+            val source = remember { MutableInteractionSource() }
             Column(
                 Modifier.weight(1f).fillMaxHeight()
-                    .clickable(remember { MutableInteractionSource() }, indication = null) { onClick(i) }
+                    .pressable(source)
+                    .clickable(source, indication = null) { onClick(i) }
                     .semantics { contentDescription = title; selected = sel },
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
             ) {
-                Box(Modifier.size(width = 56.dp, height = 30.dp).clip(RoundedCornerShape(15.dp)).background(pill), contentAlignment = Alignment.Center) {
-                    Icon(painterResource(icon), contentDescription = null, tint = fg, modifier = Modifier.size(22.dp))
+                Box(Modifier.size(width = pillWidth, height = 30.dp).clip(RoundedCornerShape(15.dp)).background(pill), contentAlignment = Alignment.Center) {
+                    Icon(painterResource(icon), contentDescription = null, tint = fg, modifier = Modifier.size(22.dp).graphicsLayer { scaleX = iconScale; scaleY = iconScale })
                 }
                 Text(title, style = MaterialTheme.typography.labelMedium, color = fg, maxLines = 1, modifier = Modifier.padding(top = 4.dp))
             }
@@ -215,7 +219,6 @@ private fun StudyTab(resumeTick: Int, go: (String) -> Unit) {
         // Сгруппированный список, как в настройках Android 16–17.
         Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             val rows = listOf(
-                Triple(R.drawable.ic_cards, "Вечерняя учёба", "Разобрать ошибки с занятий и прорешать похожие задачи") to MainActivity.SCREEN_EVENING,
                 Triple(R.drawable.ic_pen, "Домашка", "ДЗ до 100%: решаешь в тетради, наставник проверяет") to MainActivity.SCREEN_HOMEWORK,
                 Triple(R.drawable.ic_chart, "Успеваемость", "Оценки из личного кабинета") to MainActivity.SCREEN_GRADES,
                 Triple(R.drawable.ic_chart, "Прогресс", "Активность и темы с ошибками") to MainActivity.SCREEN_PROGRESS,

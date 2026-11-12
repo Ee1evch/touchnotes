@@ -203,8 +203,8 @@ fun NotebookScreen(notebookId: Long, onBack: () -> Unit, onCleanReady: () -> Uni
             }
             androidx.compose.animation.AnimatedVisibility(
                 visible = panel && wide,
-                enter = expandHorizontally(expandFrom = Alignment.Start, animationSpec = tween(360, easing = FastOutSlowInEasing)) + fadeIn(tween(280, delayMillis = 80)),
-                exit = shrinkHorizontally(shrinkTowards = Alignment.Start, animationSpec = tween(300, easing = FastOutSlowInEasing)) + fadeOut(tween(160)),
+                enter = expandHorizontally(expandFrom = Alignment.Start, animationSpec = spring(dampingRatio = 0.82f, stiffness = 420f)) + fadeIn(tween(240, delayMillis = 60)),
+                exit = shrinkHorizontally(shrinkTowards = Alignment.Start, animationSpec = spring(dampingRatio = 0.88f, stiffness = 480f)) + fadeOut(tween(160)),
             ) {
                 MentorPanel(
                     ctl, state.answer, onCleanReady = onCleanReady, onSettings = onSettings,
@@ -215,8 +215,8 @@ fun NotebookScreen(notebookId: Long, onBack: () -> Unit, onCleanReady: () -> Uni
         androidx.compose.animation.AnimatedVisibility(
             visible = panel && !wide,
             modifier = Modifier.align(Alignment.BottomCenter),
-            enter = slideInVertically(tween(340, easing = FastOutSlowInEasing)) { it } + fadeIn(),
-            exit = slideOutVertically(tween(280, easing = FastOutSlowInEasing)) { it } + fadeOut(),
+            enter = slideInVertically(spring(dampingRatio = 0.82f, stiffness = 420f)) { it } + fadeIn(),
+            exit = slideOutVertically(tween(240, easing = FastOutSlowInEasing)) { it } + fadeOut(),
         ) {
             MentorPanel(
                 ctl, state.answer, onCleanReady = onCleanReady, onSettings = onSettings,

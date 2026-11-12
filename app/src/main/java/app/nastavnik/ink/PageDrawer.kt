@@ -50,8 +50,25 @@ class PageDrawer {
         strokeWidth = 1.4f
         style = Paint.Style.STROKE
     }
-    private val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = DOT }
+    private val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = DOT
+        style = Paint.Style.STROKE
+        strokeCap = Paint.Cap.ROUND
+        strokeWidth = 3.2f
+    }
     private val bitmapPaint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
+    private val bgRect = RectF()
+    private val markRect = RectF()
+    private var paperBuf = FloatArray(1024)
+    private var cachedDashPx = -1f
+    private var cachedDash: DashPathEffect? = null
+
+    private fun ensurePaperBuf(needed: Int): FloatArray {
+        if (paperBuf.size < needed) {
+            paperBuf = FloatArray(maxOf(needed, paperBuf.size * 2))
+        }
+        return paperBuf
+    }
 
     /** Ручка: отрезки с круглыми концами — без щелей и «перекрученных» мест на разворотах пера. */
     private val inkPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -91,12 +108,14 @@ class PageDrawer {
         val h = page.height
         c.drawRect(0f, 0f, PAGE_W, h, paperPaint)
         if (background != null && !background.isRecycled) {
-            c.drawBitmap(background, null, RectF(0f, 0f, PAGE_W, h), bitmapPaint)
+            bgRect.set(0f, 0f, PAGE_W, h)
+            c.drawBitmap(background, null, bgRect, bitmapPaint)
         }
         drawPaper(c, page.paper, h, visible)
-        for (s in page.strokes) if (s.tool == Tool.HIGHLIGHTER && s !in exclude && visibleStroke(s, visible)) drawStroke(c, s)
-        for (t in page.texts) if (t !in exclude) drawText(c, t)
-        for (s in page.strokes) if (s.tool != Tool.HIGHLIGHTER && s !in exclude && visibleStroke(s, visible)) drawStroke(c, s)
+        val hasExclude = exclude.isNotEmpty()
+        for (s in page.strokes) if (s.tool == Tool.HIGHLIGHTER && (!hasExclude || s !in exclude) && visibleStroke(s, visible)) drawStroke(c, s)
+        for (t in page.texts) if (!hasExclude || t !in exclude) drawText(c, t)
+        for (s in page.strokes) if (s.tool != Tool.HIGHLIGHTER && (!hasExclude || s !in exclude) && visibleStroke(s, visible)) drawStroke(c, s)
     }
 
     // ---------------- текст ----------------
@@ -173,6 +192,50 @@ class PageDrawer {
         }
     }
 
+    /** Быстрая отрисовка живого маркера напрямую из накапливаемого [Path] без аллокаций на каждый кадр. */
+    fun drawLiveHighlighter(c: Canvas, path: Path, color: Int, width: Float) {
+        markerPaint.color = displayColor(color)
+        markerPaint.alpha = if (dark) MARKER_ALPHA_DARK else MARKER_ALPHA
+        markerPaint.strokeWidth = width
+        c.drawPath(path, markerPaint)
+    }
+
+    /** Быстрая отрисовка живого штриха ручки по накапливаемым корзинам толщин + хвосту. */
+    fun drawLivePen(
+        c: Canvas,
+        color: Int,
+        dotX: Float,
+        dotY: Float,
+        dotR: Float,
+        hasDot: Boolean,
+        buckets: Array<FloatArray?>,
+        bucketSizes: IntArray,
+        tailBuckets: Array<FloatArray?>,
+        tailSizes: IntArray,
+    ) {
+        val dispColor = displayColor(color)
+        if (hasDot) {
+            dotFill.color = dispColor
+            c.drawCircle(dotX, dotY, dotR, dotFill)
+            return
+        }
+        inkPaint.color = dispColor
+        for (b in buckets.indices) {
+            val fSize = bucketSizes[b]
+            val tSize = tailSizes[b]
+            if (fSize == 0 && tSize == 0) continue
+            inkPaint.strokeWidth = b * 0.4f
+            if (fSize > 0) {
+                val arr = buckets[b]
+                if (arr != null) c.drawLines(arr, 0, fSize, inkPaint)
+            }
+            if (tSize > 0) {
+                val arr = tailBuckets[b]
+                if (arr != null) c.drawLines(arr, 0, tSize, inkPaint)
+            }
+        }
+    }
+
     /** Цвет чернил на экране: в тёмной теме тёмные чернила светлеют, цветные — чуть ярче. */
     fun displayColor(c: Int): Int {
         if (!dark) return c
@@ -188,41 +251,72 @@ class PageDrawer {
         val bottom = (visible?.bottom ?: h).coerceAtMost(h)
         val left = (visible?.left ?: 0f).coerceAtLeast(0f)
         val right = (visible?.right ?: PAGE_W).coerceAtMost(PAGE_W)
+        if (top > bottom || left > right) return
         when (paper) {
             Paper.GRID -> {
+                val hCount = (h / CELL).toInt() + 2
+                val vCount = (PAGE_W / CELL).toInt() + 2
+                val buf = ensurePaperBuf((hCount + vCount) * 4)
+                var idx = 0
                 var y = CELL
                 while (y < h) {
-                    if (y in top..bottom) c.drawLine(left, y, right, y, linePaint)
+                    if (y in top..bottom) {
+                        buf[idx++] = left
+                        buf[idx++] = y
+                        buf[idx++] = right
+                        buf[idx++] = y
+                    }
                     y += CELL
                 }
                 var x = CELL
                 while (x < PAGE_W) {
-                    if (x in left..right) c.drawLine(x, top, x, bottom, linePaint)
+                    if (x in left..right) {
+                        buf[idx++] = x
+                        buf[idx++] = top
+                        buf[idx++] = x
+                        buf[idx++] = bottom
+                    }
                     x += CELL
                 }
+                if (idx > 0) c.drawLines(buf, 0, idx, linePaint)
                 // Поля справа, как в школьной тетради.
                 c.drawLine(PAGE_W - CELL * 2, top, PAGE_W - CELL * 2, bottom, marginPaint)
             }
             Paper.LINED -> {
+                val hCount = ((h - LINE_TOP) / LINE_STEP).toInt().coerceAtLeast(0) + 2
+                val buf = ensurePaperBuf(hCount * 4)
+                var idx = 0
                 var y = LINE_TOP
                 while (y < h - CELL) {
-                    if (y in top..bottom) c.drawLine(left, y, right, y, linePaint)
+                    if (y in top..bottom) {
+                        buf[idx++] = left
+                        buf[idx++] = y
+                        buf[idx++] = right
+                        buf[idx++] = y
+                    }
                     y += LINE_STEP
                 }
+                if (idx > 0) c.drawLines(buf, 0, idx, linePaint)
                 c.drawLine(LINE_MARGIN, top, LINE_MARGIN, bottom, marginPaint)
             }
             Paper.DOTS -> {
-                var y = CELL
-                while (y < h) {
-                    if (y in top..bottom) {
-                        var x = CELL
-                        while (x < PAGE_W) {
-                            if (x in left..right) c.drawCircle(x, y, 1.6f, dotPaint)
-                            x += CELL
-                        }
+                val rows = ((bottom - top) / CELL).toInt().coerceAtLeast(0) + 2
+                val cols = ((right - left) / CELL).toInt().coerceAtLeast(0) + 2
+                val buf = ensurePaperBuf(rows * cols * 2)
+                var idx = 0
+                val firstY = ((kotlin.math.ceil((top / CELL).toDouble()).toInt()).coerceAtLeast(1)) * CELL
+                val firstX = ((kotlin.math.ceil((left / CELL).toDouble()).toInt()).coerceAtLeast(1)) * CELL
+                var y = firstY
+                while (y < h && y <= bottom) {
+                    var x = firstX
+                    while (x < PAGE_W && x <= right) {
+                        buf[idx++] = x
+                        buf[idx++] = y
+                        x += CELL
                     }
                     y += CELL
                 }
+                if (idx > 0) c.drawPoints(buf, 0, idx, dotPaint)
             }
             Paper.BLANK -> Unit
         }
@@ -245,6 +339,14 @@ class PageDrawer {
     }
     private val wave = Path()
 
+    private fun dashFor(px: Float): DashPathEffect {
+        if (kotlin.math.abs(cachedDashPx - px) > 1e-4f || cachedDash == null) {
+            cachedDashPx = px
+            cachedDash = DashPathEffect(floatArrayOf(8 * px, 6 * px), 0f)
+        }
+        return cachedDash!!
+    }
+
     /**
      * Отметки в единицах страницы: подсветка строки цветом вида и кружок с номером заметки.
      * [scale] — сколько пикселей в единице страницы: значок и линии не должны расти при увеличении.
@@ -253,7 +355,9 @@ class PageDrawer {
         val px = 1f / scale.coerceAtLeast(0.05f)
         for (m in marks) {
             val color = kindColor(m.kind)
-            val r = RectF(m.rect).apply { inset(-4 * px, -3 * px) }
+            markRect.set(m.rect)
+            markRect.inset(-4 * px, -3 * px)
+            val r = markRect
             val strong = selected == m.number
             if (m.drawing != null) {
                 markLine.color = color
@@ -293,7 +397,7 @@ class PageDrawer {
                 MarkKind.THEORY -> c.drawLine(r.left + 1.5f * px, r.top + 2 * px, r.left + 1.5f * px, r.bottom - 2 * px, markLine.apply { strokeWidth = 4 * px })
                 MarkKind.OK -> Unit
                 else -> {
-                    markLine.pathEffect = DashPathEffect(floatArrayOf(8 * px, 6 * px), 0f)
+                    markLine.pathEffect = dashFor(px)
                     c.drawRoundRect(r, radius, radius, markLine)
                 }
             }

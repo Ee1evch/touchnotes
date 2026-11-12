@@ -230,8 +230,9 @@ private fun WeekStrip(day: LocalDate, lessons: List<Lesson>, onPick: (LocalDate)
                 val d = monday.plusDays(i.toLong())
                 val sel = d == day
                 val bg by androidx.compose.animation.animateColorAsState(if (sel) Brand.Accent else Brand.Glass, Motion.enter(220), label = "dayBg")
+                val scale by animateFloatAsState(if (sel) 1.04f else 1f, spring(dampingRatio = 0.65f, stiffness = 600f), label = "dayScale")
                 Column(
-                    Modifier.weight(1f).clip(RoundedCornerShape(16.dp)).background(bg).clickable { onPick(d) }.padding(vertical = 8.dp),
+                    Modifier.weight(1f).graphicsLayer { scaleX = scale; scaleY = scale }.clip(RoundedCornerShape(16.dp)).background(bg).clickable { onPick(d) }.padding(vertical = 8.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     val fg = if (sel) Brand.OnAccent else MaterialTheme.colorScheme.onSurface

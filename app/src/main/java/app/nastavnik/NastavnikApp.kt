@@ -18,9 +18,6 @@ import app.nastavnik.data.SettingsRepo
 import app.nastavnik.ink.Notebooks
 import app.nastavnik.session.CleanSession
 import app.nastavnik.study.Alarms
-import app.nastavnik.study.Siren
-import app.nastavnik.study.WakeAlarm
-import app.nastavnik.study.WakePrefs
 import app.nastavnik.ui.Palettes
 import app.nastavnik.schedule.ScheduleRepo
 import app.nastavnik.sync.SyncManager
@@ -98,10 +95,8 @@ class NastavnikApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        WakeAlarm.cancelRemovedAlarm(this)
-        Siren.cancelRemovedSiren(this)
         // Обычные настройки и база доступны после первой разблокировки.
-        if (!WakePrefs.unlocked(this)) {
+        if (getSystemService(android.os.UserManager::class.java)?.isUserUnlocked == false) {
             createChannels()
             androidx.core.content.ContextCompat.registerReceiver(
                 this,
@@ -143,15 +138,10 @@ class NastavnikApp : Application() {
             setShowBadge(false)
         }
         nm.createNotificationChannel(channel)
-        listOf("wake", "sleep", "reminders", "personal").forEach(nm::deleteNotificationChannel)
+        listOf("wake", "sleep", "reminders", "personal", "lock").forEach(nm::deleteNotificationChannel)
         nm.createNotificationChannel(
             NotificationChannel(CHANNEL_GRADES, "Новые оценки", NotificationManager.IMPORTANCE_DEFAULT).apply {
                 description = "Когда в личном кабинете появляется новая оценка"
-            },
-        )
-        nm.createNotificationChannel(
-            NotificationChannel(CHANNEL_LOCK, "Вечерняя учёба", NotificationManager.IMPORTANCE_HIGH).apply {
-                description = "Предупреждение за 30 минут и замок приложений до вечерней учёбы"
             },
         )
         nm.createNotificationChannel(
@@ -165,9 +155,6 @@ class NastavnikApp : Application() {
         const val CHANNEL_SERVICE = "service"
         const val CHANNEL_LESSONS = "lessons"
         const val CHANNEL_GRADES = "grades"
-        const val CHANNEL_WAKE = "wake"
-        const val CHANNEL_SLEEP = "sleep"
-        const val CHANNEL_LOCK = "study_lock"
     }
 }
 

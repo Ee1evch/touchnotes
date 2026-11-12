@@ -29,7 +29,7 @@ import java.io.File
 import java.time.LocalDate
 import java.time.LocalTime
 
-/** «Наставник · Студент»: только расписание, оценки и настройки; служб наставника, замка и сирены нет. */
+/** «Наставник · Студент»: только расписание, оценки и настройки; служб наставника нет. */
 @RunWith(AndroidJUnit4::class)
 class StudentFlowTest {
     private val instr = InstrumentationRegistry.getInstrumentation()
@@ -54,7 +54,7 @@ class StudentFlowTest {
         assertTrue(BuildConfig.STUDENT)
         assertEquals("app.nastavnik.student", ctx.packageName)
         // Служб полной версии в лёгкой нет.
-        for (cls in listOf("app.nastavnik.study.WakeGuard", "app.nastavnik.overlay.BubbleService", "app.nastavnik.study.SirenService")) {
+        for (cls in listOf("app.nastavnik.overlay.BubbleService", "app.nastavnik.overlay.MentorTileService")) {
             val missing = runCatching { ctx.packageManager.getServiceInfo(ComponentName(ctx, cls), 0) }.exceptionOrNull() is PackageManager.NameNotFoundException
             assertTrue("$cls есть в лёгкой версии", missing)
         }

@@ -30,14 +30,13 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import app.nastavnik.R
 import app.nastavnik.app
 import app.nastavnik.schedule.Lesson
 import app.nastavnik.schedule.ScheduleText
 import app.nastavnik.study.Alarms
 import app.nastavnik.study.LessonQuiet
 import app.nastavnik.study.LiveNotifications
-import app.nastavnik.study.StudyLock
-import app.nastavnik.study.WakeGuard
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import app.nastavnik.sync.WebDavStore
 import app.nastavnik.sync.YandexDiskStore
@@ -63,6 +62,8 @@ fun SyncSection() {
     var password by remember { mutableStateOf("") }
     var checking by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+
+    var expanded by remember { mutableStateOf(false) }
 
     SectionCard("Синхронизация") {
         if (configured) {
@@ -93,18 +94,18 @@ fun SyncSection() {
                     )
                 }
             }
-            Text(
-                "Синхронизируются тетради, карточки, прогресс, чистовики, группа и экзамены — сами, при открытии и закрытии приложения.",
-                style = MaterialTheme.typography.bodySmall, color = Brand.InkSoft,
-            )
-            LinkText("Отключить облако") { app.sync.disconnect(); configured = false }
+            LinkText("Отключить облако") { app.sync.disconnect(); configured = false; expanded = false }
             return@SectionCard
         }
 
         FieldLabel(
-            "Тетради на планшете, карточки на телефоне — одно и то же",
-            "Подключи одно облако на обоих устройствах (тот же аккаунт). Своего сервера нет: данные лежат в папке «Nastavnik» твоего диска.",
+            "Общие тетради, карточки и расписание",
+            "Яндекс Диск или WebDAV — данные хранятся на твоём диске в папке «Nastavnik».",
         )
+        if (!expanded) {
+            SoftButton("Подключить облако", icon = R.drawable.ic_cloud) { expanded = true }
+            return@SectionCard
+        }
         Segmented(listOf(true to "Яндекс Диск", false to "Другой WebDAV"), yandex) { yandex = it }
         AnimatedVisibility(!yandex, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
             AppTextField(url, { url = it }, label = "Адрес WebDAV", placeholder = "https://cloud.example.ru/remote.php/dav/files/имя/")
@@ -159,27 +160,15 @@ fun SyncSection() {
     }
 }
 
-/** Устройство: как вести себя и за сколько предупреждать о паре. */
+/** Уведомления и тихий режим на парах. */
 @Composable
-fun DeviceSection(tablet: Boolean, showRole: Boolean = true) {
+fun DeviceSection(tablet: Boolean = false, showRole: Boolean = false) {
     val context = LocalContext.current
     val repo = context.app.settings
-    var role by remember { mutableStateOf(repo.deviceRole()) }
     var alert by remember { mutableStateOf(repo.lessonAlertMin()) }
-    SectionCard("Это устройство") {
-        if (showRole) {
-            FieldLabel(
-                "Режим",
-                if (tablet) "Планшет: тетради для стилуса, наставник, чистовики — и всё остальное." else "Телефон: расписание, оценки и карточки — без тетрадей для стилуса.",
-            )
-            Segmented(listOf("auto" to "Сам", "phone" to "Телефон", "tablet" to "Планшет"), role) {
-                role = it
-                repo.setDeviceRole(it)
-            }
-            HorizontalDivider(Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant)
-        }
-        FieldLabel("Перед парой", "Живое уведомление: аудитория, отсчёт до начала, весь день полосой.")
-        Segmented(listOf(0 to "Не надо", 5 to "за 5 мин", 10 to "за 10", 15 to "за 15"), alert) {
+    SectionCard("Уведомления и пары") {
+        FieldLabel("Перед парой", "Живое уведомление: аудитория, отсчёт до конца пары или перемены.")
+        Segmented(listOf(0 to "Выкл.", 5 to "за 5 мин", 10 to "за 10", 15 to "за 15"), alert) {
             alert = it
             repo.setLessonAlertMin(it)
             Alarms.rescheduleAll(context)
@@ -194,12 +183,12 @@ fun DeviceSection(tablet: Boolean, showRole: Boolean = true) {
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                FieldLabel("Тихо на парах", "На время пары — «Не беспокоить», после — как было. Будильники и повторные звонки проходят.")
+                FieldLabel("Тихо на парах", "На время пары — «Не беспокоить», после — как было. Повторные звонки проходят.")
             }
             AppSwitch(quiet) {
                 quiet = it
                 repo.setQuietLessons(it)
-                if (it && !access) StudyLock.openSettings(context, LessonQuiet.accessIntent())
+                if (it && !access) context.startActivity(LessonQuiet.accessIntent())
                 Alarms.rescheduleAll(context)
             }
         }
@@ -209,7 +198,7 @@ fun DeviceSection(tablet: Boolean, showRole: Boolean = true) {
                     "Нужно разрешить «Наставнику» доступ к режиму «Не беспокоить».",
                     style = MaterialTheme.typography.bodySmall, color = Brand.InkSoft, modifier = Modifier.weight(1f),
                 )
-                LinkText("Разрешить") { StudyLock.openSettings(context, LessonQuiet.accessIntent()) }
+                LinkText("Разрешить") { context.startActivity(LessonQuiet.accessIntent()) }
             }
         }
     }

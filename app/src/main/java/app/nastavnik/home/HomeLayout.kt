@@ -46,7 +46,7 @@ object HomeLayout {
         val items = raw.split(',').mapNotNull { part ->
             val (id, size) = part.split(':').takeIf { it.size == 2 } ?: return@mapNotNull null
             val s = runCatching { Size.valueOf(size.trim()) }.getOrNull() ?: return@mapNotNull null
-            val key = id.trim()
+            val key = id.trim().let { if (it == "alarm" && "exam" in known) "exam" else it }
             if (key !in known || !seen.add(key)) null else Item(key, s)
         }
         return items.ifEmpty { if (raw.trim() == "-") emptyList() else default }

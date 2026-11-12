@@ -48,8 +48,6 @@ import app.nastavnik.schedule.ScheduleNow
 import app.nastavnik.study.Exam
 import app.nastavnik.study.ExamPlan
 import app.nastavnik.study.DayPlan
-import app.nastavnik.study.StudyLock
-import app.nastavnik.study.StudyLockRules
 import app.nastavnik.study.ruPlural
 import kotlinx.coroutines.launch
 import java.time.LocalDateTime
@@ -60,7 +58,7 @@ import java.util.Locale
  * Главная — одинаковая по смыслу на телефоне и планшете, сверху вниз от важного:
  *  1. шапка: дата и одна фраза о том, что сейчас («Сейчас физика — ещё 35 мин»);
  *  2. карточка дня: пара, которая важна сейчас (идёт или следующая), и лента всех пар дня;
- *  3. три плитки: карточки, серия, будильник (или экзамен);
+ *  3. плитки: карточки, серия, экзамен;
  *  4. напоминания;
  *  5. на планшете — тетради, наставник и разделы сеткой.
  */
@@ -256,7 +254,6 @@ fun SectionsGrid(go: (String) -> Unit, columns: Int, items: List<Triple<Int, Str
 
 /** Разделы планшета для сетки. */
 val TABLET_SECTIONS = listOf(
-    Triple(R.drawable.ic_pen, "Домашка", MainActivity.SCREEN_HOMEWORK),
     Triple(R.drawable.ic_calendar, "Расписание", MainActivity.SCREEN_SCHEDULE),
     Triple(R.drawable.ic_chart, "Оценки", MainActivity.SCREEN_GRADES),
     Triple(R.drawable.ic_target, "Тренировка", MainActivity.SCREEN_TRAINING),
@@ -265,47 +262,6 @@ val TABLET_SECTIONS = listOf(
     Triple(R.drawable.ic_history, "История", MainActivity.SCREEN_HISTORY),
     Triple(R.drawable.ic_note, "Чистовик", MainActivity.SCREEN_CLEAN),
 )
-
-/**
- * Вечерняя учёба на главной: видна вечером (с 16:00), пока не сделана, и всегда — пока замок закрыт.
- */
-@Composable
-fun EveningCard(resumeTick: Int, now: LocalDateTime, go: (String) -> Unit) {
-    val context = LocalContext.current
-    val status by produceState<StudyLock.Status?>(null, resumeTick) {
-        value = StudyLock.status(context)
-    }
-    val s = status ?: return
-    val mistakes by remember(context, s.date) { context.app.study.observeMistakes(s.date) }
-        .collectAsStateWithLifecycle(initialValue = emptyList())
-    val pendingMistakes = mistakes.count { !it.reviewed }
-    val show = s.locked || ((!s.allDone || pendingMistakes > 0) && now.hour >= 16) ||
-        (s.configured && !s.allDone && s.date != now.toLocalDate())
-    if (!show) return
-    val src = remember { MutableInteractionSource() }
-    Row(
-        Modifier.fillMaxWidth().enter().pressable(src)
-            .glass(RoundedCornerShape(24.dp), 12.dp, strong = s.locked)
-            .clickable(src, indication = null) { go(MainActivity.SCREEN_EVENING) }
-            .padding(16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-        Box(
-            Modifier.size(40.dp).clip(CircleShape).background(if (s.locked) Brand.Error else Brand.Accent),
-            contentAlignment = Alignment.Center,
-        ) { Icon(painterResource(R.drawable.ic_cards), contentDescription = null, tint = Brand.OnAccent, modifier = Modifier.size(20.dp)) }
-        Column(Modifier.weight(1f)) {
-            Text(if (s.locked) "Приложения закрыты" else "Вечерняя учёба", style = MaterialTheme.typography.titleMedium)
-            Text(
-                if (pendingMistakes > 0) "К разбору · $pendingMistakes ${ruPlural(pendingMistakes, "ошибка", "ошибки", "ошибок")} за день"
-                else "${s.steps} из 4 · карточки, что было сегодня, подготовка и ДЗ к завтра",
-                style = MaterialTheme.typography.bodySmall, color = Brand.InkSoft, maxLines = 2, overflow = TextOverflow.Ellipsis,
-            )
-        }
-        InkButton(if (s.steps == 0) "Начать" else "Дальше") { go(MainActivity.SCREEN_EVENING) }
-    }
-}
 
 /**
  * План на день от наставника: 3–4 дела по сводке учёбы и времени в телефоне. Один запрос в день;
@@ -335,7 +291,7 @@ fun PlanCard(resumeTick: Int) {
             }
         }
         if (!usage) LinkText("Учитывать время в телефоне") {
-            StudyLock.openSettings(context, DayPlan.usageIntent())
+            context.startActivity(DayPlan.usageIntent())
         }
     }
 }

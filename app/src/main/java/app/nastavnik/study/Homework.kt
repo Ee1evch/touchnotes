@@ -210,7 +210,7 @@ object Homeworks {
             val page = renderPage(file, c.page, width) ?: return@mapNotNull null
             val top = (c.top.coerceIn(0f, 1f) * page.height).toInt()
             val bottom = (c.bottom.coerceIn(0f, 1f) * page.height).toInt().coerceAtLeast(top + 20).coerceAtMost(page.height)
-            Bitmap.createBitmap(page, 0, top, page.width, bottom - top).also { if (it != page) page.recycle() }
+            Bitmap.createBitmap(page, 0, top, page.width, bottom - top)
         }
         if (pieces.isEmpty()) return null
         val out = Bitmap.createBitmap(width, pieces.sumOf { it.height }, Bitmap.Config.ARGB_8888)
@@ -491,7 +491,6 @@ object Homeworks {
             update(c, hwId, taskId) { it.copy(status = status, comment = comment, failed = if (status == Status.DONE) it.failed else it.failed + 1) }
         } ?: return Result.failure(IllegalStateException("ДЗ не найдено"))
         if (status == Status.DONE) c.app.study.record(Learning.KIND_TASK, "${hw.subject} · ДЗ ${t.label}", 0)
-        afterChange(c)
         return Result.success(Verdict(status, comment, nw))
     }
 
@@ -501,14 +500,7 @@ object Homeworks {
         val t = hw.tasks.firstOrNull { it.id == taskId } ?: return false
         if (!HomeworkRules.canDispute(t.status, t.failed, hw.statuses)) return false
         update(c, hwId, taskId) { it.copy(status = Status.DISPUTED) }
-        afterChange(c)
         return true
-    }
-
-    /** ДЗ изменилось — пересчитать учебный замок. */
-    private fun afterChange(c: Context) {
-        val app = c.applicationContext as? NastavnikApp ?: return
-        app.appScope.launch { runCatching { StudyLock.status(app) } }
     }
 
     // ---------------- карточки ----------------

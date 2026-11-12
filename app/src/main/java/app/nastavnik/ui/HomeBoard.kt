@@ -1,6 +1,7 @@
 package app.nastavnik.ui
 
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -50,11 +51,10 @@ import java.time.LocalDateTime
 private data class Widget(val id: String, val title: String, val icon: Int, val sizes: List<Size>, val tabletOnly: Boolean = false)
 
 private val WIDGETS = listOf(
-    Widget("evening", "Вечерняя учёба", R.drawable.ic_cards, listOf(Size.M, Size.L)),
     Widget("day", "Пары", R.drawable.ic_calendar, listOf(Size.S, Size.M, Size.L)),
     Widget("plan", "План на день", R.drawable.ic_sparkle, listOf(Size.M, Size.L)),
     Widget("cards", "Карточки", R.drawable.ic_cards, listOf(Size.S, Size.M, Size.L)),
-    Widget("alarm", "Экзамен", R.drawable.ic_target, listOf(Size.S, Size.M, Size.L)),
+    Widget("exam", "Экзамен", R.drawable.ic_target, listOf(Size.S, Size.M, Size.L)),
     Widget("grades", "Успеваемость", R.drawable.ic_chart, listOf(Size.S, Size.M, Size.L)),
     Widget("notebooks", "Тетради", R.drawable.ic_notebook, listOf(Size.M, Size.L), tabletOnly = true),
     Widget("mentor", "Наставник", R.drawable.ic_sparkle, listOf(Size.M, Size.L), tabletOnly = true),
@@ -62,12 +62,10 @@ private val WIDGETS = listOf(
 )
 
 private fun defaults(tablet: Boolean) = if (tablet) listOf(
-    Item("evening", Size.L), Item("day", Size.M), Item("plan", Size.M),
-    Item("cards", Size.S), Item("alarm", Size.S),
+    Item("cards", Size.S), Item("exam", Size.S),
     Item("notebooks", Size.L), Item("mentor", Size.M), Item("sections", Size.M),
 ) else listOf(
-    Item("evening", Size.L), Item("day", Size.L), Item("plan", Size.L),
-    Item("cards", Size.S), Item("alarm", Size.S),
+    Item("cards", Size.S), Item("exam", Size.S),
     Item("grades", Size.L),
 )
 
@@ -109,7 +107,6 @@ fun HomeBoard(
     fun content(item: Item, m: Modifier) {
         val small = item.size == Size.S
         when (item.id) {
-            "evening" -> Box(m) { EveningCard(resumeTick, now, go) }
             "day" -> if (small) {
                 val st = remember(lessons, now) { ScheduleNow.at(lessons.orEmpty(), now) }
                 val l = st.current ?: st.next
@@ -117,7 +114,7 @@ fun HomeBoard(
             } else Box(m) { DayCard(lessons, tomorrow, now, hasGroup, onSchedule = onSchedule) }
             "plan" -> Box(m) { PlanCard(resumeTick) }
             "cards" -> CardsTile(m, due, go)
-            "alarm" -> ExamTile(m, exam, go)
+            "exam" -> ExamTile(m, exam, go)
             "grades" -> if (small) {
                 HomeTile(m, R.drawable.ic_chart, "Оценки", "успеваемость", false, { go(MainActivity.SCREEN_GRADES) })
             } else Box(m) { GradesCard(onOpen = { go(MainActivity.SCREEN_GRADES) }) }
@@ -127,7 +124,7 @@ fun HomeBoard(
     }
 
     val columns = HomeLayout.columns(tablet)
-    Column(Modifier.fillMaxWidth().animateContentSize(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+    Column(Modifier.fillMaxWidth().animateContentSize(spring(dampingRatio = 0.8f, stiffness = 450f)), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         // Правка — панель сверху, чтобы сразу было видно, что делать.
         if (editing) AddPanel(
             hidden = catalog.filter { w -> items.none { it.id == w.id } },
