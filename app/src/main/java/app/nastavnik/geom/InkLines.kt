@@ -106,20 +106,15 @@ class LineMap(
         if (ls.isEmpty()) return null
         val top = ls.minOf { it.top }
         val bottom = ls.maxOf { it.bottom }
-        var left = ls.minOf { it.left }
-        var right = ls.maxOf { it.right }
-        // Модель уточнила часть строки — берём только куски строк, которые попали в её рамку.
-        if (box != null) {
-            val slack = max(lineHeight / 2, box.width / 8)
-            val parts = ls.flatMap { it.segments }.filter { it.last >= box.left - slack && it.first <= box.right + slack }
-            if (parts.isNotEmpty()) {
-                left = parts.minOf { it.first }
-                right = parts.maxOf { it.last } + 1
-            } else {
-                left = box.left
-                right = box.right
-            }
+        val slack = max(lineHeight / 2, (box?.width ?: 0) / 8)
+        var parts = if (box != null) {
+            ls.flatMap { it.segments }.filter { it.last >= box.left - slack && it.first <= box.right + slack }
+        } else emptyList()
+        if (parts.isEmpty()) {
+            parts = ls.flatMap { it.segments }
         }
+        val left = parts.minOf { it.first }
+        val right = parts.maxOf { it.last } + 1
         return clampToPiece(left, top, right, bottom, box, pad)
     }
 
@@ -130,33 +125,21 @@ class LineMap(
      */
     private fun clampToPiece(left: Int, top: Int, right: Int, bottom: Int, box: IRect?, p: Int): IRect {
         var l = left
-        var t = top
         var r = right
-        var b = bottom
-        if (box != null && box.width > 0 && box.height > 0) {
-            val minPiece = max(10, lineHeight / 3)
-            // По горизонтали: ограничиваем единым куском модели
-            val cl = max(l, box.left)
-            val cr = min(r, box.right)
-            if (cr - cl >= minPiece) {
-                l = cl
-                r = cr
-            } else if (box.width >= minPiece) {
+        if (box != null && box.width > 0) {
+            val slack = max(lineHeight / 2, box.width / 8)
+            if (box.left - left > slack) {
                 l = box.left
+            }
+            if (right - box.right > slack) {
                 r = box.right
             }
-            // По вертикали: не даём строке или блоку захватывать лишнее
-            val ct = max(t, box.top)
-            val cb = min(b, box.bottom)
-            if (cb - ct >= minPiece) {
-                t = ct
-                b = cb
-            } else if (box.height >= minPiece) {
-                t = box.top
-                b = box.bottom
+            if (l >= r) {
+                l = left
+                r = right
             }
         }
-        return IRect(l - p, t - p, r + p, b + p).clampInto(IRect(0, 0, width, height))
+        return IRect(l - p, top - p, r + p, bottom + p).clampInto(IRect(0, 0, width, height))
     }
 
     /** Место под строкой: туда студент пишет следующий шаг. */
@@ -252,8 +235,8 @@ object InkLines {
                 val b = bands[i + 1]
                 if (b[1] - a[0] > maxMergedH) continue
                 val gap = b[0] - a[1]
-                val small = min(a[1] - a[0], b[1] - b[0]) < mh * 0.45
-                if (gap < mh * 0.22 || (small && gap < mh * 0.6)) {
+                val small = min(a[1] - a[0], b[1] - b[0]) < mh * 0.5f
+                if (small && gap < mh * 0.6f) {
                     bands[i] = intArrayOf(a[0], b[1])
                     bands.removeAt(i + 1)
                     merged = true
