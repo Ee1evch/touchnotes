@@ -15,9 +15,9 @@ android {
         applicationId = "app.nastavnik.parent"
         minSdk = 29
         targetSdk = 36
-        val build = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
-        versionCode = build
-        versionName = "1.$build"
+        val build = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 153
+        versionCode = maxOf(build, 10107)
+        versionName = "1.1.7"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

@@ -86,22 +86,24 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "build-$BUILD_NUMBER" nastavnik.apk student.apk parent.apk \
-            --repo "${{ github.repository }}" \
-            --target "${{ github.sha }}" \
-            --title "Наставник 1.5, сборка $BUILD_NUMBER" \
-            --notes "Ветка ${{ github.ref_name }}, коммит ${{ github.sha }}" \
-            --latest || {
-            gh release edit "build-$BUILD_NUMBER" \
+          for TAG in "v1.1.7" "build-$BUILD_NUMBER"; do
+            gh release create "$TAG" nastavnik.apk student.apk parent.apk \
               --repo "${{ github.repository }}" \
               --target "${{ github.sha }}" \
-              --title "Наставник 1.5, сборка $BUILD_NUMBER" \
-              --notes "Ветка ${{ github.ref_name }}, коммит ${{ github.sha }}" \
-              --latest
-            gh release upload "build-$BUILD_NUMBER" nastavnik.apk student.apk parent.apk \
-              --repo "${{ github.repository }}" \
-              --clobber
-          }
+              --title "Наставник 1.1.7" \
+              --notes "Ветка ${{ github.ref_name }}, версия 1.1.7 (коммит ${{ github.sha }})" \
+              --latest || {
+              gh release edit "$TAG" \
+                --repo "${{ github.repository }}" \
+                --target "${{ github.sha }}" \
+                --title "Наставник 1.1.7" \
+                --notes "Ветка ${{ github.ref_name }}, версия 1.1.7 (коммит ${{ github.sha }})" \
+                --latest
+              gh release upload "$TAG" nastavnik.apk student.apk parent.apk \
+                --repo "${{ github.repository }}" \
+                --clobber
+            }
+          done
 
   # Проверки на эмуляторе планшета: экспорт PDF, плавающая кнопка, стилус, панель, снимок экрана.
   smoke:

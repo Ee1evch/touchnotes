@@ -21,7 +21,13 @@ object UpdateCheck {
     fun parse(body: String, currentBuild: Int, apkName: String = "nastavnik.apk"): UpdateInfo? {
         val obj = runCatching { json.parseToJsonElement(body).jsonObject }.getOrNull() ?: return null
         val tag = obj.str("tag_name") ?: return null
-        val build = Regex("(\\d+)$").find(tag)?.value?.toIntOrNull() ?: return null
+        val semver = Regex("v?(\\d+)\\.(\\d+)\\.(\\d+)").find(tag)
+        val build = if (semver != null) {
+            val (maj, min, patch) = semver.destructured
+            maj.toInt() * 10000 + min.toInt() * 100 + patch.toInt()
+        } else {
+            Regex("(\\d+)$").find(tag)?.value?.toIntOrNull() ?: return null
+        }
         if (build <= currentBuild) return null
         // В релизе несколько APK — «Наставник», «Студент» и приложение для родителя; нам — только свой.
         val apks = (obj["assets"] as? JsonArray)?.mapNotNull { it as? JsonObject }?.filter { it.str("name")?.endsWith(".apk") == true }.orEmpty()
