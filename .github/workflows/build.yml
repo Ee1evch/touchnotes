@@ -91,7 +91,17 @@ jobs:
             --target "${{ github.sha }}" \
             --title "Наставник 1.5, сборка $BUILD_NUMBER" \
             --notes "Ветка ${{ github.ref_name }}, коммит ${{ github.sha }}" \
-            --latest
+            --latest || {
+            gh release edit "build-$BUILD_NUMBER" \
+              --repo "${{ github.repository }}" \
+              --target "${{ github.sha }}" \
+              --title "Наставник 1.5, сборка $BUILD_NUMBER" \
+              --notes "Ветка ${{ github.ref_name }}, коммит ${{ github.sha }}" \
+              --latest
+            gh release upload "build-$BUILD_NUMBER" nastavnik.apk student.apk parent.apk \
+              --repo "${{ github.repository }}" \
+              --clobber
+          }
 
   # Проверки на эмуляторе планшета: экспорт PDF, плавающая кнопка, стилус, панель, снимок экрана.
   smoke:
