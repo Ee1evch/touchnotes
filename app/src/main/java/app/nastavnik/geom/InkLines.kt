@@ -61,7 +61,7 @@ class LineMap(
      */
     fun isLocal(r: IRect): Boolean {
         val maxH = min(max(lineHeight * 6, height / 8), (height * 0.35f).roundToInt())
-        val maxW = (width * 0.65f).roundToInt()
+        val maxW = (width * 0.95f).roundToInt()
         return r.width in 1..maxW && r.height in 1..maxH
     }
 
