@@ -46,7 +46,6 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import java.util.Locale
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -163,7 +162,7 @@ private fun TodayTab(resumeTick: Int, go: (String) -> Unit, onTab: (PhoneTab) ->
     val nowMs = remember(resumeTick) { System.currentTimeMillis() }
     val dueCards by remember(nowMs) { app.db.cards().observeDueCount(nowMs) }.collectAsStateWithLifecycle(initialValue = 0)
     val journal by app.grades.journal.collectAsStateWithLifecycle()
-    LaunchedEffect(Unit) { app.grades.ensureLoaded() }
+    LaunchedEffect(Unit) { app.grades.refreshLks() }
     val avgGrade = journal?.averageMark
     var editing by remember { mutableStateOf(false) }
 

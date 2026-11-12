@@ -363,7 +363,7 @@ private fun Stat(value: String, label: String, color: Color, modifier: Modifier)
 }
 
 /** Цвет оценки, как у родителя: 5 — зелёный, 4 — синий, 3 — жёлтый, 2 — красный; зачёт — зелёный. */
-private fun markColor(v: String): Color {
+fun markColor(v: String): Color {
     val n = v.replace(',', '.').toDoubleOrNull() ?: return lksMarkColor(v)
     return when {
         n >= 4.5 -> Brand.Ok
