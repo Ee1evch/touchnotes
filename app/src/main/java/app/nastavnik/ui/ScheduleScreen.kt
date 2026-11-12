@@ -148,7 +148,7 @@ fun ScheduleScreen(onBack: (() -> Unit)?) {
             RoundIconButton(R.drawable.ic_tune, "Сменить группу") { picking = true }
         }
 
-        WeekStrip(day, week.orEmpty(), onPick = { day = it }, onShift = { day = day.plusWeeks(it.toLong()) })
+        WeekStrip(day, week.orEmpty(), onPick = { day = it }, onShift = { shift -> day = ScheduleText.monday(day).plusWeeks(shift.toLong()) })
 
         AnimatedVisibility(error != null) {
             StatusLine(error.orEmpty(), Tone.ERROR)

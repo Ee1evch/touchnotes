@@ -190,8 +190,7 @@ fun NotebookScreen(notebookId: Long, onBack: () -> Unit, onCleanReady: () -> Uni
                                 .padding(horizontal = 14.dp, vertical = 8.dp),
                         )
                     }
-                    // Страница задачи ДЗ — плашка с проверкой.
-                    HomeworkBar(ctl, Modifier.align(Alignment.BottomCenter).padding(start = 72.dp, end = 16.dp, bottom = 56.dp))
+
                     // Инструменты — плашкой сбоку, цвета открываются по касанию.
                     EditorRail(ctl, maxHeight)
                     androidx.compose.animation.AnimatedVisibility(

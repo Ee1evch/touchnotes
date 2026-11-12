@@ -137,24 +137,7 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 }
-                askShared?.let { uris ->
-                    androidx.compose.material3.AlertDialog(
-                        onDismissRequest = { askShared = null },
-                        title = { Text("Что это за файл?") },
-                        text = { Text("Домашку наставник разберёт на задачи и будет проверять, пока не сделаешь на 100%. В тетрадь — просто писать поверх.") },
-                        confirmButton = {
-                            androidx.compose.material3.TextButton(onClick = {
-                                askShared = null
-                                sharedHomework = uris.first()
-                                fromOverlay = false
-                                screen = SCREEN_HOMEWORK
-                            }) { Text("Это домашка") }
-                        },
-                        dismissButton = {
-                            androidx.compose.material3.TextButton(onClick = { askShared = null; importShared(uris, "pdf") }) { Text("В тетрадь") }
-                        },
-                    )
-                }
+
                 // «Наставник · Студент»: только расписание, оценки и настройки.
                 if (BuildConfig.STUDENT) {
                     StudentShell()
@@ -243,7 +226,7 @@ class MainActivity : ComponentActivity() {
         if (uris.isEmpty()) return
         val type = intent.type ?: uris.firstOrNull()?.let { contentResolver.getType(it) }.orEmpty()
         // PDF — может быть домашкой: спросим.
-        if (type.contains("pdf")) { askShared = uris; return }
+        if (type.contains("pdf")) { importShared(uris, "pdf"); return }
         importShared(uris, type)
     }
 

@@ -65,6 +65,7 @@ private fun defaults(tablet: Boolean) = if (tablet) listOf(
     Item("cards", Size.S), Item("exam", Size.S),
     Item("notebooks", Size.L), Item("mentor", Size.M), Item("sections", Size.M),
 ) else listOf(
+    Item("day", Size.L),
     Item("cards", Size.S), Item("exam", Size.S),
     Item("grades", Size.L),
 )
@@ -87,7 +88,10 @@ fun HomeBoard(
     val app = context.app
     val catalog = remember(tablet) { WIDGETS.filter { tablet || !it.tabletOnly } }
     val known = remember(catalog) { catalog.map { it.id }.toSet() }
-    var items by remember(tablet) { mutableStateOf(HomeLayout.decode(app.settings.homeLayout(tablet), known, defaults(tablet))) }
+    val rawLayout = app.settings.homeLayout(tablet).let {
+        if (!tablet && (it == "cards:S,exam:S,grades:L" || it.isNullOrBlank())) null else it
+    }
+    var items by remember(tablet) { mutableStateOf(HomeLayout.decode(rawLayout, known, defaults(tablet))) }
     fun save(next: List<Item>) {
         items = next
         app.settings.setHomeLayout(tablet, if (next.isEmpty()) "-" else HomeLayout.encode(next))

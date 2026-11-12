@@ -234,13 +234,18 @@ fun GradesCard(onOpen: () -> Unit) {
     LaunchedEffect(Unit) { repo.refreshLks() }
     val recent = snap?.courses.orEmpty().flatMap { c -> c.items.filter { it.gradedAt > 0 && it.grade != "-" }.map { c to it } }
         .sortedByDescending { it.second.gradedAt }.take(3)
+    val journal by repo.journal.collectAsStateWithLifecycle()
+    val avg = journal?.averageMark ?: snap?.courses?.flatMap { it.items }?.mapNotNull { it.raw }?.takeIf { it.isNotEmpty() }?.average()
     Column(
         Modifier.widthIn(max = 760.dp).fillMaxWidth().enter().glass(RoundedCornerShape(26.dp), 10.dp).clickable(onClick = onOpen).padding(18.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Успеваемость", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-            snap?.let { MoodleClient.averagePercent(it) }?.let { Text("${it.toInt()} %", style = MaterialTheme.typography.titleMedium, color = Brand.Accent) }
+            avg?.let {
+                val str = "%.2f".format(Locale.forLanguageTag("ru"), it)
+                Text("средний $str", style = MaterialTheme.typography.titleMedium, color = markColor("%.1f".format(Locale.US, it)))
+            } ?: snap?.let { MoodleClient.averagePercent(it) }?.let { Text("${it.toInt()} %", style = MaterialTheme.typography.titleMedium, color = Brand.Accent) }
         }
         if (recent.isEmpty()) Text(if (snap == null) "Загружаю…" else "Новых оценок нет", style = MaterialTheme.typography.bodyMedium, color = Brand.InkSoft)
         recent.forEach { (c, i) ->
@@ -330,7 +335,7 @@ fun lksMarkColor(v: String): Color {
 /** Журнал ЛКС, как в приложении для родителя: сводка (средний балл, пропуски, предметы) и карточки предметов. */
 @Composable
 fun LksJournalView(j: app.nastavnik.grades.LksJournal) {
-    val avg = j.lessons.mapNotNull { it.avgMark?.replace(',', '.')?.toDoubleOrNull() }.takeIf { it.isNotEmpty() }?.average()
+    val avg = j.averageMark
     val all = j.lessons.flatMap { it.entries }.filter { it.absent }
     val missed = all.size
     val valid = all.count { it.absentValid == true }
@@ -343,7 +348,7 @@ fun LksJournalView(j: app.nastavnik.grades.LksJournal) {
         Stat("${j.lessons.size}", ruPlural(j.lessons.size, "предмет", "предмета", "предметов"), MaterialTheme.colorScheme.onSurface, Modifier.weight(1f))
     }
     if (j.period.isNotBlank()) Text(j.period, style = MaterialTheme.typography.bodySmall, color = Brand.InkSoft, modifier = Modifier.padding(start = 6.dp))
-    val lessons = j.lessons.sortedWith(compareBy({ it.avgMark == null && it.entries.none { e -> e.marks.isNotEmpty() } }, { it.title }))
+    val lessons = j.lessons.sortedWith(compareBy({ it.displayAvg == null && it.entries.none { e -> e.marks.isNotEmpty() } }, { it.title }))
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         lessons.forEach { l -> LksLessonCard(l) }
     }
@@ -392,7 +397,7 @@ private fun LksLessonCard(l: app.nastavnik.grades.LksLesson) {
                 ).joinToString(" · ")
                 Text(sub, style = MaterialTheme.typography.bodySmall, color = when { unexcused > 0 -> Brand.Error; missed > 0 -> Color(0xFFE0A21E); else -> Brand.InkSoft })
             }
-            l.avgMark?.takeIf { it.isNotBlank() }?.let { Text(it, style = MaterialTheme.typography.headlineMedium.copy(fontSize = 28.sp), color = markColor(it)) }
+            l.displayAvg?.takeIf { it.isNotBlank() }?.let { Text(it, style = MaterialTheme.typography.headlineMedium.copy(fontSize = 28.sp), color = markColor(it)) }
         }
         if (marks.isNotEmpty()) {
             Row(Modifier.horizontalScroll(androidx.compose.foundation.rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {

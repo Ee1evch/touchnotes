@@ -421,7 +421,7 @@ private fun GradesTab(state: ParentRepo.State) {
         }
         return
     }
-    val subjects = journal.lessons.sortedWith(compareBy({ it.avgMark == null && it.entries.none { e -> e.marks.isNotEmpty() } }, { it.title }))
+    val subjects = journal.lessons.sortedWith(compareBy({ it.displayAvg == null && it.entries.none { e -> e.marks.isNotEmpty() } }, { it.title }))
     LazyColumn(contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item { GradesSummary(journal) }
         items(subjects) { SubjectCard(it) }
@@ -430,8 +430,7 @@ private fun GradesTab(state: ParentRepo.State) {
 
 @Composable
 private fun GradesSummary(j: app.nastavnik.grades.LksJournal) {
-    val avgs = j.lessons.mapNotNull { it.avgMark?.replace(',', '.')?.toDoubleOrNull() }
-    val avg = avgs.takeIf { it.isNotEmpty() }?.average()
+    val avg = j.averageMark
     val (missed, valid) = ParentData.absences(j)
     Card {
         Row(Modifier.padding(20.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -470,7 +469,7 @@ private fun SubjectCard(s: LksLesson) {
                     ).joinToString(" · ")
                     Text(sub, style = MaterialTheme.typography.bodySmall, color = when { unexcused > 0 -> Tone.Bad; missed > 0 -> Tone.Warn; else -> MaterialTheme.colorScheme.onSurfaceVariant })
                 }
-                val avg = s.avgMark?.takeIf { it.isNotBlank() }
+                val avg = s.displayAvg?.takeIf { it.isNotBlank() }
                 if (avg != null) Text(avg, style = MaterialTheme.typography.headlineMedium.copy(fontSize = 28.sp), color = Tone.mark(avg))
             }
             if (marks.isNotEmpty()) LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) { items(marks.takeLast(20).reversed()) { (_, v) -> MarkChip(v) } }

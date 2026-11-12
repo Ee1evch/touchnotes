@@ -15,6 +15,8 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -38,11 +40,13 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import java.util.Locale
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -156,6 +160,11 @@ private fun TodayTab(resumeTick: Int, go: (String) -> Unit, onTab: (PhoneTab) ->
     val lessons by produceState<List<Lesson>?>(null, version, resumeTick, now.toLocalDate()) { value = app.schedule.day(LocalDate.now()) }
     val sync by app.sync.status.collectAsStateWithLifecycle()
     val hasGroup = app.settings.scheduleGroup().isNotBlank()
+    val nowMs = remember(resumeTick) { System.currentTimeMillis() }
+    val dueCards by remember(nowMs) { app.db.cards().observeDueCount(nowMs) }.collectAsStateWithLifecycle(initialValue = 0)
+    val journal by app.grades.journal.collectAsStateWithLifecycle()
+    LaunchedEffect(Unit) { app.grades.ensureLoaded() }
+    val avgGrade = journal?.averageMark
     var editing by remember { mutableStateOf(false) }
 
     ScreenScaffold(title = "", onBack = null) {
@@ -164,6 +173,14 @@ private fun TodayTab(resumeTick: Int, go: (String) -> Unit, onTab: (PhoneTab) ->
             if (app.sync.configured) SyncDot(sync.running, sync.ok) { app.sync.soon(0) }
             RoundIconButton(R.drawable.ic_tune, "Настройки") { go(MainActivity.SCREEN_SETTINGS) }
         }
+        QuickActionsStrip(
+            onSchedule = { onTab(PhoneTab.SCHEDULE) },
+            onGrades = { onTab(PhoneTab.GRADES) },
+            onReview = { go(MainActivity.SCREEN_REVIEW) },
+            onNotebooks = { go(MainActivity.SCREEN_NOTEBOOKS) },
+            dueCards = dueCards,
+            avgGrade = avgGrade,
+        )
         HomeBoard(
             tablet = false,
             editing = editing,
@@ -171,6 +188,72 @@ private fun TodayTab(resumeTick: Int, go: (String) -> Unit, onTab: (PhoneTab) ->
             resumeTick = resumeTick,
             go = go,
             onSchedule = { onTab(PhoneTab.SCHEDULE) },
+        )
+    }
+}
+
+/** Быстрые действия на телефоне: расписание, средний балл, карточки и конспекты. */
+@Composable
+private fun QuickActionsStrip(
+    onSchedule: () -> Unit,
+    onGrades: () -> Unit,
+    onReview: () -> Unit,
+    onNotebooks: () -> Unit,
+    dueCards: Int,
+    avgGrade: Double?,
+) {
+    Row(
+        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        QuickChip(icon = R.drawable.ic_calendar, title = "Пары", onClick = onSchedule)
+        QuickChip(
+            icon = R.drawable.ic_chart,
+            title = if (avgGrade != null) "Балл %.2f".format(Locale.forLanguageTag("ru"), avgGrade) else "Оценки",
+            badgeColor = avgGrade?.let { markColor("%.1f".format(Locale.US, it)) },
+            onClick = onGrades,
+        )
+        QuickChip(
+            icon = R.drawable.ic_cards,
+            title = if (dueCards > 0) "Карточки ($dueCards)" else "Карточки",
+            accent = dueCards > 0,
+            onClick = onReview,
+        )
+        QuickChip(icon = R.drawable.ic_notebook, title = "Конспекты", onClick = onNotebooks)
+    }
+}
+
+@Composable
+private fun QuickChip(
+    icon: Int,
+    title: String,
+    badgeColor: Color? = null,
+    accent: Boolean = false,
+    onClick: () -> Unit,
+) {
+    val src = remember { MutableInteractionSource() }
+    Row(
+        Modifier
+            .pressable(src)
+            .clip(RoundedCornerShape(16.dp))
+            .glass(RoundedCornerShape(16.dp), 6.dp)
+            .clickable(src, indication = null, onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 9.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(7.dp),
+    ) {
+        Icon(
+            painterResource(icon),
+            contentDescription = null,
+            tint = badgeColor ?: if (accent) Brand.Accent else Brand.Ink,
+            modifier = Modifier.size(16.dp),
+        )
+        Text(
+            title,
+            style = MaterialTheme.typography.labelLarge,
+            color = badgeColor ?: if (accent) Brand.Accent else MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
         )
     }
 }
@@ -219,7 +302,6 @@ private fun StudyTab(resumeTick: Int, go: (String) -> Unit) {
         // Сгруппированный список, как в настройках Android 16–17.
         Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             val rows = listOf(
-                Triple(R.drawable.ic_pen, "Домашка", "ДЗ до 100%: решаешь в тетради, наставник проверяет") to MainActivity.SCREEN_HOMEWORK,
                 Triple(R.drawable.ic_chart, "Успеваемость", "Оценки из личного кабинета") to MainActivity.SCREEN_GRADES,
                 Triple(R.drawable.ic_chart, "Прогресс", "Активность и темы с ошибками") to MainActivity.SCREEN_PROGRESS,
                 Triple(R.drawable.ic_notebook, "Конспекты", "Тетради с планшета — посмотреть") to MainActivity.SCREEN_NOTEBOOKS,

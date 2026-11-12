@@ -49,10 +49,34 @@ data class LksLesson(
     val rating: String? = null,
     val absences: Int = 0,
     val entries: List<LksEntry> = emptyList(),
-)
+) {
+    /** Реальный средний балл: если ЛКС прислал avgMark — берём его, иначе честно усредняем оценки из entries. */
+    val calculatedAvg: Double? get() {
+        avgMark?.replace(',', '.')?.toDoubleOrNull()?.let { return it }
+        val marks = entries.flatMap { it.marks }.mapNotNull { LksExtract.numeric(it.value) }
+        return marks.takeIf { it.isNotEmpty() }?.average()
+    }
+
+    /** Текстовое представление среднего балла (например, "4.75"). */
+    val displayAvg: String? get() {
+        if (!avgMark.isNullOrBlank() && avgMark != "-") return avgMark
+        return calculatedAvg?.let { String.format(java.util.Locale.US, "%.2f", it) }
+    }
+}
 
 @Serializable
-data class LksJournal(val lessons: List<LksLesson>, val period: String = "", val loadedAt: Long = 0)
+data class LksJournal(val lessons: List<LksLesson>, val period: String = "", val loadedAt: Long = 0) {
+    /**
+     * Реальный средний балл по всему журналу: среднее по средним баллам всех предметов с оценками,
+     * либо среднее по всем полученным оценкам.
+     */
+    val averageMark: Double? get() {
+        val subjectAvgs = lessons.mapNotNull { it.calculatedAvg }
+        if (subjectAvgs.isNotEmpty()) return subjectAvgs.average()
+        val allMarks = lessons.flatMap { it.entries }.flatMap { it.marks }.mapNotNull { LksExtract.numeric(it.value) }
+        return allMarks.takeIf { it.isNotEmpty() }?.average()
+    }
+}
 
 /**
  * ЛКС Сириуса (lks.siriusuniversity.ru, платформа «Тандем» на Laravel). Вход — обычная форма `/login`

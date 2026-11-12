@@ -61,7 +61,7 @@ class LineMap(
      */
     fun isLocal(r: IRect): Boolean {
         val maxH = min(max(lineHeight * 6, height / 8), (height * 0.35f).roundToInt())
-        val maxW = (width * 0.95f).roundToInt()
+        val maxW = (width * 0.65f).roundToInt()
         return r.width in 1..maxW && r.height in 1..maxH
     }
 
@@ -90,12 +90,33 @@ class LineMap(
             return box?.takeIf { it.width in 1..(width / 2) && it.height in 1..(lineHeight * 2) }
                 ?.clampInto(IRect(0, 0, width, height))
         }
-        val xParts = if (box != null && box.width < width / 2) {
+        val xParts = if (box != null) {
             val slack = max(4, lineHeight / 3)
             target.segments.filter { it.last >= box.left - slack && it.first <= box.right + slack }
         } else emptyList()
-        val left = if (xParts.isEmpty()) target.left else xParts.minOf { it.first }
-        val right = if (xParts.isEmpty()) target.right else xParts.maxOf { it.last } + 1
+        val rawLeft = if (xParts.isEmpty()) target.left else xParts.minOf { it.first }
+        val rawRight = if (xParts.isEmpty()) target.right else xParts.maxOf { it.last } + 1
+        val maxErrorW = min(max(260, (width * 0.35f).roundToInt()), 420)
+        val left: Int
+        val right: Int
+        if (rawRight - rawLeft > maxErrorW) {
+            if (box != null && box.width in 1..maxErrorW) {
+                val cx = (box.left + box.right) / 2
+                val cl = max(rawLeft, cx - box.width / 2)
+                left = cl
+                right = min(rawRight, cl + box.width)
+            } else if (target.segments.size > 1) {
+                val seg = target.segments.lastOrNull { (it.last - it.first) in 1..maxErrorW } ?: target.segments.last()
+                left = seg.first
+                right = min(seg.last + 1, left + maxErrorW)
+            } else {
+                left = max(rawLeft, rawRight - maxErrorW)
+                right = rawRight
+            }
+        } else {
+            left = rawLeft
+            right = rawRight
+        }
         val tightPad = max(2, (lineHeight * 0.1f).roundToInt())
         return clampToPiece(left, target.top, right, target.bottom, box, tightPad)
     }
