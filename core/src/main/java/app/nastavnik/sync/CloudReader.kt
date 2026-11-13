@@ -13,14 +13,38 @@ class CloudReader(
         val names = store.list("${SyncEngine.ROOT}/devices").filter { it.endsWith(".json.gz") }
         if (names.isEmpty()) throw java.io.IOException("На Диске нет данных «Наставника» — проверь токен и что синхронизация у студента включена")
         val best = HashMap<String, SyncRecord>()
+        var decryptedCount = 0
+        var encryptedEncountered = false
+        var lastCryptoError: Throwable? = null
+
         for (name in names) {
-            val snap = runCatching { SyncEngine.decode(store.read("${SyncEngine.ROOT}/devices/$name")!!, passphrase()) }.getOrNull() ?: continue
+            val bytes = store.read("${SyncEngine.ROOT}/devices/$name") ?: continue
+            if (SyncCrypto.isEncrypted(bytes)) encryptedEncountered = true
+
+            val snap = try {
+                SyncEngine.decode(bytes, passphrase())
+            } catch (e: BadPassphraseException) {
+                lastCryptoError = e
+                continue
+            } catch (e: Exception) {
+                continue
+            }
+            decryptedCount++
             for (r in snap.records) {
                 if (r.key !in keys) continue
                 val cur = best[r.key]
                 if (cur == null || SyncEngine.newer(r, cur)) best[r.key] = r
             }
         }
+
+        if (decryptedCount == 0 && encryptedEncountered) {
+            val phrase = passphrase().trim()
+            if (phrase.isEmpty()) {
+                throw BadPassphraseException("Данные зашифрованы E2E-паролем — введите парольную фразу студента в настройках")
+            }
+            throw (lastCryptoError ?: BadPassphraseException("Неверная парольная фраза E2E — не удалось расшифровать данные студента"))
+        }
+
         return best.filterValues { !it.deleted }
     }
 }

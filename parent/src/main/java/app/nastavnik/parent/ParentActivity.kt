@@ -494,9 +494,11 @@ private fun EntryRow(e: LksEntry) {
 @Composable
 private fun SettingsScreen(repo: ParentRepo, first: Boolean, onDone: () -> Unit, onBack: (() -> Unit)?, onDisconnect: () -> Unit) {
     var token by rememberSaveable { mutableStateOf(repo.token) }
+    var passphrase by rememberSaveable { mutableStateOf(repo.passphrase) }
     var book by rememberSaveable { mutableStateOf(repo.recordBook) }
     var group by rememberSaveable { mutableStateOf(repo.groupOverride) }
     var show by remember { mutableStateOf(false) }
+    var showPass by remember { mutableStateOf(false) }
     Column(
         Modifier.fillMaxSize().statusBarsPadding().imePadding()
             .verticalScroll(rememberScrollState()).padding(20.dp),
@@ -532,6 +534,25 @@ private fun SettingsScreen(repo: ParentRepo, first: Boolean, onDone: () -> Unit,
         }
         Card {
             Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("Парольная фраза сквозного шифрования (E2E)", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    "Если студент включил E2E-шифрование в «Наставнике» (Настройки → Синхронизация), введи его парольную фразу. Без неё данные студента не расшифруются. Парольная фраза хранится в защищённом KeyStore.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                OutlinedTextField(
+                    passphrase, { passphrase = it }, Modifier.fillMaxWidth().semantics { contentDescription = "Парольная фраза E2E" },
+                    singleLine = true, placeholder = { Text("парольная фраза студента") },
+                    visualTransformation = if (showPass) VisualTransformation.None else PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    trailingIcon = {
+                        Icon(painterResource(if (showPass) R.drawable.ic_eye_off else R.drawable.ic_eye), if (showPass) "Скрыть" else "Показать",
+                            Modifier.size(22.dp).clickable { showPass = !showPass })
+                    },
+                )
+            }
+        }
+        Card {
+            Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("Номер зачётной книжки", style = MaterialTheme.typography.titleSmall)
                 Text("Посещаемость, которую отмечает староста (itattendance.ru): был, опоздал, болезнь, прогул — у каждой пары. Хватит и одного номера — тогда без оценок.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 OutlinedTextField(book, { book = it }, Modifier.fillMaxWidth().semantics { contentDescription = "Номер зачётки" }, singleLine = true,
@@ -550,7 +571,7 @@ private fun SettingsScreen(repo: ParentRepo, first: Boolean, onDone: () -> Unit,
         }
         BackdropCard()
         Button(
-            onClick = { repo.save(token, book, group); onDone() },
+            onClick = { repo.save(token, book, group, passphrase); onDone() },
             enabled = token.isNotBlank() || book.isNotBlank(),
             modifier = Modifier.fillMaxWidth().height(52.dp),
             shape = RoundedCornerShape(18.dp),

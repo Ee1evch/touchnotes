@@ -162,8 +162,10 @@ class SyncEngineTest {
         val readerGot = runBlocking { CloudReader(cloud, passphrase = { passphrase }).latest(setOf("note/secret_note")) }
         assertEquals("секретные данные", readerGot.getValue("note/secret_note").data!!.jsonObject["text"]!!.jsonPrimitive.content)
 
-        // CloudReader с неверным паролем не может прочитать
-        val badReaderGot = runBlocking { CloudReader(cloud, passphrase = { "wrong" }).latest(setOf("note/secret_note")) }
-        assertTrue(badReaderGot.isEmpty())
+        // CloudReader с неверным паролем бросает понятную ошибку, а не тишину
+        try {
+            runBlocking { CloudReader(cloud, passphrase = { "wrong" }).latest(setOf("note/secret_note")) }
+            org.junit.Assert.fail("Ожидалось исключение BadPassphraseException при неверном пароле")
+        } catch (_: BadPassphraseException) {}
     }
 }
