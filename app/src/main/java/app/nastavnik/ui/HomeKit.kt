@@ -24,6 +24,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -193,7 +194,7 @@ fun HomeTile(
     val src = remember { MutableInteractionSource() }
     Column(
         modifier.enter().pressable(src).glass(RoundedCornerShape(24.dp), 10.dp)
-            .clickable(src, indication = null, onClick = onClick).padding(14.dp),
+            .clickable(src, indication = ripple(), onClick = onClick).padding(14.dp),
     ) {
         Box(
             Modifier.size(32.dp).clip(CircleShape).background(if (accent) Brand.Accent else Brand.Accent.copy(alpha = 0.12f)),
@@ -239,7 +240,7 @@ fun SectionsGrid(go: (String) -> Unit, columns: Int, items: List<Triple<Int, Str
                     val src = remember(screen) { MutableInteractionSource() }
                     Column(
                         Modifier.weight(1f).enter().pressable(src).glass(RoundedCornerShape(22.dp), 8.dp)
-                            .clickable(src, indication = null) { go(screen) }.padding(horizontal = 12.dp, vertical = 14.dp),
+                            .clickable(src, indication = ripple()) { go(screen) }.padding(horizontal = 12.dp, vertical = 14.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         IconBadge(icon, 36)

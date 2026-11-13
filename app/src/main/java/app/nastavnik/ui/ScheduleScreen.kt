@@ -18,7 +18,9 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.material3.ripple
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -230,9 +232,10 @@ private fun WeekStrip(day: LocalDate, lessons: List<Lesson>, onPick: (LocalDate)
                 val d = monday.plusDays(i.toLong())
                 val sel = d == day
                 val bg by androidx.compose.animation.animateColorAsState(if (sel) Brand.Accent else Brand.Glass, Motion.enter(220), label = "dayBg")
-                val scale by animateFloatAsState(if (sel) 1.04f else 1f, spring(dampingRatio = 0.65f, stiffness = 600f), label = "dayScale")
+                val scale by animateFloatAsState(if (sel) 1.05f else 1f, spring(dampingRatio = 0.65f, stiffness = 600f), label = "dayScale")
+                val src = remember(d) { MutableInteractionSource() }
                 Column(
-                    Modifier.weight(1f).graphicsLayer { scaleX = scale; scaleY = scale }.clip(RoundedCornerShape(16.dp)).background(bg).clickable { onPick(d) }.padding(vertical = 8.dp),
+                    Modifier.weight(1f).graphicsLayer { scaleX = scale; scaleY = scale }.pressable(src).clip(RoundedCornerShape(16.dp)).background(bg).clickable(src, indication = ripple()) { onPick(d) }.padding(vertical = 8.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     val fg = if (sel) Brand.OnAccent else MaterialTheme.colorScheme.onSurface
@@ -293,7 +296,13 @@ fun LessonCard(l: Lesson, now: LocalDateTime, index: Int = 0, compact: Boolean =
     Column(
         Modifier
             .fillMaxWidth()
-            .graphicsLayer { alpha = appear; translationY = (1 - appear) * 10.dp.toPx() }
+            .graphicsLayer {
+                alpha = appear
+                translationY = (1 - appear) * 10.dp.toPx()
+                val s = 0.97f + 0.03f * appear
+                scaleX = s
+                scaleY = s
+            }
             .glass(RoundedCornerShape(24.dp))
             .padding(16.dp),
     ) {

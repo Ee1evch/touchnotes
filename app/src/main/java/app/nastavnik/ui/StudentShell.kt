@@ -8,6 +8,8 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -60,8 +62,17 @@ fun StudentShell() {
             MainActivity.SCREEN_APPEARANCE -> AppearanceScreen(onBack = { screen = MainActivity.SCREEN_SETTINGS })
             MainActivity.SCREEN_LKS -> LksScreen(onBack = { screen = ""; tab = PhoneTab.GRADES }, onDone = { screen = ""; tab = PhoneTab.GRADES })
             else -> Box(Modifier.fillMaxSize().paperBackdrop()) {
-                Box(Modifier.fillMaxSize().navigationBarsPadding().padding(bottom = 80.dp)) {
-                    when (tab) {
+                AnimatedContent(
+                    targetState = tab,
+                    transitionSpec = {
+                        val dir = if (targetState.ordinal > initialState.ordinal) 1 else -1
+                        (fadeIn(tween(220, delayMillis = 20)) + slideInHorizontally(spring(dampingRatio = 0.86f, stiffness = 420f)) { it / 14 * dir })
+                            .togetherWith(fadeOut(tween(140)) + slideOutHorizontally(tween(180)) { -it / 18 * dir })
+                    },
+                    label = "studentTab",
+                    modifier = Modifier.fillMaxSize().navigationBarsPadding().padding(bottom = 80.dp),
+                ) { t ->
+                    when (t) {
                         PhoneTab.GRADES -> GradesScreen(onBack = null, onSettings = { screen = MainActivity.SCREEN_SETTINGS }, onLks = { screen = MainActivity.SCREEN_LKS })
                         else -> ScheduleScreen(onBack = null)
                     }

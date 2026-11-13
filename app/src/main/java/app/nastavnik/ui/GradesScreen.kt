@@ -133,14 +133,38 @@ fun GradesScreen(onBack: (() -> Unit)?, onSettings: () -> Unit, onLks: () -> Uni
         if (repo.viaLks) {
             val j = journal
             if (j == null) {
-                Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Brand.Accent) }
+                if (loading) {
+                    Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Brand.Accent) }
+                } else {
+                    Column(
+                        Modifier.fillMaxWidth().enter().glass(RoundedCornerShape(26.dp), 10.dp).padding(22.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Text("Оценки пока не загрузились", style = MaterialTheme.typography.titleMedium)
+                        Text(error ?: "Проверь подключение к интернету или обнови журнал", style = MaterialTheme.typography.bodyMedium, color = Brand.InkSoft)
+                        SoftButton("Повторить", icon = R.drawable.ic_refresh) { scope.launch { repo.refreshLks(force = true) } }
+                    }
+                }
                 return@ScreenScaffold
             }
             LksJournalView(j)
             return@ScreenScaffold
         }
         val s = snap ?: run {
-            Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Brand.Accent) }
+            if (loading) {
+                Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Brand.Accent) }
+            } else {
+                Column(
+                    Modifier.fillMaxWidth().enter().glass(RoundedCornerShape(26.dp), 10.dp).padding(22.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Text("Оценки пока не загрузились", style = MaterialTheme.typography.titleMedium)
+                    Text(error ?: "Проверь подключение к интернету или обнови журнал", style = MaterialTheme.typography.bodyMedium, color = Brand.InkSoft)
+                    SoftButton("Повторить", icon = R.drawable.ic_refresh) { scope.launch { repo.refresh(force = true) } }
+                }
+            }
             return@ScreenScaffold
         }
         Summary(s)
@@ -236,8 +260,10 @@ fun GradesCard(onOpen: () -> Unit) {
         .sortedByDescending { it.second.gradedAt }.take(3)
     val journal by repo.journal.collectAsStateWithLifecycle()
     val avg = journal?.averageMark ?: snap?.courses?.flatMap { it.items }?.mapNotNull { it.raw }?.takeIf { it.isNotEmpty() }?.average()
+    val src = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
     Column(
-        Modifier.widthIn(max = 760.dp).fillMaxWidth().enter().glass(RoundedCornerShape(26.dp), 10.dp).clickable(onClick = onOpen).padding(18.dp),
+        Modifier.widthIn(max = 760.dp).fillMaxWidth().enter().pressable(src).glass(RoundedCornerShape(26.dp), 10.dp)
+            .clickable(src, indication = androidx.compose.material3.ripple(), onClick = onOpen).padding(18.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -377,12 +403,13 @@ fun markColor(v: String): Color {
 @Composable
 private fun LksLessonCard(l: app.nastavnik.grades.LksLesson) {
     var open by remember { mutableStateOf(false) }
+    val src = remember { MutableInteractionSource() }
     val marks = l.entries.flatMap { e -> e.marks.map { it.value } }
     val missed = l.entries.count { it.absent }
     val unexcused = l.entries.count { it.absent && it.absentValid != true }
     Column(
-        Modifier.fillMaxWidth().enter().glass()
-            .clickable { open = !open }
+        Modifier.fillMaxWidth().enter().pressable(src).glass()
+            .clickable(src, indication = ripple()) { open = !open }
             .animateContentSize(androidx.compose.animation.core.spring(dampingRatio = 0.8f, stiffness = 380f))
             .padding(18.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),

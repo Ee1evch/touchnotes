@@ -39,6 +39,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -135,7 +136,7 @@ fun TabRowBar(items: List<Triple<String, Int, Boolean>>, onClick: (Int) -> Unit,
             Column(
                 Modifier.weight(1f).fillMaxHeight()
                     .pressable(source)
-                    .clickable(source, indication = null) { onClick(i) }
+                    .clickable(source, indication = ripple(bounded = false, radius = 32.dp)) { onClick(i) }
                     .semantics { contentDescription = title; selected = sel },
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
@@ -237,7 +238,7 @@ private fun QuickChip(
             .pressable(src)
             .clip(RoundedCornerShape(16.dp))
             .glass(RoundedCornerShape(16.dp), 6.dp)
-            .clickable(src, indication = null, onClick = onClick)
+            .clickable(src, indication = ripple(), onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(7.dp),

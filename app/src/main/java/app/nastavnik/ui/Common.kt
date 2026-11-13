@@ -161,6 +161,9 @@ fun Modifier.enter(): Modifier {
         val p = progress.value
         alpha = p
         translationY = (1f - p) * 12.dp.toPx()
+        val s = 0.97f + 0.03f * p
+        scaleX = s
+        scaleY = s
     }
 }
 
@@ -168,8 +171,13 @@ fun Modifier.enter(): Modifier {
 @Composable
 fun Modifier.pressable(source: MutableInteractionSource): Modifier {
     val pressed by source.collectIsPressedAsState()
-    val k by animateFloatAsState(if (pressed) 0.96f else 1f, spring(dampingRatio = 0.75f, stiffness = 600f), label = "press")
-    return this.graphicsLayer { scaleX = k; scaleY = k }
+    val k by animateFloatAsState(if (pressed) 0.96f else 1f, spring(dampingRatio = 0.72f, stiffness = 550f), label = "pressScale")
+    val a by animateFloatAsState(if (pressed) 0.92f else 1f, spring(dampingRatio = 0.8f, stiffness = 600f), label = "pressAlpha")
+    return this.graphicsLayer {
+        scaleX = k
+        scaleY = k
+        alpha = a
+    }
 }
 
 @Composable

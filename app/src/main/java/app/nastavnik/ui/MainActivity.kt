@@ -127,6 +127,7 @@ class MainActivity : ComponentActivity() {
                                 SCREEN_CLEAN_TEST -> go(SCREEN_CLEAN)
                                 SCREEN_APPEARANCE -> go(SCREEN_SETTINGS)
                                 SCREEN_VIEWER -> go(SCREEN_NOTEBOOKS)
+                                SCREEN_NOTEBOOK -> go(SCREEN_NOTEBOOKS)
                                 SCREEN_LKS -> go(SCREEN_GRADES)
                                 else -> home()
                             }
@@ -233,8 +234,10 @@ class MainActivity : ComponentActivity() {
     private fun importShared(uris: List<Uri>, type: String) {
         importing = true
         lifecycleScope.launch {
-            val nbs = app.notebooks
-            val meta = if (type.contains("pdf")) nbs.importPdf(uris.first()) else nbs.importImages(uris)
+            val meta = runCatching {
+                val nbs = app.notebooks
+                if (type.contains("pdf")) nbs.importPdf(uris.first()) else nbs.importImages(uris)
+            }.getOrNull()
             importing = false
             if (meta != null) {
                 fromOverlay = false
