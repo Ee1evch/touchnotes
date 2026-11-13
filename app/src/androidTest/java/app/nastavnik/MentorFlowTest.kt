@@ -244,7 +244,8 @@ class MentorFlowTest {
         assertEquals("image", (lastContent[0].jsonObject["type"] as JsonPrimitive).content)
         // Размер снимка всегда в тексте; если запомнены другие страницы конспекта — с пояснением про них.
         assertTrue(bodies.first().contains("[Снимок экрана:") || bodies.first().contains("Последний снимок — текущий экран"))
-        val system = (first["system"] as JsonPrimitive).content
+        val system = (first["system"] as? JsonPrimitive)?.content
+            ?: (first["system"] as? JsonArray)?.joinToString("\n") { (it.jsonObject["text"] as? JsonPrimitive)?.content.orEmpty() }.orEmpty()
         assertTrue(system.contains("Ты — наставник"))
         assertTrue(system.contains("в пикселях"))
         // Тема из ответа становится названием задачи в истории.
@@ -801,12 +802,15 @@ class MentorFlowTest {
         SystemClock.sleep(600)
         val opt = device.wait(Until.findObject(By.desc("Настройки инструмента")), 5000)
         opt?.click()
-        val part = device.wait(Until.findObject(By.text("Часть линии")), 5000) ?: run {
+        SystemClock.sleep(500)
+        var part = device.wait(Until.findObject(By.text("Часть линии")), 5000)
+        if (part == null) {
             opt?.click()
-            device.wait(Until.findObject(By.text("Часть линии")), 5000)
+            SystemClock.sleep(500)
+            part = device.wait(Until.findObject(By.text("Часть линии")), 5000)
         }
         part?.click()
-        SystemClock.sleep(400)
+        SystemClock.sleep(600)
         penStroke((0..10).map { k -> (x0 + 200f) to (y0 + 520f + k * 8f) })
         assertEquals("частичный ластик не разрезал линию", 3, page().strokes.size)
 
@@ -834,7 +838,7 @@ class MentorFlowTest {
         val st = ctx.app.settings
         try {
             var sc = ActivityScenario.launch<MainActivity>(Intent(ctx, MainActivity::class.java).putExtra(MainActivity.EXTRA_SCREEN, MainActivity.SCREEN_APPEARANCE))
-            assertNotNull("нет экрана оформления", device.wait(Until.findObject(By.desc("Тема Океан")), 8000))
+            assertNotNull("нет экрана оформления", findScrolling(By.desc("Тема Океан"), 10000))
             SystemClock.sleep(800)
             screenshot("appearance_light")
             device.findObject(By.desc("Тема Океан"))!!.click()

@@ -126,8 +126,8 @@ object Palettes {
     var wallpaperDark: Palette? = null
         private set
 
-    val light get() = listOfNotNull(wallpaperLight) + listOf(PAPER, WARM_PAPER, NORDIC, SAGE, OCEAN, MINT, SUNSET, LAVENDER, SAKURA)
-    val dark get() = listOfNotNull(wallpaperDark) + listOf(GRAPHITE, CYBERPUNK, MIDNIGHT, FOREST, ESPRESSO)
+    val light get() = listOfNotNull(wallpaperLight) + listOf(PAPER, OCEAN, WARM_PAPER, NORDIC, SAGE, MINT, SUNSET, LAVENDER, SAKURA)
+    val dark get() = listOfNotNull(wallpaperDark) + listOf(GRAPHITE, MIDNIGHT, CYBERPUNK, FOREST, ESPRESSO)
     val all get() = light + dark
 
     /** Палитры «Обои» из системных динамических цветов — как у приложений Android 12–17. */
