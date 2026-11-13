@@ -140,7 +140,7 @@ fun NotebookScreen(notebookId: Long, onBack: () -> Unit, onCleanReady: () -> Uni
     LaunchedEffect(state.answer, ctl.index) { ctl.refreshMarks(state.answer) }
 
     val wide = LocalConfiguration.current.screenWidthDp >= 840
-    var panel by rememberSaveable { mutableStateOf(false) }
+    var panel by rememberSaveable { mutableStateOf(wide) }
     var pagesOpen by rememberSaveable { mutableStateOf(false) }
     val importers = rememberImporters(onImages = { ctl.addImages(it) }, onPdf = { ctl.addPdf(it) })
         // Лист всегда белый, как бумага; от темы зависит только стол вокруг него.
@@ -190,6 +190,9 @@ fun NotebookScreen(notebookId: Long, onBack: () -> Unit, onCleanReady: () -> Uni
                                 .padding(horizontal = 14.dp, vertical = 8.dp),
                         )
                     }
+
+                    // Страница задачи ДЗ — плашка с проверкой.
+                    HomeworkBar(ctl, Modifier.align(Alignment.BottomCenter).padding(start = 72.dp, end = 16.dp, bottom = 56.dp))
 
                     // Инструменты — плашкой сбоку, цвета открываются по касанию.
                     EditorRail(ctl, maxHeight)

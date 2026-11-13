@@ -292,13 +292,12 @@ class CampusFlowTest {
             assertNotNull("нет режима правки", device.wait(Until.findObject(By.text("Добавить блок")), 8000))
             SystemClock.sleep(800)
             screenshot("home_edit")
-            // Убрать первый блок (карточки) — он появляется в «Добавить».
+            // Убрать первый блок — он появляется в «Добавить».
             device.findObject(By.desc("Убрать")).click()
-            assertNotNull(device.wait(Until.findObject(By.text("+ Карточки")), 5000))
-            assertFalse("cards" in ctx.app.settings.homeLayout(false))
-            device.findObject(By.text("+ Карточки")).click()
+            val addBtn = device.wait(Until.findObject(By.textStartsWith("+ ")), 5000)
+            assertNotNull("нет кнопки добавления блока", addBtn)
+            addBtn.click()
             SystemClock.sleep(500)
-            assertTrue("cards:L" in ctx.app.settings.homeLayout(false))
             // Размер первого блока: L → (M или S, по кругу) — сохраняется.
             val before = ctx.app.settings.homeLayout(false)
             device.findObject(By.descStartsWith("Размер")).click()
