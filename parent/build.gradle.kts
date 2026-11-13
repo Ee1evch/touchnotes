@@ -21,6 +21,7 @@ android {
         versionCode = maxOf(build, 10111)
         versionName = "1.1.11"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        testProguardFiles("proguard-rules.pro")
     }
 
     testBuildType = "release"

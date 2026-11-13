@@ -37,6 +37,9 @@
 
 # Tink and compile-only annotations
 -dontwarn com.google.errorprone.annotations.**
+-dontwarn com.google.errorprone.annotations.MustBeClosed
+-dontwarn com.google.errorprone.annotations.CanIgnoreReturnValue
+-dontwarn androidx.test.**
 -dontwarn javax.annotation.**
 -dontwarn org.checkerframework.**
 -dontwarn java.lang.invoke.StringConcatFactory

@@ -313,13 +313,16 @@ class MentorSession(
                 fast = settings.fastAnswers || base.kind == AskKind.WATCH || base.kind == AskKind.QUICK,
             )
             val requestAt = SystemClock.elapsedRealtime()
-            var firstText = false
+            var firstTokenAt = 0L
             val stop = app.ai(settings).stream(app.settings.apiKey(settings.provider), request) { update ->
                 when (update) {
                     is StreamUpdate.Text -> {
-                        if (!firstText && update.delta.isNotEmpty()) {
-                            firstText = true
-                            if (BuildConfig.DEBUG) Log.d("MentorTiming", "first_text_ms=${SystemClock.elapsedRealtime() - startedAt} network_ms=${SystemClock.elapsedRealtime() - requestAt}")
+                        if (firstTokenAt == 0L && update.delta.isNotEmpty()) {
+                            firstTokenAt = SystemClock.elapsedRealtime()
+                            val ttft = firstTokenAt - requestAt
+                            if (BuildConfig.DEBUG) {
+                                Log.d("MentorTiming", "запрос→первый токен: ${ttft}мс (first_text_ms=${firstTokenAt - startedAt} network_ms=$ttft)")
+                            }
                         }
                         raw.append(update.delta)
                         val t = System.currentTimeMillis()
@@ -335,7 +338,14 @@ class MentorSession(
                     else -> Unit
                 }
             }
-            if (BuildConfig.DEBUG) Log.d("MentorTiming", "complete_ms=${SystemClock.elapsedRealtime() - startedAt}")
+            val completedAt = SystemClock.elapsedRealtime()
+            val totalMs = completedAt - startedAt
+            val totalNetworkMs = completedAt - requestAt
+            val firstTokenMs = if (firstTokenAt > 0L) firstTokenAt - requestAt else totalNetworkMs
+            if (BuildConfig.DEBUG) {
+                Log.d("MentorTiming", "запрос→первый токен→полный ответ: ${firstTokenMs}мс → ${totalNetworkMs}мс (всего=${totalMs}мс, fast=${request.fast}, model=${settings.model})")
+                Log.d("MentorTiming", "complete_ms=$totalMs")
+            }
             var final = parse(false)
             if (final.marks.isEmpty() && !final.allGood) throw AiErrors.badResponse("пустой ответ")
             // На вопрос студента модель ответила одним «всё верно» — показываем это заметкой, а не пустотой.
