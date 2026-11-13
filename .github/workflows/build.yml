@@ -113,12 +113,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           SHA_BODY=$(cat sha256sums.txt)
-          RELEASE_NOTES="Ветка ${{ github.ref_name }}, версия 1.1.11 (коммит ${{ github.sha }})
-
-Хеши SHA-256:
-\`\`\`
-$SHA_BODY
-\`\`\`"
+          RELEASE_NOTES=$(printf "Ветка %s, версия 1.1.11 (коммит %s)\n\nХеши SHA-256:\n%s" "${{ github.ref_name }}" "${{ github.sha }}" "$SHA_BODY")
           for TAG in "v1.1.11" "build-$BUILD_NUMBER"; do
             gh release create "$TAG" nastavnik.apk student.apk parent.apk sha256sums.txt \
               --repo "${{ github.repository }}" \
