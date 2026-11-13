@@ -150,6 +150,7 @@ jobs:
           target: google_apis
           arch: x86_64
           profile: pixel_tablet
+          ram-size: 2048M
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           script: bash .github/scripts/smoke.sh

@@ -68,6 +68,19 @@ fun SyncSection() {
 
     SectionCard("Синхронизация") {
         if (configured) {
+            val isLegacyYandex = app.settings.syncUrl() == WebDavStore.YANDEX || app.settings.syncUrl().contains("webdav.yandex.ru")
+            if (isLegacyYandex) {
+                Banner(
+                    text = "Используется полный доступ ко всему Яндекс Диску. Рекомендуется переподключить с доступом только к папке приложения.",
+                    action = "Переподключить",
+                    onAction = {
+                        app.sync.disconnect()
+                        configured = false
+                        yandex = true
+                        url = ""
+                    },
+                )
+            }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Column(Modifier.weight(1f)) {
                     Text(
