@@ -39,6 +39,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.FileProvider
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
+import app.nastavnik.BuildConfig
 import app.nastavnik.R
 import app.nastavnik.app
 import app.nastavnik.grades.LksExtract
@@ -149,7 +150,7 @@ fun LksScreen(onBack: () -> Unit, onDone: () -> Unit) {
     val web = remember { LksWeb(context) { _, _ -> } }
 
     DisposableEffect(activity) {
-        val isRelease = !app.nastavnik.BuildConfig.DEBUG
+        val isRelease = !BuildConfig.DEBUG
         if (isRelease && activity != null) {
             activity.window.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
         }
