@@ -470,6 +470,7 @@ class SettingsRepo(private val context: Context) {
         private const val K_SYNC_URL = "sync_url"
         private const val K_SYNC_LOGIN = "sync_login"
         private const val K_SYNC_PASSWORD = "sync_password"
+        private const val K_SYNC_PASSPHRASE = "sync_passphrase"
         private const val K_SYNC_STATUS = "sync_status"
         private const val K_STUDY_STAMP = "study_stamp"
         private const val K_USAGE = "usage_log"
