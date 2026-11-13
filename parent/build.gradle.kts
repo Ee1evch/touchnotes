@@ -23,6 +23,8 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    testBuildType = "release"
+
     val keystorePropsFile = rootProject.file("keystore.properties")
     val keystoreProps = Properties()
     if (keystorePropsFile.exists()) {
@@ -66,7 +68,12 @@ android {
     buildTypes {
         debug { signingConfig = signingConfigs.getByName("debug") }
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
             signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
         }
     }

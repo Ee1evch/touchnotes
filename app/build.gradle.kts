@@ -24,6 +24,8 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    testBuildType = "release"
+
     // Два приложения из одного кода: полный «Наставник» и лёгкий «Наставник · Студент» (расписание, оценки ЛКС,
     // живое уведомление, «Тихо на парах», темы) — свой идентификатор, ставятся рядом.
     flavorDimensions += "edition"
@@ -86,7 +88,12 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
             signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
         }
     }

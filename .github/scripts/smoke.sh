@@ -12,7 +12,7 @@ logpid=$!
 
 export GRADLE_OPTS="-Dorg.gradle.jvmargs=-Xmx2048m"
 
-./gradlew --no-daemon :app:connectedFullDebugAndroidTest :parent:connectedDebugAndroidTest
+./gradlew --no-daemon :app:connectedFullReleaseAndroidTest :parent:connectedReleaseAndroidTest
 code=$?
 
 # Очистка памяти между прогонами для предотвращения OOM на runner-е
@@ -20,7 +20,7 @@ sync; sleep 2
 
 # «Наставник · Студент» — только свой тест (общие тесты полной версии в лёгкой не к месту).
 if [ $code -eq 0 ]; then
-  ./gradlew --no-daemon :app:connectedStudentDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=app.nastavnik.StudentFlowTest || code=1
+  ./gradlew --no-daemon :app:connectedStudentReleaseAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=app.nastavnik.StudentFlowTest || code=1
 fi
 
 sleep 2
