@@ -18,8 +18,8 @@ android {
         minSdk = 29
         targetSdk = 36
         val build = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 153
-        versionCode = maxOf(build, 10111)
-        versionName = "1.1.11"
+        versionCode = maxOf(build, 10114)
+        versionName = "1.1.14"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         testProguardFiles("proguard-rules.pro")
     }

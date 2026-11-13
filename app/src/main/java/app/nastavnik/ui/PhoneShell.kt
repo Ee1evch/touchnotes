@@ -91,10 +91,10 @@ fun PhoneShell(tab: PhoneTab, onTab: (PhoneTab) -> Unit, resumeTick: Int, go: (S
         AnimatedContent(
             targetState = tab,
             transitionSpec = {
-                // Вкладки — мягкий сдвиг в сторону перехода с пружинкой и проявление.
+                // Вкладки — плавный сдвиг и мягкое проявление без скачков и пауз.
                 val dir = if (targetState.ordinal > initialState.ordinal) 1 else -1
-                (fadeIn(tween(240, delayMillis = 30)) + slideInHorizontally(spring(dampingRatio = 0.86f, stiffness = 420f)) { it / 12 * dir })
-                    .togetherWith(fadeOut(tween(140)) + slideOutHorizontally(tween(200)) { -it / 18 * dir })
+                (fadeIn(tween(260, easing = Motion.Decelerate)) + slideInHorizontally(tween(300, easing = Motion.Emphasized)) { (it * 0.18f * dir).toInt() })
+                    .togetherWith(fadeOut(tween(180, easing = Motion.Accelerate)) + slideOutHorizontally(tween(300, easing = Motion.Emphasized)) { (-it * 0.18f * dir).toInt() })
             },
             label = "tab",
             modifier = Modifier.fillMaxSize().navigationBarsPadding().padding(bottom = 80.dp),
@@ -128,10 +128,10 @@ private fun TabBar(tab: PhoneTab, onTab: (PhoneTab) -> Unit, modifier: Modifier)
 fun TabRowBar(items: List<Triple<String, Int, Boolean>>, onClick: (Int) -> Unit, modifier: Modifier) {
     Row(modifier.fillMaxWidth().background(Brand.Glass).navigationBarsPadding().height(80.dp)) {
         items.forEachIndexed { i, (title, icon, sel) ->
-            val fg by animateColorAsState(if (sel) Brand.Accent else Brand.InkSoft, tween(220), label = "tabColor")
-            val pill by animateColorAsState(if (sel) Brand.Accent.copy(alpha = 0.14f) else Color.Transparent, tween(220), label = "tabPill")
-            val iconScale by animateFloatAsState(if (sel) 1.08f else 1f, spring(dampingRatio = 0.6f, stiffness = 500f), label = "tabIconScale")
-            val pillWidth by animateDpAsState(if (sel) 56.dp else 44.dp, spring(dampingRatio = 0.75f, stiffness = 450f), label = "pillWidth")
+            val fg by animateColorAsState(if (sel) Brand.Accent else Brand.InkSoft, tween(240, easing = Motion.Emphasized), label = "tabColor")
+            val pill by animateColorAsState(if (sel) Brand.Accent.copy(alpha = 0.14f) else Color.Transparent, tween(240, easing = Motion.Emphasized), label = "tabPill")
+            val iconScale by animateFloatAsState(if (sel) 1.08f else 1f, spring(dampingRatio = 0.88f, stiffness = 500f), label = "tabIconScale")
+            val pillWidth by animateDpAsState(if (sel) 56.dp else 44.dp, spring(dampingRatio = 0.88f, stiffness = 450f), label = "pillWidth")
             val source = remember { MutableInteractionSource() }
             Column(
                 Modifier.weight(1f).fillMaxHeight()
@@ -173,7 +173,6 @@ private fun TodayTab(resumeTick: Int, go: (String) -> Unit, onTab: (PhoneTab) ->
             if (app.sync.configured) SyncDot(sync.running, sync.ok) { app.sync.soon(0) }
             RoundIconButton(R.drawable.ic_tune, "Настройки") { go(MainActivity.SCREEN_SETTINGS) }
         }
-        InAppUpdateBanner()
         QuickActionsStrip(
             onSchedule = { onTab(PhoneTab.SCHEDULE) },
             onGrades = { onTab(PhoneTab.GRADES) },

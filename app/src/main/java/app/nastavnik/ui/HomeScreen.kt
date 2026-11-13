@@ -120,8 +120,6 @@ fun HomeScreen(resumeTick: Int, go: (String) -> Unit, openNotebook: (Long) -> Un
                     RoundIconButton(R.drawable.ic_tune, "Настройки") { go(MainActivity.SCREEN_SETTINGS) }
                 }
 
-                InAppUpdateBanner()
-
                 if (!overlay) {
                     Banner("Разреши «Поверх других окон», чтобы кнопка наставника появлялась над записями.", "Разрешить") {
                         context.startActivity(Permissions.overlaySettingsIntent(context))

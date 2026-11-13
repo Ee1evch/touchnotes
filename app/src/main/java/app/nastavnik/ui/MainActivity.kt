@@ -153,8 +153,8 @@ class MainActivity : ComponentActivity() {
                     targetState = screen,
                     transitionSpec = {
                         // «Сквозное проявление» Material 3: старый экран мягко гаснет, новый проявляется с лёгким приближением.
-                        (fadeIn(tween(260, easing = Motion.Decelerate)) + scaleIn(spring(dampingRatio = 0.82f, stiffness = 450f), initialScale = 0.96f))
-                            .togetherWith(fadeOut(tween(160, easing = Motion.Accelerate)) + scaleOut(tween(160, easing = Motion.Accelerate), targetScale = 1.02f))
+                        (fadeIn(tween(260, easing = Motion.Decelerate)) + scaleIn(spring(dampingRatio = 0.88f, stiffness = 450f), initialScale = 0.97f))
+                            .togetherWith(fadeOut(tween(160, easing = Motion.Accelerate)))
                     },
                     label = "screen",
                 ) { target ->

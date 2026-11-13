@@ -150,8 +150,6 @@ fun ScheduleScreen(onBack: (() -> Unit)?) {
             RoundIconButton(R.drawable.ic_tune, "Сменить группу") { picking = true }
         }
 
-        InAppUpdateBanner()
-
         WeekStrip(day, week.orEmpty(), onPick = { day = it }, onShift = { shift -> day = ScheduleText.monday(day).plusWeeks(shift.toLong()) })
 
         AnimatedVisibility(error != null) {
@@ -162,8 +160,8 @@ fun ScheduleScreen(onBack: (() -> Unit)?) {
             targetState = day,
             transitionSpec = {
                 val dir = if (targetState.isAfter(initialState)) 1 else -1
-                (slideInHorizontally(Motion.enter(340)) { it / 12 * dir } + fadeIn(Motion.enter(260)))
-                    .togetherWith(slideOutHorizontally(Motion.exit(160)) { -it / 16 * dir } + fadeOut(Motion.exit(120)))
+                (fadeIn(tween(240, easing = Motion.Decelerate)) + slideInHorizontally(tween(280, easing = Motion.Emphasized)) { (it * 0.18f * dir).toInt() })
+                    .togetherWith(fadeOut(tween(160, easing = Motion.Accelerate)) + slideOutHorizontally(tween(280, easing = Motion.Emphasized)) { (-it * 0.18f * dir).toInt() })
             },
             label = "day",
             modifier = Modifier.pointerInput(Unit) {

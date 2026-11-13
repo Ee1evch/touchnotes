@@ -66,8 +66,8 @@ fun StudentShell() {
                     targetState = tab,
                     transitionSpec = {
                         val dir = if (targetState.ordinal > initialState.ordinal) 1 else -1
-                        (fadeIn(tween(220, delayMillis = 20)) + slideInHorizontally(spring(dampingRatio = 0.86f, stiffness = 420f)) { it / 14 * dir })
-                            .togetherWith(fadeOut(tween(140)) + slideOutHorizontally(tween(180)) { -it / 18 * dir })
+                        (fadeIn(tween(260, easing = Motion.Decelerate)) + slideInHorizontally(tween(300, easing = Motion.Emphasized)) { (it * 0.18f * dir).toInt() })
+                            .togetherWith(fadeOut(tween(180, easing = Motion.Accelerate)) + slideOutHorizontally(tween(300, easing = Motion.Emphasized)) { (-it * 0.18f * dir).toInt() })
                     },
                     label = "studentTab",
                     modifier = Modifier.fillMaxSize().navigationBarsPadding().padding(bottom = 80.dp),

@@ -23,10 +23,15 @@ object UpdateCheck {
 
     private val json = Json { ignoreUnknownKeys = true }
 
-    /** Обновление, если релиз новее [currentBuild] и в нём есть APK; иначе null. */
-    fun parse(body: String, currentBuild: Int, apkName: String = "nastavnik.apk"): UpdateInfo? {
+    /** Обновление, если релиз новее [currentBuild], не совпадает с [currentVersionName] и в нём есть APK; иначе null. */
+    fun parse(body: String, currentBuild: Int, apkName: String = "nastavnik.apk", currentVersionName: String = ""): UpdateInfo? {
         val obj = runCatching { json.parseToJsonElement(body).jsonObject }.getOrNull() ?: return null
         val tag = obj.str("tag_name") ?: return null
+        val latestVer = tag.removePrefix("v").trim()
+        val curVer = currentVersionName.trim().removePrefix("v").trim()
+        if (curVer.isNotBlank() && latestVer.equals(curVer, ignoreCase = true)) {
+            return null
+        }
         val semver = Regex("v?(\\d+)\\.(\\d+)\\.(\\d+)").find(tag)
         val build = if (semver != null) {
             val (maj, min, patch) = semver.destructured

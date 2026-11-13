@@ -56,6 +56,8 @@ fun SettingsScreen(onBack: () -> Unit, onAppearance: () -> Unit = {}, onOnboardi
     val tablet = remember(s.deviceRole) { context.app.isTablet() }
 
     ScreenScaffold(title = "Настройки", onBack = onBack) {
+        InAppUpdateBanner()
+
         AppearanceEntry(onAppearance)
 
         if (tablet) {

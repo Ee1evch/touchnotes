@@ -46,6 +46,9 @@ class BackupAndUpdateTest {
         val semverUpdate = UpdateCheck.parse(semverRelease, currentBuild = 10110)!!
         assertEquals(10111, semverUpdate.build)
         assertNull(UpdateCheck.parse(semverRelease, currentBuild = 10111))
+        // Если версия совпадает со строкой текущей версии — баннер не показывается
+        assertNull(UpdateCheck.parse(semverRelease, currentBuild = 10110, currentVersionName = "1.1.11"))
+        assertNull(UpdateCheck.parse(semverRelease, currentBuild = 10110, currentVersionName = "v1.1.11"))
 
         // Извлечение SHA-256 из тела релиза
         val bodyWithSha = """{"tag_name":"v1.1.11","body":"Хеши:\n11223344556677889900aabbccddeeff11223344556677889900aabbccddeeff  nastavnik.apk\naabbccddeeff11223344556677889900aabbccddeeff11223344556677889900  student.apk","assets":[{"name":"nastavnik.apk","size":5,"browser_download_url":"https://github.com/Ee1evch/touchnotes/releases/download/v1.1.11/nastavnik.apk"}]}"""
