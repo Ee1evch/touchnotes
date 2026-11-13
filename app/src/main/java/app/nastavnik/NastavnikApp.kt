@@ -16,6 +16,8 @@ import app.nastavnik.data.AppSettings
 import app.nastavnik.data.AppUsage
 import app.nastavnik.data.CoordStats
 import app.nastavnik.data.SettingsRepo
+import app.nastavnik.data.Updater
+import app.nastavnik.data.UpdateInfo
 import app.nastavnik.network.NetworkPolicy
 import app.nastavnik.ink.Notebooks
 import app.nastavnik.session.CleanSession
@@ -30,6 +32,8 @@ import app.nastavnik.study.StudyRepo
 import app.nastavnik.study.Trainer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 
 class NastavnikApp : Application() {
     val settings: SettingsRepo by lazy { SettingsRepo(this) }
@@ -88,6 +92,19 @@ class NastavnikApp : Application() {
     /** Синхронизация с другими устройствами через облако. */
     val sync: SyncManager by lazy { SyncManager(this) }
 
+    /** Обновление приложения прямо из интерфейса. */
+    val updater: Updater by lazy { Updater(this) }
+    val availableUpdate = MutableStateFlow<UpdateInfo?>(null)
+
+    fun checkUpdateInBackground() {
+        appScope.launch {
+            runCatching {
+                val info = updater.check()
+                availableUpdate.value = info
+            }
+        }
+    }
+
     /**
      * Планшет — тетради для стилуса и наставник поверх записей; телефон — расписание, карта, карточки, напоминания.
      * По умолчанию по ширине экрана, но можно выбрать в настройках.
@@ -144,6 +161,7 @@ class NastavnikApp : Application() {
         if (!BuildConfig.STUDENT) Alarms.cancelRemovedReminders(this)
         Alarms.rescheduleAll(this)
         GradesJob.schedule(this)
+        checkUpdateInBackground()
     }
 
     private fun createChannels() {

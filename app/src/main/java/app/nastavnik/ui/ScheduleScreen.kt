@@ -150,6 +150,8 @@ fun ScheduleScreen(onBack: (() -> Unit)?) {
             RoundIconButton(R.drawable.ic_tune, "Сменить группу") { picking = true }
         }
 
+        InAppUpdateBanner()
+
         WeekStrip(day, week.orEmpty(), onPick = { day = it }, onShift = { shift -> day = ScheduleText.monday(day).plusWeeks(shift.toLong()) })
 
         AnimatedVisibility(error != null) {

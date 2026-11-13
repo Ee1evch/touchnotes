@@ -88,9 +88,11 @@ class LksWeb(private val context: android.content.Context, private val onCapture
 
             private fun handleNavigation(url: String): Boolean {
                 val uri = android.net.Uri.parse(url)
-                val isLks = uri.scheme.equals("https", ignoreCase = true) &&
-                    uri.host?.equals("lks.siriusuniversity.ru", ignoreCase = true) == true
-                if (!isLks) {
+                val host = uri.host?.lowercase().orEmpty()
+                val isAllowed = (uri.scheme.equals("https", ignoreCase = true) || uri.scheme.equals("http", ignoreCase = true)) &&
+                    (host == "lks.siriusuniversity.ru" || host.endsWith(".siriusuniversity.ru") ||
+                     host.endsWith(".yandexcloud.net") || host.endsWith(".yandex.ru") || host.endsWith(".yandex.net"))
+                if (!isAllowed) {
                     runCatching {
                         val intent = Intent(Intent.ACTION_VIEW, uri).apply {
                             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -104,6 +106,13 @@ class LksWeb(private val context: android.content.Context, private val onCapture
 
             override fun onPageStarted(view: WebView, url: String?, favicon: android.graphics.Bitmap?) {
                 if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) view.evaluateJavascript(LksExtract.CAPTURE_JS, null)
+                url?.let { onPage?.invoke(it) }
+            }
+
+            override fun doUpdateVisitedHistory(view: WebView, url: String, isReload: Boolean) {
+                super.doUpdateVisitedHistory(view, url, isReload)
+                CookieManager.getInstance().flush()
+                onPage?.invoke(url)
             }
 
             override fun onPageFinished(view: WebView, url: String) {
@@ -162,23 +171,30 @@ fun LksScreen(onBack: () -> Unit, onDone: () -> Unit) {
     }
 
     DisposableEffect(Unit) {
-        web.onPage = { url ->
+        fun tryCaptureCookies(url: String) {
+            if (done) return
             val path = runCatching { java.net.URI(url).path.orEmpty() }.getOrDefault("")
-            if (path.startsWith("/login") || path.isEmpty()) {
+            if (path.startsWith("/login")) {
                 // «Запомнить меня» — чтобы сессия жила долго и входить приходилось редко.
                 web.view.evaluateJavascript("(function(){var r=document.querySelector(\"input[name='remember']\");if(r&&!r.checked){r.click();}})()", null)
-            } else if (!done && url.startsWith(LKS_URL)) {
-                done = true
+                return
+            }
+            if (url.startsWith(LKS_URL)) {
                 CookieManager.getInstance().flush()
                 val cookies = CookieManager.getInstance().getCookie(LKS_URL).orEmpty()
-                status = "Вошёл. Забираю оценки…"
-                web.wipeData()
-                scope.launch {
-                    app.grades.connectLksSession(cookies)
-                    onDone()
+                if (cookies.isNotBlank()) {
+                    done = true
+                    status = "Вошёл. Забираю оценки…"
+                    scope.launch {
+                        app.grades.connectLksSession(cookies)
+                        web.wipeData()
+                        onDone()
+                    }
                 }
             }
         }
+
+        web.onPage = { url -> tryCaptureCookies(url) }
         web.load("$LKS_URL/login")
         onDispose {
             web.wipeData()

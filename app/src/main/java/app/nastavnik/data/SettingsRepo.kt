@@ -277,7 +277,8 @@ class SettingsRepo(private val context: Context) {
 
     fun setApiKey(key: String, p: AiProvider = provider()) {
         val clean = key.trim()
-        if (vault.isAvailable()) vault.putString(keyName(p), clean) else memoryKeys[p] = clean
+        vault.putString(keyName(p), clean)
+        memoryKeys[p] = clean
         // Дёргаем обычные настройки, чтобы подписчики flow() узнали об изменении.
         prefs.edit { putLong(K_KEY_STAMP, System.currentTimeMillis()) }
     }
@@ -366,7 +367,8 @@ class SettingsRepo(private val context: Context) {
     fun syncPassword(): String = (vault.getString(K_SYNC_PASSWORD) ?: memorySyncPassword).orEmpty()
     fun setSync(url: String, login: String, password: String) {
         prefs.edit { putString(K_SYNC_URL, url.trim()); putString(K_SYNC_LOGIN, login.trim()) }
-        if (vault.isAvailable()) vault.putString(K_SYNC_PASSWORD, password) else memorySyncPassword = password
+        vault.putString(K_SYNC_PASSWORD, password)
+        memorySyncPassword = password
     }
     fun clearSync() {
         prefs.edit { remove(K_SYNC_URL); remove(K_SYNC_LOGIN); remove(K_SYNC_STATUS) }
@@ -380,7 +382,8 @@ class SettingsRepo(private val context: Context) {
     fun syncPassphrase(): String = (vault.getString(K_SYNC_PASSPHRASE) ?: memorySyncPassphrase).orEmpty()
     fun setSyncPassphrase(phrase: String) {
         val clean = phrase.trim()
-        if (vault.isAvailable()) vault.putString(K_SYNC_PASSPHRASE, clean) else memorySyncPassphrase = clean
+        vault.putString(K_SYNC_PASSPHRASE, clean)
+        memorySyncPassphrase = clean
     }
 
     val syncConfigured: Boolean get() = syncUrl().isNotEmpty() && syncLogin().isNotEmpty() && syncPassword().isNotEmpty()
