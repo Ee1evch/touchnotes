@@ -86,7 +86,7 @@ data class ShotGeometry(
             val box = NBox(left, b.top, right, b.bottom)
             // Овал вокруг всего экрана ничего не показывает — такой рисунок не рисуем.
             val tooBig = m.drawing.kind == DrawingKind.ELLIPSE && (box.height > MAX_ELLIPSE || box.width * box.height > MAX_ELLIPSE * MAX_ELLIPSE * 2)
-            return m.copy(box = box.takeIf { it.width > 0f && it.height > 0f && !tooBig })
+            return m.copy(box = box.takeIf { it.width > 0f && it.height > 0f && !tooBig }, rawModelBox = m.box)
         }
         val map = lines ?: LineMap(emptyList(), imageW, imageH)
         val px = m.box?.let {
@@ -96,16 +96,22 @@ data class ShotGeometry(
             )
         }
         val ref = PlaceRef(m.lines, m.after, px)
-        val r = (if (m.kind == MarkKind.ERROR) map.resolveError(ref)
-            else map.resolve(ref, hintLike = m.kind == MarkKind.HINT))
-            ?: return m.copy(box = null, lines = null, after = null)
+        val v = if (m.kind == MarkKind.ERROR) map.resolveErrorVerified(ref)
+            else map.resolveVerified(ref, hintLike = m.kind == MarkKind.HINT)
+        val r = v.rect ?: return m.copy(box = null, lines = m.lines, after = null, rawModelBox = m.box, coordMiss = v.hasModelBox && !v.hitInk)
         val w = imageW.toFloat()
         val h = imageH.toFloat()
         val box = NBox(
             (r.left / w).coerceIn(0f, 1f), (r.top / h).coerceIn(0f, 1f),
             (r.right / w).coerceIn(0f, 1f), (r.bottom / h).coerceIn(0f, 1f),
         )
-        return m.copy(box = box.takeIf { it.width > 0f && it.height > 0f }, lines = null, after = null)
+        return m.copy(
+            box = box.takeIf { it.width > 0f && it.height > 0f },
+            lines = m.lines,
+            after = null,
+            rawModelBox = m.box,
+            coordMiss = v.hasModelBox && !v.hitInk,
+        )
     }
 
     fun toScreen(b: NBox): IRect = IRect(
@@ -379,6 +385,18 @@ class MentorSession(
                 topic,
                 final.marks.count { it.kind == MarkKind.ERROR },
             )
+            // Статистика качества координат модели: фиксируем попадания и промахи
+            final.marks.forEach { mark ->
+                if (mark.rawModelBox != null) {
+                    app.coordStats.record(
+                        hit = !mark.coordMiss,
+                        model = settings.model,
+                        line = mark.lines?.first,
+                        box = mark.rawModelBox.let { "[${it.left}, ${it.top}, ${it.right}, ${it.bottom}]" },
+                        question = base.question,
+                    )
+                }
+            }
             _state.update {
                 it.copy(answer = base.copy(marks = final.marks, streaming = false, status = null, done = final.done, allGood = final.allGood))
             }

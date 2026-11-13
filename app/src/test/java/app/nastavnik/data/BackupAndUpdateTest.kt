@@ -41,10 +41,10 @@ class BackupAndUpdateTest {
             """{"name":"student.apk","browser_download_url":"https://github.com/Ee1evch/touchnotes/releases/download/build-82/student.apk"}]}"""
         assertEquals("https://github.com/Ee1evch/touchnotes/releases/download/build-82/student.apk", UpdateCheck.parse(three, 50, "student.apk")!!.apkUrl)
 
-        // Семантическая версия v1.1.8 корректно распознаётся новее старых сборок
-        val semverRelease = release("v1.1.8")
+        // Семантическая версия v1.1.9 корректно распознаётся новее старых сборок
+        val semverRelease = release("v1.1.9")
         val semverUpdate = UpdateCheck.parse(semverRelease, currentBuild = 151)!!
-        assertEquals(10108, semverUpdate.build)
-        assertNull(UpdateCheck.parse(semverRelease, currentBuild = 10108))
+        assertEquals(10109, semverUpdate.build)
+        assertNull(UpdateCheck.parse(semverRelease, currentBuild = 10109))
     }
 }

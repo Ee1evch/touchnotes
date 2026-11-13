@@ -52,6 +52,10 @@ data class Mark(
     /** Полная подсказка — открывается кнопкой «Подробнее» (null — модель её не дала). */
     val detail: String? = null,
     val drawing: Drawing? = null,
+    /** Исходные координаты, присланные моделью (до привязки к чернилам). */
+    val rawModelBox: NBox? = null,
+    /** Признак промаха: рамка модели не попала на чернила, включена подсветка строки. */
+    val coordMiss: Boolean = false,
 )
 
 data class ScreenAnswer(

@@ -91,6 +91,7 @@ fun SettingsScreen(onBack: () -> Unit, onAppearance: () -> Unit = {}, onOnboardi
 
             NotesAppSection()
             UsageSection(s.model)
+            CoordAccuracySection()
         }
 
         DeviceSection(tablet, showRole = false)

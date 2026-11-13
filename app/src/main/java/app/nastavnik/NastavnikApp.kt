@@ -14,6 +14,7 @@ import app.nastavnik.ai.OpenAiClient
 import app.nastavnik.data.AppDatabase
 import app.nastavnik.data.AppSettings
 import app.nastavnik.data.AppUsage
+import app.nastavnik.data.CoordStats
 import app.nastavnik.data.SettingsRepo
 import app.nastavnik.ink.Notebooks
 import app.nastavnik.session.CleanSession
@@ -52,6 +53,9 @@ class NastavnikApp : Application() {
 
     /** Карточки повторения и учебные события для «Прогресса». */
     val study: StudyRepo by lazy { StudyRepo(this) }
+
+    /** Статистика точности координат модели и разметка промахов. */
+    val coordStats: CoordStats by lazy { CoordStats(this) }
 
     /** Тренировочные варианты, мини-тесты и карточки из подсказок. */
     val trainer: Trainer by lazy { Trainer(this) }

@@ -534,7 +534,13 @@ private fun AnswerView(ctl: NotebookController, answer: AnswerUi, onBack: () -> 
                 else -> {
                     if (answer.streaming && answer.marks.isEmpty()) ThinkingRow(answer.seq, answer.status)
                     answer.marks.forEachIndexed { i, m ->
-                        NoteCard(i + 1, m, topic = ctl.meta?.title.orEmpty(), onLocate = { ctl.focusMark(i + 1) })
+                        NoteCard(
+                            i + 1,
+                            m,
+                            topic = ctl.meta?.title.orEmpty(),
+                            onLocate = { ctl.focusMark(i + 1) },
+                            onNotHere = { ctl.onMarkNotHere(i + 1) },
+                        )
                     }
                     if (answer.streaming && answer.marks.isNotEmpty()) ThinkingRow(answer.seq, "Дописываю…")
                 }
@@ -761,11 +767,12 @@ private fun EmptyMentor() {
 
 /** Заметка наставника в панели: номер как на листе, вид, короткая подсказка и «Подробнее». */
 @Composable
-private fun NoteCard(number: Int, m: Mark, topic: String, onLocate: () -> Unit) {
+private fun NoteCard(number: Int, m: Mark, topic: String, onLocate: () -> Unit, onNotHere: (() -> Unit)? = null) {
     val context = LocalContext.current
     val speak: (String) -> Unit = context.app.speaker::speak
     val scope = rememberCoroutineScope()
     var expanded by rememberSaveable(number, m.text) { mutableStateOf(false) }
+    var notHereReported by rememberSaveable(number) { mutableStateOf(false) }
     // «В карточки»: null — не нажимали, иначе итог (добавлено или почему нет).
     var carded by remember(m.text) { mutableStateOf<String?>(null) }
     var carding by remember(m.text) { mutableStateOf(false) }
@@ -792,7 +799,26 @@ private fun NoteCard(number: Int, m: Mark, topic: String, onLocate: () -> Unit) 
             }
             Text(NoteColors.title(m.kind), style = MaterialTheme.typography.labelLarge, color = kindColor)
             Spacer(Modifier.weight(1f))
-            if (m.box != null) Text("показать ↗", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (m.box != null) {
+                if (notHereReported) {
+                    Text("✓ промах", style = MaterialTheme.typography.labelSmall, color = Brand.Ok)
+                } else if (onNotHere != null) {
+                    Text(
+                        "Не здесь",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Brand.Error,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Brand.ErrorSoft)
+                            .clickable {
+                                notHereReported = true
+                                onNotHere()
+                            }
+                            .padding(horizontal = 6.dp, vertical = 2.dp),
+                    )
+                }
+                Text("показать ↗", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
             Box(
                 Modifier
                     .size(32.dp)

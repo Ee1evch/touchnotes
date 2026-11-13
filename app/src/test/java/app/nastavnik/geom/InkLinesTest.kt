@@ -176,4 +176,31 @@ class InkLinesTest {
         assertTrue("выделение ограничено куском по горизонтали: $resolved", resolved.left in 190..210 && resolved.right in 315..335)
         assertTrue("выделение ограничено одной строкой: $resolved", resolved.height in 20..60)
     }
+
+    @Test
+    fun verificationDetectsMissAndFallsBackToLineHighlight() {
+        val spec = listOf(Triple(60, 40, 700), Triple(140, 40, 900), Triple(230, 80, 500))
+        val map = InkLines.detect(page(spec), w, h)
+        // Строка 2 заканчивается на x=900. Модель дала координаты рамки в пустом поле справа (1050..1150)
+        val missBox = IRect(1050, 135, 1150, 170)
+        val v = map.resolveErrorVerified(PlaceRef(lines = 2..2, box = missBox))
+        // Рамка не легла на чернила -> зафиксирован промах, включена подсветка всей строки 2
+        assertTrue("должен быть зафиксирован промах мимо чернил", !v.hitInk)
+        assertTrue("должен включиться откат на подсветку всей строки", v.lineFallback)
+        assertNotNull(v.rect)
+        assertTrue("подсветка строки 2 охватывает чернила строки: ${v.rect}", v.rect!!.left in 25..45 && v.rect!!.right in 895..925)
+    }
+
+    @Test
+    fun verificationConfirmsHitWhenBoxLiesOnInk() {
+        val spec = listOf(Triple(60, 40, 700), Triple(140, 40, 900), Triple(230, 80, 500))
+        val map = InkLines.detect(page(spec), w, h)
+        // Рамка попала на чернила в строке 2 (например 300..450)
+        val hitBox = IRect(300, 135, 450, 170)
+        val v = map.resolveErrorVerified(PlaceRef(lines = 2..2, box = hitBox))
+        assertTrue("должно быть подтверждено попадание в чернила", v.hitInk)
+        assertTrue("не должно быть отката на всю строку", !v.lineFallback)
+        assertNotNull(v.rect)
+        assertTrue("выделен компактный кусок: ${v.rect}", v.rect!!.left in 290..315 && v.rect!!.right in 440..465)
+    }
 }

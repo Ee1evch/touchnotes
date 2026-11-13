@@ -89,6 +89,31 @@ fun UsageSection(model: String) {
     }
 }
 
+/** Точность координат рамки и статистика промахов для оценки качества промтов. */
+@Composable
+fun CoordAccuracySection() {
+    val context = LocalContext.current
+    val statsRepo = context.app.coordStats
+    var summary by remember { mutableStateOf(statsRepo.summary()) }
+    SectionCard("Верификация координат") {
+        FieldLabel(
+            "Точность рамок: ${"%.1f".format(Locale.US, summary.hitPercent)}%",
+            "LineMap верифицирует координаты по сегментам чернил: при промахе подсвечивается строка целиком.",
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Stat("Проверок", summary.total.toString(), "всего рамок", Modifier.weight(1f))
+            Stat("В чернила", summary.hits.toString(), "точное попадание", Modifier.weight(1f))
+            Stat("Промахов", summary.totalMisses.toString(), "${summary.misses} авто + ${summary.userMisses} «не здесь»", Modifier.weight(1f))
+        }
+        if (summary.total > 0 || summary.userMisses > 0) {
+            SoftButton("Сбросить статистику", icon = R.drawable.ic_refresh) {
+                statsRepo.reset()
+                summary = statsRepo.summary()
+            }
+        }
+    }
+}
+
 private fun fmt(v: Double) = if (v < 1) String.format(Locale.US, "%.2f", v) else String.format(Locale.US, "%.0f", v)
 
 @Composable

@@ -9,6 +9,7 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import app.nastavnik.NastavnikApp
+import app.nastavnik.ai.NBox
 import app.nastavnik.ai.Prompts
 import app.nastavnik.capture.ImageUtils
 import app.nastavnik.geom.IRect
@@ -598,6 +599,7 @@ class NotebookController(val app: NastavnikApp, val notebookId: Long, private va
         }
         val r = prepared.screenRect
         answerPageId = p.id
+        rejectedMarks.clear()
         answerScale = PAGE_W / r.width().coerceAtLeast(1)
         val geometry = ShotGeometry(IRect(r.left, r.top, r.right, r.bottom), prepared.width, prepared.height, prepared.gutter, prepared.lines, prepared.luma)
         ShotGeometry.last = geometry
@@ -611,8 +613,24 @@ class NotebookController(val app: NastavnikApp, val notebookId: Long, private va
     var marksVisible by mutableStateOf(true)
         private set
 
+    private val rejectedMarks = mutableSetOf<Int>()
+
     fun toggleMarks() {
         marksVisible = !marksVisible
+        refreshMarks()
+    }
+
+    /** Студент нажал «Не здесь»: фиксируем промах для разметки и переключаем подсветку на строку. */
+    fun onMarkNotHere(number: Int) {
+        rejectedMarks.add(number)
+        val a = mentor.state.value.answer ?: return
+        val m = a.marks.getOrNull(number - 1) ?: return
+        app.coordStats.recordUserMiss(
+            model = app.settings.load().model,
+            line = m.lines?.first,
+            box = m.box?.let { "[${it.left}, ${it.top}, ${it.right}, ${it.bottom}]" },
+            question = meta?.title,
+        )
         refreshMarks()
     }
 
@@ -624,9 +642,23 @@ class NotebookController(val app: NastavnikApp, val notebookId: Long, private va
         } else {
             val g = a.geometry
             a.marks.mapIndexedNotNull { i, m ->
-                val b = m.box ?: return@mapIndexedNotNull null
+                val num = i + 1
+                val isRejected = num in rejectedMarks
+                val lineBox = if (isRejected) {
+                    m.lines?.firstOrNull()?.let { lineNum ->
+                        g?.lines?.line(lineNum)?.let { l ->
+                            NBox(
+                                l.left.toFloat() / g.imageW,
+                                l.top.toFloat() / g.imageH,
+                                l.right.toFloat() / g.imageW,
+                                l.bottom.toFloat() / g.imageH,
+                            )
+                        }
+                    }
+                } else null
+                val b = (if (isRejected) lineBox else m.box) ?: return@mapIndexedNotNull null
                 val s = g?.toScreen(b) ?: return@mapIndexedNotNull null
-                PageMark(i + 1, m.kind, RectF(s.left * answerScale, s.top * answerScale, s.right * answerScale, s.bottom * answerScale), m.drawing)
+                PageMark(num, m.kind, RectF(s.left * answerScale, s.top * answerScale, s.right * answerScale, s.bottom * answerScale), m.drawing)
             }
         }
     }
