@@ -35,6 +35,7 @@ import app.nastavnik.ai.Pricing
 import app.nastavnik.ai.UsageLog
 import app.nastavnik.app
 import app.nastavnik.data.Backup
+import app.nastavnik.data.TrustResult
 import app.nastavnik.data.UpdateInfo
 import app.nastavnik.data.Updater
 import app.nastavnik.study.Streaks
@@ -212,9 +213,19 @@ fun UpdateSection() {
                 }
                 progress = 0f
                 scope.launch {
-                    runCatching { updater.download(f) { progress = it } }
-                        .onSuccess { updater.install(it); status = null }
-                        .onFailure { status = "Не удалось скачать: ${it.message}" to Tone.ERROR }
+                    runCatching {
+                        val apk = updater.download(f) { progress = it }
+                        val trust = updater.verify(apk, f.sha256)
+                        when (trust) {
+                            is TrustResult.Valid -> {
+                                updater.install(apk)
+                                status = null
+                            }
+                            is TrustResult.Rejected -> {
+                                status = trust.reason to Tone.ERROR
+                            }
+                        }
+                    }.onFailure { status = "Не удалось скачать: ${it.message}" to Tone.ERROR }
                     progress = -1f
                 }
             }

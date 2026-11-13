@@ -70,6 +70,11 @@ class Updater(private val context: Context) {
         )
     }
 
+    /** Проверка подписи, версии и контрольной суммы скачанного APK перед установкой. */
+    fun verify(apk: File, expectedSha256: String? = null): TrustResult {
+        return ApkTrust.verify(context, apk, expectedDigestSha256 = expectedSha256)
+    }
+
     fun install(apk: File) {
         val uri = NoteApps.uriFor(context, apk)
         context.startActivity(

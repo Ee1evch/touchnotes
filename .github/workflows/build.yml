@@ -20,6 +20,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Аудит отсутствия секретных ключей в репозитории
+        run: |
+          UNAUTHORIZED=$(find . -name "*.keystore" -o -name "*.jks" | grep -v "^\./app/debug.keystore$" || true)
+          if [ -n "$UNAUTHORIZED" ]; then
+            echo "::error::Обнаружены непредусмотренные файлы keystore/jks в репозитории: $UNAUTHORIZED"
+            exit 1
+          fi
+
       - name: JDK 17
         uses: actions/setup-java@v4
         with:
@@ -43,12 +51,24 @@ jobs:
       - name: Сборка релизных APK
         run: GITHUB_RUN_NUMBER="$BUILD_NUMBER" ./gradlew --no-daemon assembleRelease
 
-      # Подпись всеми схемами (v1+v2+v3) тем же ключом, что раньше: такой APK принимает любой установщик
-      # Android 10+, а обновление поверх работает. Проверка подписи — в лог.
+      # Подпись всеми схемами (v1+v2+v3). Если задан секрет RELEASE_KEYSTORE_BASE64, подписываем релизным ключом.
+      # Иначе — debug-ключом для тестовых и PR-сборок.
       - name: APK для релиза (подпись v1+v2+v3)
+        env:
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
         run: |
           BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
-          KEY="--ks app/debug.keystore --ks-pass pass:android --ks-key-alias androiddebugkey --key-pass pass:android"
+          if [ -n "$RELEASE_KEYSTORE_BASE64" ]; then
+            echo "$RELEASE_KEYSTORE_BASE64" | base64 -d > release.keystore
+            KEY="--ks release.keystore --ks-pass pass:$RELEASE_KEYSTORE_PASSWORD --ks-key-alias $RELEASE_KEY_ALIAS --key-pass pass:$RELEASE_KEY_PASSWORD"
+            echo "Подпись релизным ключом из секретов CI"
+          else
+            KEY="--ks app/debug.keystore --ks-pass pass:android --ks-key-alias androiddebugkey --key-pass pass:android"
+            echo "Подпись debug-ключом (релизный ключ не передан в секретах)"
+          fi
           sign() {
             "$BT/apksigner" sign $KEY --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true --out "$2" "$1"
             echo "== $2"; "$BT/apksigner" verify -v --min-sdk-version 21 "$2" | grep -E "Verified using v[123] "
@@ -56,6 +76,11 @@ jobs:
           sign app/build/outputs/apk/full/release/app-full-release.apk nastavnik.apk
           sign app/build/outputs/apk/student/release/app-student-release.apk student.apk
           sign parent/build/outputs/apk/release/parent-release.apk parent.apk
+          rm -f release.keystore
+
+          # Вычисление контрольных сумм SHA-256 для защиты обновлятора
+          sha256sum nastavnik.apk student.apk parent.apk > sha256sums.txt
+          cat sha256sums.txt
 
       - name: Отчёты тестов
         if: always()
@@ -75,6 +100,7 @@ jobs:
             nastavnik.apk
             student.apk
             parent.apk
+            sha256sums.txt
           if-no-files-found: error
 
       # Каждая сборка из push — релиз build-<номер> с APK: по нему приложение находит обновление
@@ -86,20 +112,27 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          for TAG in "v1.1.10" "build-$BUILD_NUMBER"; do
-            gh release create "$TAG" nastavnik.apk student.apk parent.apk \
+          SHA_BODY=$(cat sha256sums.txt)
+          RELEASE_NOTES="Ветка ${{ github.ref_name }}, версия 1.1.11 (коммит ${{ github.sha }})
+
+Хеши SHA-256:
+\`\`\`
+$SHA_BODY
+\`\`\`"
+          for TAG in "v1.1.11" "build-$BUILD_NUMBER"; do
+            gh release create "$TAG" nastavnik.apk student.apk parent.apk sha256sums.txt \
               --repo "${{ github.repository }}" \
               --target "${{ github.sha }}" \
-              --title "Наставник 1.1.10" \
-              --notes "Ветка ${{ github.ref_name }}, версия 1.1.10 (коммит ${{ github.sha }})" \
+              --title "Наставник 1.1.11" \
+              --notes "$RELEASE_NOTES" \
               --latest || {
               gh release edit "$TAG" \
                 --repo "${{ github.repository }}" \
                 --target "${{ github.sha }}" \
-                --title "Наставник 1.1.10" \
-                --notes "Ветка ${{ github.ref_name }}, версия 1.1.10 (коммит ${{ github.sha }})" \
+                --title "Наставник 1.1.11" \
+                --notes "$RELEASE_NOTES" \
                 --latest
-              gh release upload "$TAG" nastavnik.apk student.apk parent.apk \
+              gh release upload "$TAG" nastavnik.apk student.apk parent.apk sha256sums.txt \
                 --repo "${{ github.repository }}" \
                 --clobber
             }
@@ -111,6 +144,14 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
+
+      - name: Аудит отсутствия секретных ключей в репозитории
+        run: |
+          UNAUTHORIZED=$(find . -name "*.keystore" -o -name "*.jks" | grep -v "^\./app/debug.keystore$" || true)
+          if [ -n "$UNAUTHORIZED" ]; then
+            echo "::error::Обнаружены непредусмотренные файлы keystore/jks в репозитории: $UNAUTHORIZED"
+            exit 1
+          fi
 
       - name: JDK 17
         uses: actions/setup-java@v4

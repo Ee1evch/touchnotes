@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -17,8 +19,8 @@ android {
         // Номер сборки GitHub Actions: каждая новая сборка «новее» предыдущей — по нему приложение
         // находит обновление в GitHub Releases и ставит его поверх.
         val build = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 153
-        versionCode = maxOf(build, 10110)
-        versionName = "1.1.10"
+        versionCode = maxOf(build, 10111)
+        versionName = "1.1.11"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -39,14 +41,43 @@ android {
         }
     }
 
+    val keystorePropsFile = rootProject.file("keystore.properties")
+    val keystoreProps = Properties()
+    if (keystorePropsFile.exists()) {
+        keystoreProps.load(keystorePropsFile.inputStream())
+    }
+
     signingConfigs {
-        // Общий debug-ключ лежит в репозитории, чтобы APK из GitHub Actions
-        // и локальные сборки ставились поверх друг друга через `adb install -r`.
+        // Общий debug-ключ лежит в репозитории для локальных сборок и тестов.
         getByName("debug") {
             storeFile = file("debug.keystore")
             storePassword = "android"
             keyAlias = "androiddebugkey"
             keyPassword = "android"
+        }
+
+        val releaseKeyPath = keystoreProps.getProperty("RELEASE_KEYSTORE_PATH")
+            ?: System.getenv("RELEASE_KEYSTORE_PATH")
+        val releaseKeyStorePass = keystoreProps.getProperty("RELEASE_KEYSTORE_PASSWORD")
+            ?: System.getenv("RELEASE_KEYSTORE_PASSWORD")
+        val releaseKeyAlias = keystoreProps.getProperty("RELEASE_KEY_ALIAS")
+            ?: System.getenv("RELEASE_KEY_ALIAS")
+        val releaseKeyPass = keystoreProps.getProperty("RELEASE_KEY_PASSWORD")
+            ?: System.getenv("RELEASE_KEY_PASSWORD")
+
+        val hasReleaseSigning = !releaseKeyPath.isNullOrBlank() &&
+            !releaseKeyStorePass.isNullOrBlank() &&
+            !releaseKeyAlias.isNullOrBlank() &&
+            !releaseKeyPass.isNullOrBlank() &&
+            rootProject.file(releaseKeyPath).exists()
+
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = rootProject.file(releaseKeyPath)
+                storePassword = releaseKeyStorePass
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPass
+            }
         }
     }
 
@@ -56,7 +87,7 @@ android {
         }
         release {
             isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
         }
     }
 

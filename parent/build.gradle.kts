@@ -1,3 +1,5 @@
+import java.util.Properties
+
 // «Наставник · Родитель» — отдельное приложение: расписание студента с посещаемостью и успеваемость.
 // Данные — с Яндекс Диска студента (облако «Наставника», только чтение) и с сайта расписания.
 plugins {
@@ -16,9 +18,15 @@ android {
         minSdk = 29
         targetSdk = 36
         val build = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 153
-        versionCode = maxOf(build, 10110)
-        versionName = "1.1.10"
+        versionCode = maxOf(build, 10111)
+        versionName = "1.1.11"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    val keystorePropsFile = rootProject.file("keystore.properties")
+    val keystoreProps = Properties()
+    if (keystorePropsFile.exists()) {
+        keystoreProps.load(keystorePropsFile.inputStream())
     }
 
     signingConfigs {
@@ -29,13 +37,37 @@ android {
             keyAlias = "androiddebugkey"
             keyPassword = "android"
         }
+
+        val releaseKeyPath = keystoreProps.getProperty("RELEASE_KEYSTORE_PATH")
+            ?: System.getenv("RELEASE_KEYSTORE_PATH")
+        val releaseKeyStorePass = keystoreProps.getProperty("RELEASE_KEYSTORE_PASSWORD")
+            ?: System.getenv("RELEASE_KEYSTORE_PASSWORD")
+        val releaseKeyAlias = keystoreProps.getProperty("RELEASE_KEY_ALIAS")
+            ?: System.getenv("RELEASE_KEY_ALIAS")
+        val releaseKeyPass = keystoreProps.getProperty("RELEASE_KEY_PASSWORD")
+            ?: System.getenv("RELEASE_KEY_PASSWORD")
+
+        val hasReleaseSigning = !releaseKeyPath.isNullOrBlank() &&
+            !releaseKeyStorePass.isNullOrBlank() &&
+            !releaseKeyAlias.isNullOrBlank() &&
+            !releaseKeyPass.isNullOrBlank() &&
+            rootProject.file(releaseKeyPath).exists()
+
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = rootProject.file(releaseKeyPath)
+                storePassword = releaseKeyStorePass
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPass
+            }
+        }
     }
 
     buildTypes {
         debug { signingConfig = signingConfigs.getByName("debug") }
         release {
             isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
         }
     }
 
