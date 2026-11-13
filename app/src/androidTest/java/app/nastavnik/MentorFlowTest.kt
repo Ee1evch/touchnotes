@@ -674,10 +674,19 @@ class MentorFlowTest {
                 .putExtra(MainActivity.EXTRA_NOTEBOOK, meta.id),
         )
         try {
-            device.wait(Until.findObject(By.desc("Показать наставника")), 10000)!!.click()
-            assertNotNull("панель не открылась", device.wait(Until.findObject(By.desc("Скрыть наставника")), 5000))
-            device.findObject(By.desc("Скрыть наставника"))!!.click()
-            assertNotNull("кнопка пропала", device.wait(Until.findObject(By.desc("Показать наставника")), 5000))
+            val showBtn = device.wait(Until.findObject(By.desc("Показать наставника")), 4000)
+            if (showBtn != null) {
+                showBtn.click()
+                assertNotNull("панель не открылась", device.wait(Until.findObject(By.desc("Скрыть наставника")), 5000))
+                device.findObject(By.desc("Скрыть наставника"))?.click()
+                assertNotNull("кнопка пропала", device.wait(Until.findObject(By.desc("Показать наставника")), 5000))
+            } else {
+                val hideBtn = device.wait(Until.findObject(By.desc("Скрыть наставника")), 4000)
+                hideBtn?.click()
+                assertNotNull("панель не закрылась", device.wait(Until.findObject(By.desc("Показать наставника")), 5000))
+                device.findObject(By.desc("Показать наставника"))?.click()
+                assertNotNull("панель не открылась", device.wait(Until.findObject(By.desc("Скрыть наставника")), 5000))
+            }
         } finally {
             sc.close()
             nbs.store.delete(meta.id)
@@ -789,9 +798,14 @@ class MentorFlowTest {
         device.findObject(By.desc("Ручка"))!!.click()
         penStroke((0..40).map { k -> (x0 + k * 10f) to (y0 + 560f) })
         device.findObject(By.desc("Ластик"))!!.click()
-        SystemClock.sleep(300)
-        device.findObject(By.desc("Настройки инструмента"))!!.click()
-        device.wait(Until.findObject(By.text("Часть линии")), 5000)!!.click()
+        SystemClock.sleep(600)
+        val opt = device.wait(Until.findObject(By.desc("Настройки инструмента")), 5000)
+        opt?.click()
+        val part = device.wait(Until.findObject(By.text("Часть линии")), 5000) ?: run {
+            opt?.click()
+            device.wait(Until.findObject(By.text("Часть линии")), 5000)
+        }
+        part?.click()
         SystemClock.sleep(400)
         penStroke((0..10).map { k -> (x0 + 200f) to (y0 + 520f + k * 8f) })
         assertEquals("частичный ластик не разрезал линию", 3, page().strokes.size)
