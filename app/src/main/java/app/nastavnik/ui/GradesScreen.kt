@@ -9,6 +9,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -27,6 +28,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -260,10 +262,10 @@ fun GradesCard(onOpen: () -> Unit) {
         .sortedByDescending { it.second.gradedAt }.take(3)
     val journal by repo.journal.collectAsStateWithLifecycle()
     val avg = journal?.averageMark ?: snap?.courses?.flatMap { it.items }?.mapNotNull { it.raw }?.takeIf { it.isNotEmpty() }?.average()
-    val src = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    val src = remember { MutableInteractionSource() }
     Column(
         Modifier.widthIn(max = 760.dp).fillMaxWidth().enter().pressable(src).glass(RoundedCornerShape(26.dp), 10.dp)
-            .clickable(src, indication = androidx.compose.material3.ripple(), onClick = onOpen).padding(18.dp),
+            .clickable(src, indication = ripple(), onClick = onOpen).padding(18.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
