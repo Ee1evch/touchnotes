@@ -61,12 +61,12 @@ class LksClientTest {
         return s to seen
     }
 
-    @Test fun logsInAndReadsJournal() = runBlocking {
+    @Test fun readsJournalWithCookies() = runBlocking {
         val (s, seen) = server()
-        val c = LksClient(s.url("/").toString(), client = OkHttpClient())
-        val bad = runCatching { c.login("me@yandex.ru", "wrong") }.exceptionOrNull()
-        assertTrue(bad is LksClient.LoginException)
-        c.login("me@yandex.ru", "right")
+        val jar = SessionCookies()
+        val url = s.url("/")
+        jar.saveFromResponse(url, listOf(okhttp3.Cookie.parse(url, "lks_session=abc; Path=/")!!))
+        val c = LksClient(url.toString(), cookies = jar, client = OkHttpClient())
         val j = c.journal(now = 7)
         assertEquals(2, j.lessons.size)
         val ma = j.lessons[0]
@@ -92,8 +92,10 @@ class LksClientTest {
 
     @Test fun waitsWhileJournalIsBuilding() = runBlocking {
         val (s, _) = server(building = 1)
-        val c = LksClient(s.url("/").toString(), client = OkHttpClient())
-        c.login("me@yandex.ru", "right")
+        val jar = SessionCookies()
+        val url = s.url("/")
+        jar.saveFromResponse(url, listOf(okhttp3.Cookie.parse(url, "lks_session=abc; Path=/")!!))
+        val c = LksClient(url.toString(), cookies = jar, client = OkHttpClient())
         assertEquals(2, c.journal().lessons.size)
         s.shutdown()
     }

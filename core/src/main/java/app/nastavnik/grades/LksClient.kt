@@ -18,7 +18,6 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
 import okhttp3.Cookie
 import okhttp3.CookieJar
-import okhttp3.FormBody
 import okhttp3.HttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -111,24 +110,6 @@ class LksClient(
         }
     }
 
-    /** Вход по почте и паролю. После него куки сессии лежат в [cookies]. */
-    suspend fun login(email: String, password: String) = withContext(Dispatchers.IO) {
-        val (_, page) = get("/login")
-        val token = tokenRe.find(page)?.groupValues?.get(1) ?: metaRe.find(page)?.groupValues?.get(1)
-            ?: throw GradesException("Не нашёл форму входа ЛКС")
-        val body = FormBody.Builder().add("_token", token).add("login", email.trim()).add("password", password).add("remember", "on").build()
-        val r = runCatching { http.newCall(Request.Builder().url("$base/login").post(body).header("Referer", "$base/login").build()).execute() }
-            .getOrElse { throw GradesException("ЛКС не отвечает. Проверь интернет.") }
-        r.use {
-            if (it.code == 419) throw GradesException("ЛКС сбросил сессию — попробуй ещё раз")
-            val path = it.request.url.encodedPath
-            val text = it.body?.string().orEmpty()
-            if (path.startsWith("/login") || text.contains("name=\"password\"")) {
-                throw LoginException(if (text.contains("throttle", true) || text.contains("Слишком много", true)) "Слишком много попыток входа — подожди минуту" else "ЛКС не принял почту или пароль")
-            }
-        }
-    }
-
     /** Журнал: дисциплины, средний балл, рейтинг, пропуски и оценки по датам за [interval] ("term" — семестр, "year" — год). */
     suspend fun journal(interval: String = "year", now: Long = System.currentTimeMillis()): LksJournal = withContext(Dispatchers.IO) {
         val (path, page) = get("/journal")
@@ -163,7 +144,6 @@ class LksClient(
     companion object {
         const val BASE = "https://lks.siriusuniversity.ru"
         private val shared by lazy { OkHttpClient.Builder().connectTimeout(20, TimeUnit.SECONDS).readTimeout(60, TimeUnit.SECONDS).build() }
-        private val tokenRe = Regex("""name="_token"\s+value="([^"]+)"""")
         private val metaRe = Regex("""<meta name="csrf-token" content="([^"]+)"""")
 
         private fun JsonElement?.text(): String? = when (this) {

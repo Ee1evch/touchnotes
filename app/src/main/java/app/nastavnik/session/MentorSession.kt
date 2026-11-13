@@ -310,7 +310,7 @@ class MentorSession(
                 // Сначала страницы всего конспекта, последним — текущий экран с номерами строк.
                 images = shot.context.map { ImagePart(it) } + ImagePart(shot.jpeg),
                 maxTokens = if (settings.fastAnswers && base.kind != AskKind.USER) FAST_MAX_TOKENS else MAX_TOKENS,
-                fast = settings.fastAnswers,
+                fast = settings.fastAnswers || base.kind == AskKind.WATCH || base.kind == AskKind.QUICK,
             )
             val requestAt = SystemClock.elapsedRealtime()
             var firstText = false

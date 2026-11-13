@@ -171,6 +171,8 @@ object ScreenAnswerParser {
             }
             val t = topicRe.matchEntire(line)
             if (t != null) {
+                flush()
+                kind = null
                 topic = t.groupValues[1].trim().trim('«', '»', '"', '.').take(80).ifBlank { null }
                 continue
             }

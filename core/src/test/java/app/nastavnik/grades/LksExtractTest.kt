@@ -34,6 +34,5 @@ class LksExtractTest {
         assertEquals("87", s.courses[0].total)
         assertEquals(4.5, s.courses[1].totalRaw!!, 0.0)
         assertNull(LksExtract.parse("""{"tables":[]}"""))
-        assertTrue(LksExtract.loginJs("a@b.ru", "p'\"x").contains("\"p'\\\"x\""))
     }
 }

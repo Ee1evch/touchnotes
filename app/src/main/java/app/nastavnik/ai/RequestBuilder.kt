@@ -34,11 +34,14 @@ data class MessageRequest(
     /** Быстрый ответ: низкое «усилие» и без размышлений, где модель это позволяет. */
     val fast: Boolean = false,
     val useFallbacks: Boolean = !compat && ClaudeModel.supportsFallbacks(model) && RequestBuilder.thinkingOff(model, fast, compat) == null,
+    /** Кэширование системного промта (Anthropic prompt caching). */
+    val promptCache: Boolean = false,
 )
 
 /** Тело и заголовки запроса к Anthropic `/v1/messages`. */
 object RequestBuilder {
     const val FALLBACK_BETA = "server-side-fallback-2026-07-01"
+    const val PROMPT_CACHE_BETA = "prompt-caching-2024-07-31"
 
     fun build(req: MessageRequest): JsonObject {
         val turns = Turns.normalize(req.turns)
@@ -73,7 +76,19 @@ object RequestBuilder {
         return buildJsonObject {
             put("model", req.model)
             put("max_tokens", req.maxTokens)
-            put("system", req.system)
+            if (req.promptCache && !req.compat) {
+                put("system", buildJsonArray {
+                    addJsonObject {
+                        put("type", "text")
+                        put("text", req.system)
+                        putJsonObject("cache_control") {
+                            put("type", "ephemeral")
+                        }
+                    }
+                })
+            } else {
+                put("system", req.system)
+            }
             put("messages", messages)
             // effort понимают модели Claude 4.6 и новее; для старых id не отправляем.
             if (!req.compat && supportsEffort(req.model)) putJsonObject("output_config") { put("effort", if (req.fast) "low" else req.effort) }
@@ -90,7 +105,10 @@ object RequestBuilder {
         }
         put("anthropic-version", "2023-06-01")
         put("content-type", "application/json")
-        if (req.useFallbacks) put("anthropic-beta", FALLBACK_BETA)
+        val betas = mutableListOf<String>()
+        if (req.useFallbacks) betas.add(FALLBACK_BETA)
+        if (req.promptCache && !req.compat) betas.add(PROMPT_CACHE_BETA)
+        if (betas.isNotEmpty()) put("anthropic-beta", betas.joinToString(","))
         if (req.stream) put("accept", "text/event-stream")
     }
 

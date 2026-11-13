@@ -206,6 +206,9 @@ class SettingsRepo(private val context: Context) {
                 AiProvider.ANTHROPIC_COMPAT -> setAnthropicCompatBaseUrl(it)
                 else -> Unit
             }
+            if (it.startsWith("http://", ignoreCase = true)) {
+                setAllowInsecureLocalProxy(true)
+            }
         }
         c.authMode?.let(::setAuthMode)
         c.apiKey?.let { setApiKey(it, c.provider) }
@@ -243,6 +246,9 @@ class SettingsRepo(private val context: Context) {
     fun setOnboardingDone(v: Boolean) = prefs.edit { putBoolean(K_ONBOARDING, v) }
     fun setProjectionExplained(v: Boolean) = prefs.edit { putBoolean(K_PROJ_EXPLAINED, v) }
     fun setActiveConversation(id: Long) = prefs.edit { putLong(K_ACTIVE_CONV, id) }
+
+    fun allowInsecureLocalProxy(): Boolean = prefs.getBoolean(K_ALLOW_INSECURE_LOCAL, false)
+    fun setAllowInsecureLocalProxy(on: Boolean) = prefs.edit { putBoolean(K_ALLOW_INSECURE_LOCAL, on) }
 
     /** Только для отладочной сборки: адрес мок-сервера вместо api.anthropic.com (используют тесты). */
     fun debugBaseUrl(): String? = prefs.getString(K_DEBUG_BASE_URL, null)?.takeIf { it.isNotBlank() }
@@ -471,5 +477,6 @@ class SettingsRepo(private val context: Context) {
         private const val K_API_KEY = "api_key"
         private const val K_KEY_STAMP = "api_key_stamp"
         private const val K_DEBUG_BASE_URL = "debug_base_url"
+        private const val K_ALLOW_INSECURE_LOCAL = "allow_insecure_local"
     }
 }

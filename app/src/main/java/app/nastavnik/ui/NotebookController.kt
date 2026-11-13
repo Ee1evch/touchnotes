@@ -165,7 +165,11 @@ class NotebookController(val app: NastavnikApp, val notebookId: Long, private va
         val ps = withContext(Dispatchers.IO) { nbs.store.loadPages(m) }
         meta = m
         pages = ps
-        mentor.useConversation(m.conversationId)
+        // Чат только в рамках текущей сессии: при входе в тетрадь всегда новый чистый диалог
+        mentor.newTask()
+        answerPageId = 0L
+        ink.marks = emptyList()
+        rejectedMarks.clear()
         mentor.extraSystem = PracticePrompts.variantForMentor(m.tasks)
         applyTool()
         // Открыли ради конкретной страницы (задача ДЗ) — сразу на ней.
@@ -488,6 +492,13 @@ class NotebookController(val app: NastavnikApp, val notebookId: Long, private va
         autoJob?.cancel()
         examJob?.cancel()
         mentor.cancel()
+        mentor.dismiss()
+        answerPageId = 0L
+        ink.marks = emptyList()
+        rejectedMarks.clear()
+        cachedMainShot = null
+        contextCache.clear()
+        cleanPageCache.clear()
         val m = meta ?: return
         val first = pages.firstOrNull() ?: return
         app.appScope.launch {
@@ -497,11 +508,7 @@ class NotebookController(val app: NastavnikApp, val notebookId: Long, private va
     }
 
     private fun rememberConversation(conv: Long) {
-        val m = meta ?: return
-        if (m.conversationId == conv) return
-        val nm = m.copy(conversationId = conv)
-        meta = nm
-        app.appScope.launch(Dispatchers.IO) { nbs.store.saveMeta(nm) }
+        // Чат сохраняется только на время текущей сессии тетради, не персистим в метаданные на диск
     }
 
     /** null означает все страницы, включая добавленные позже. */
@@ -565,13 +572,22 @@ class NotebookController(val app: NastavnikApp, val notebookId: Long, private va
         }
     }
 
-    private data class CachedContextPage(val page: InkPage, val version: Long, val jpeg: ByteArray)
+    private data class CachedContextPage(val pageId: Long, val version: Long, val jpeg: ByteArray)
     private val contextCache = LinkedHashMap<Long, CachedContextPage>(16, 0.75f, true)
     private var contextCacheBytes = 0
 
+    private data class CachedMainShot(
+        val pageId: Long,
+        val version: Long,
+        val jpeg: ByteArray,
+        val geometry: ShotGeometry,
+        val scale: Float,
+    )
+    private var cachedMainShot: CachedMainShot? = null
+
     private suspend fun contextImage(page: InkPage): ByteArray {
         val cached = contextCache[page.id]
-        if (cached != null && cached.page === page && cached.version == page.version) return cached.jpeg
+        if (cached != null && cached.pageId == page.id && cached.version == page.version) return cached.jpeg
         val version = page.version
         val jpeg = nbs.renderJpeg(notebookId, page, ImageUtils.SMALL_PIXELS, 78)
         contextCache.remove(page.id)?.let { contextCacheBytes -= it.jpeg.size }
@@ -581,33 +597,43 @@ class NotebookController(val app: NastavnikApp, val notebookId: Long, private va
                 contextCacheBytes -= oldest.next().value.jpeg.size
                 oldest.remove()
             }
-            contextCache[page.id] = CachedContextPage(page, version, jpeg)
+            contextCache[page.id] = CachedContextPage(page.id, version, jpeg)
             contextCacheBytes += jpeg.size
         }
         return jpeg
     }
 
-    /** Снимок текущей страницы и все остальные страницы тетради. */
+    /** Снимок текущей страницы и все остальные страницы тетради. Кэширует неизменённые листы. */
     private suspend fun shot(contextLimit: Int): ShotResult {
         val p = page ?: return ShotResult.Failed("Страница не открыта")
         flushSaveNow()
-        val bmp = nbs.render(notebookId, p, ImageUtils.MAX_PIXELS)
-        val prepared = try {
-            withContext(Dispatchers.Default) { ImageUtils.prepare(bmp, Rect(0, 0, bmp.width, bmp.height), numberLines = true) }
-        } finally {
-            bmp.recycle()
-        }
-        val r = prepared.screenRect
         answerPageId = p.id
         rejectedMarks.clear()
-        answerScale = PAGE_W / r.width().coerceAtLeast(1)
-        val geometry = ShotGeometry(IRect(r.left, r.top, r.right, r.bottom), prepared.width, prepared.height, prepared.gutter, prepared.lines, prepared.luma)
-        ShotGeometry.last = geometry
+        val main = cachedMainShot
+        val (jpeg, geometry) = if (main != null && main.pageId == p.id && main.version == p.version) {
+            answerScale = main.scale
+            ShotGeometry.last = main.geometry
+            main.jpeg to main.geometry
+        } else {
+            val bmp = nbs.render(notebookId, p, ImageUtils.MAX_PIXELS)
+            val prepared = try {
+                withContext(Dispatchers.Default) { ImageUtils.prepare(bmp, Rect(0, 0, bmp.width, bmp.height), numberLines = true) }
+            } finally {
+                bmp.recycle()
+            }
+            val r = prepared.screenRect
+            val scale = PAGE_W / r.width().coerceAtLeast(1)
+            answerScale = scale
+            val geom = ShotGeometry(IRect(r.left, r.top, r.right, r.bottom), prepared.width, prepared.height, prepared.gutter, prepared.lines, prepared.luma)
+            ShotGeometry.last = geom
+            cachedMainShot = CachedMainShot(p.id, p.version, prepared.jpeg, geom, scale)
+            prepared.jpeg to geom
+        }
         // Остальные страницы — по близости к текущей, в порядке тетради.
         val others = pages.withIndex().filter { it.index != index && (selectedContextPages == null || it.value.id in selectedContextPages!!) }
             .sortedBy { abs(it.index - index) }.take(contextLimit).sortedBy { it.index }
         val context = others.map { contextImage(it.value) }
-        return ShotResult.Ok(prepared.jpeg, geometry, null, context)
+        return ShotResult.Ok(jpeg, geometry, null, context)
     }
 
     var marksVisible by mutableStateOf(true)
@@ -669,10 +695,24 @@ class NotebookController(val app: NastavnikApp, val notebookId: Long, private va
         ink.marks.firstOrNull { it.number == number }?.let { ink.reveal(it.rect) }
     }
 
-    /** Все страницы тетради — картинками для чистовика. */
+    private data class CachedCleanPage(val version: Long, val jpeg: ByteArray)
+    private val cleanPageCache = LinkedHashMap<Long, CachedCleanPage>()
+
+    /** Все страницы тетради — картинками для чистовика и анализа. Неизменённые страницы не перерисовываются. */
     suspend fun pageImages(): List<ByteArray> {
         flushSaveNow()
-        return pages.map { nbs.renderJpeg(notebookId, it, ImageUtils.MAX_PIXELS, 85) }
+        val currentIds = pages.map { it.id }.toSet()
+        cleanPageCache.keys.retainAll(currentIds)
+        return pages.map { p ->
+            val cached = cleanPageCache[p.id]
+            if (cached != null && cached.version == p.version) {
+                cached.jpeg
+            } else {
+                val jpeg = nbs.renderJpeg(notebookId, p, ImageUtils.MAX_PIXELS, 85)
+                cleanPageCache[p.id] = CachedCleanPage(p.version, jpeg)
+                jpeg
+            }
+        }
     }
 
     companion object {

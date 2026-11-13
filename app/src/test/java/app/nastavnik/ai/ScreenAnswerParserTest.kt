@@ -136,6 +136,12 @@ class ScreenAnswerParserTest {
         // Слово, начинающееся с «тема», — не тема.
         val d = ScreenAnswerParser.parse("@@ note\n@@ тематика без метки", CoordMode.PIXELS_XY, 1000, 800)
         assertEquals(null, d.topic)
+        // Тема в самом конце ответа (для минимального TTFT первой подсказки).
+        val endTopic = ScreenAnswerParser.parse("@@ error стр 2\nПроверь знак.\n@@ подробнее\nМинус меняет знак.\n@@ тема Линейные уравнения", CoordMode.PIXELS_XY, 1000, 800)
+        assertEquals("Линейные уравнения", endTopic.topic)
+        assertEquals(1, endTopic.marks.size)
+        assertEquals("Проверь знак.", endTopic.marks[0].text)
+        assertEquals("Минус меняет знак.", endTopic.marks[0].detail)
     }
 
     @Test

@@ -16,6 +16,7 @@ import app.nastavnik.data.AppSettings
 import app.nastavnik.data.AppUsage
 import app.nastavnik.data.CoordStats
 import app.nastavnik.data.SettingsRepo
+import app.nastavnik.network.NetworkPolicy
 import app.nastavnik.ink.Notebooks
 import app.nastavnik.session.CleanSession
 import app.nastavnik.study.Alarms
@@ -33,7 +34,21 @@ import kotlinx.coroutines.MainScope
 class NastavnikApp : Application() {
     val settings: SettingsRepo by lazy { SettingsRepo(this) }
     val db: AppDatabase by lazy { AppDatabase.create(this) }
-    private val http by lazy { ClaudeClient.defaultHttp() }
+    private val networkPolicy by lazy {
+        NetworkPolicy(
+            allowInsecureLocal = { BuildConfig.DEBUG || settings.allowInsecureLocalProxy() },
+            trustedProxyHosts = {
+                setOfNotNull(
+                    settings.load().openAiBaseUrl.let { runCatching { java.net.URI(it).host }.getOrNull() },
+                    settings.load().anthropicCompatBaseUrl.let { runCatching { java.net.URI(it).host }.getOrNull() },
+                    if (BuildConfig.DEBUG) settings.debugBaseUrl()?.let { runCatching { java.net.URI(it).host }.getOrNull() } else null,
+                    "127.0.0.1",
+                    "localhost",
+                )
+            },
+        )
+    }
+    private val http by lazy { ClaudeClient.defaultHttp(networkPolicy) }
 
     val claude: ClaudeClient by lazy {
         ClaudeClient(http).apply {
