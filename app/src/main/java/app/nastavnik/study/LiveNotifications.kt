@@ -202,7 +202,7 @@ object LiveNotifications {
             context, LIVE_REQUEST, Intent(context, AlarmReceiver::class.java).setAction(ACTION_LIVE),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        // Точно (будильник может запустить сервис режима «точно»); на старых — окно.
+        // Точное срабатывание (для запуска сервиса режима «точно»); на старых версиях — окно.
         runCatching {
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || am.canScheduleExactAlarms()) am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi)
             else am.setWindow(AlarmManager.RTC_WAKEUP, at, 30_000L, pi)

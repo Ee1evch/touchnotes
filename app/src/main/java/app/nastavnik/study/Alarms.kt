@@ -8,26 +8,17 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.os.Build
-import androidx.core.app.NotificationCompat
-import app.nastavnik.NastavnikApp
-import app.nastavnik.R
 import app.nastavnik.app
-import app.nastavnik.data.ReminderEntity
 import app.nastavnik.schedule.Lesson
-import app.nastavnik.ui.MainActivity
-import app.nastavnik.ui.Permissions
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import java.time.DayOfWeek
-import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneId
 
 /**
- * Будильники: свои напоминания и «через 10 минут пара». Ставятся заново при запуске, после
- * синхронизации, обновления расписания и перезагрузки — так напоминание, созданное на планшете, сработает и на телефоне.
+ * Планирование живых уведомлений о парах при запуске, синхронизации и перезагрузке.
  */
 object Alarms {
     const val ACTION_PERSONAL = "app.nastavnik.PERSONAL"
@@ -41,18 +32,28 @@ object Alarms {
         app.appScope.launch(Dispatchers.IO) {
             runCatching { scheduleNextLesson(context) }
             runCatching { LiveNotifications.updateLesson(context) }
-            runCatching { LessonQuiet.update(context) }
             // Лёгкая версия («Наставник · Студент»): только пары, живое уведомление и «Тихо на парах».
-            if (BuildConfig.STUDENT) return@launch
-            runCatching { schedulePersonal(context) }
-            runCatching { WakeAlarm.reschedule(context) }
-            runCatching { StudyLock.schedule(context) }
-            runCatching { Siren.check(context) }
-            runCatching { HomeworkReminder.schedule(context) }
         }
     }
 
     private fun am(context: Context) = context.getSystemService(AlarmManager::class.java)
+
+    /** Отменяем напоминания, созданные предыдущей версией, не удаляя сохранённые данные. */
+    fun cancelRemovedReminders(context: Context) {
+        HomeworkReminder.cancel(context)
+        val manager = am(context) ?: return
+        val daily = PendingIntent.getBroadcast(context, 0,
+            Intent(context, ReminderReceiver::class.java).setAction("app.nastavnik.REMIND"),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        manager.cancel(daily)
+        context.getSystemService(NotificationManager::class.java)?.cancel(77)
+        context.app.appScope.launch(Dispatchers.IO) {
+            for (r in context.app.db.reminders().all()) {
+                personalIntent(context, r.uid)?.let { manager.cancel(it) }
+                context.getSystemService(NotificationManager::class.java)?.cancel(r.uid.hashCode())
+            }
+        }
+    }
 
     private fun set(context: Context, at: Long, pi: PendingIntent) {
         val am = am(context) ?: return
@@ -69,17 +70,6 @@ object Alarms {
             Intent(context, AlarmReceiver::class.java).setAction(ACTION_PERSONAL).putExtra(EXTRA_UID, uid),
             flags or PendingIntent.FLAG_IMMUTABLE,
         )
-
-    suspend fun schedulePersonal(context: Context) {
-        val now = System.currentTimeMillis()
-        for (r in context.app.db.reminders().all()) {
-            val pi = personalIntent(context, r.uid) ?: continue
-            am(context)?.cancel(pi)
-            if (r.done) continue
-            val at = if (r.at > now) r.at else Repeats.next(r.at, r.repeat, now)
-            if (at != null && at > now) set(context, at, pi)
-        }
-    }
 
     suspend fun scheduleNextLesson(context: Context) {
         val app = context.app
@@ -104,52 +94,6 @@ object Alarms {
         set(context, at, pi)
     }
 
-    suspend fun onPersonal(context: Context, uid: String) {
-        val app = context.app
-        val r = app.db.reminders().get(uid) ?: return
-        if (r.done) return
-        notifyPersonal(context, r)
-        // Повторяющееся — переносим на следующий раз.
-        val next = Repeats.next(r.at, r.repeat, System.currentTimeMillis())
-        if (r.repeat != Repeats.NONE && next != null) app.db.reminders().put(r.copy(at = next))
-        schedulePersonal(context)
-    }
-
-    suspend fun markDone(context: Context, uid: String) {
-        val app = context.app
-        val r = app.db.reminders().get(uid) ?: return
-        if (r.repeat == Repeats.NONE) app.db.reminders().put(r.copy(done = true))
-        context.getSystemService(NotificationManager::class.java)?.cancel(uid.hashCode())
-        schedulePersonal(context)
-        app.sync.soon()
-    }
-
-    private fun notifyPersonal(context: Context, r: ReminderEntity) {
-        if (!Permissions.notifications(context)) return
-        val open = PendingIntent.getActivity(
-            context, r.uid.hashCode(),
-            Intent(context, MainActivity::class.java).putExtra(MainActivity.EXTRA_SCREEN, MainActivity.SCREEN_REMINDERS)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-        )
-        val done = PendingIntent.getBroadcast(
-            context, r.uid.hashCode() + 1,
-            Intent(context, AlarmReceiver::class.java).setAction(ACTION_DONE).putExtra(EXTRA_UID, r.uid),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-        )
-        val n = NotificationCompat.Builder(context, NastavnikApp.CHANNEL_PERSONAL)
-            .setSmallIcon(R.drawable.ic_bell)
-            .setContentTitle(r.title)
-            .setContentText(r.note.ifBlank { Repeats.labels[r.repeat].takeIf { r.repeat != Repeats.NONE } ?: "Напоминание" })
-            .setContentIntent(open)
-            .addAction(0, if (r.repeat == Repeats.NONE) "Готово" else "Понятно", done)
-            .setAutoCancel(true)
-            .setCategory(NotificationCompat.CATEGORY_REMINDER)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .build()
-        runCatching { context.getSystemService(NotificationManager::class.java).notify(r.uid.hashCode(), n) }
-    }
-
     /** За N минут до пары: «живое» уведомление с отсчётом (оно само обновится к началу и во время пары). */
     suspend fun onLesson(context: Context) {
         LiveNotifications.updateLesson(context)
@@ -157,18 +101,14 @@ object Alarms {
     }
 }
 
-/** Будильники напоминаний и пар, кнопка «Готово» в уведомлении. */
+/** Обновляет живое уведомление о паре. */
 class AlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val pending = goAsync()
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val uid = intent.getStringExtra(Alarms.EXTRA_UID)
                 when (intent.action) {
-                    Alarms.ACTION_PERSONAL -> if (uid != null) runCatching { Alarms.onPersonal(context, uid) }
-                    Alarms.ACTION_DONE -> if (uid != null) runCatching { Alarms.markDone(context, uid) }
                     Alarms.ACTION_LESSON -> runCatching { Alarms.onLesson(context) }
-                    HomeworkReminder.ACTION -> runCatching { HomeworkReminder.onFire(context) }
                     LiveNotifications.ACTION_LIVE -> runCatching { LiveNotifications.updateLesson(context) }
                     LessonQuiet.ACTION -> runCatching { LessonQuiet.update(context) }
                 }

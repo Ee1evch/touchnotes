@@ -1,6 +1,7 @@
 package app.nastavnik.ui
 
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -42,7 +43,6 @@ import app.nastavnik.home.HomeLayout.Item
 import app.nastavnik.home.HomeLayout.Size
 import app.nastavnik.schedule.Lesson
 import app.nastavnik.schedule.ScheduleNow
-import app.nastavnik.study.Streaks
 import kotlinx.coroutines.delay
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -51,14 +51,10 @@ import java.time.LocalDateTime
 private data class Widget(val id: String, val title: String, val icon: Int, val sizes: List<Size>, val tabletOnly: Boolean = false)
 
 private val WIDGETS = listOf(
-    Widget("evening", "Вечерняя учёба", R.drawable.ic_cards, listOf(Size.M, Size.L)),
-    Widget("siren", "Задача дня", R.drawable.ic_target, listOf(Size.S, Size.M, Size.L)),
     Widget("day", "Пары", R.drawable.ic_calendar, listOf(Size.S, Size.M, Size.L)),
     Widget("plan", "План на день", R.drawable.ic_sparkle, listOf(Size.M, Size.L)),
     Widget("cards", "Карточки", R.drawable.ic_cards, listOf(Size.S, Size.M, Size.L)),
-    Widget("streak", "Серия", R.drawable.ic_flame, listOf(Size.S, Size.M, Size.L)),
-    Widget("alarm", "Будильник", R.drawable.ic_bell, listOf(Size.S, Size.M, Size.L)),
-    Widget("reminders", "Напоминания", R.drawable.ic_bell, listOf(Size.S, Size.M, Size.L)),
+    Widget("exam", "Экзамен", R.drawable.ic_target, listOf(Size.S, Size.M, Size.L)),
     Widget("grades", "Успеваемость", R.drawable.ic_chart, listOf(Size.S, Size.M, Size.L)),
     Widget("notebooks", "Тетради", R.drawable.ic_notebook, listOf(Size.M, Size.L), tabletOnly = true),
     Widget("mentor", "Наставник", R.drawable.ic_sparkle, listOf(Size.M, Size.L), tabletOnly = true),
@@ -66,13 +62,12 @@ private val WIDGETS = listOf(
 )
 
 private fun defaults(tablet: Boolean) = if (tablet) listOf(
-    Item("evening", Size.L), Item("siren", Size.L), Item("day", Size.M), Item("plan", Size.M),
-    Item("cards", Size.S), Item("streak", Size.S), Item("alarm", Size.S), Item("reminders", Size.S),
+    Item("cards", Size.S), Item("exam", Size.S),
     Item("notebooks", Size.L), Item("mentor", Size.M), Item("sections", Size.M),
 ) else listOf(
-    Item("evening", Size.L), Item("siren", Size.L), Item("day", Size.L), Item("plan", Size.L),
-    Item("cards", Size.S), Item("streak", Size.S), Item("alarm", Size.S),
-    Item("reminders", Size.L), Item("grades", Size.L),
+    Item("day", Size.L),
+    Item("cards", Size.S), Item("exam", Size.S),
+    Item("grades", Size.L),
 )
 
 /**
@@ -93,7 +88,10 @@ fun HomeBoard(
     val app = context.app
     val catalog = remember(tablet) { WIDGETS.filter { tablet || !it.tabletOnly } }
     val known = remember(catalog) { catalog.map { it.id }.toSet() }
-    var items by remember(tablet) { mutableStateOf(HomeLayout.decode(app.settings.homeLayout(tablet), known, defaults(tablet))) }
+    val rawLayout = app.settings.homeLayout(tablet).let {
+        if (!tablet && (it == "cards:S,exam:S,grades:L" || it.isNullOrBlank())) null else it
+    }
+    var items by remember(tablet) { mutableStateOf(HomeLayout.decode(rawLayout, known, defaults(tablet))) }
     fun save(next: List<Item>) {
         items = next
         app.settings.setHomeLayout(tablet, if (next.isEmpty()) "-" else HomeLayout.encode(next))
@@ -106,21 +104,13 @@ fun HomeBoard(
     val tomorrow by produceState<List<Lesson>>(emptyList(), version, resumeTick) { value = app.schedule.day(LocalDate.now().plusDays(1)) }
     val nowMs = remember(resumeTick) { System.currentTimeMillis() }
     val due by remember(nowMs) { app.db.cards().observeDueCount(nowMs) }.collectAsStateWithLifecycle(initialValue = 0)
-    val events by remember { app.db.activity().observeAll() }.collectAsStateWithLifecycle(initialValue = emptyList())
-    val reminders by remember { app.db.reminders().observeAll() }.collectAsStateWithLifecycle(initialValue = emptyList())
     val hasGroup = app.settings.scheduleGroup().isNotBlank()
     val exam = remember(resumeTick) { app.study.nextExam() }
-    val today = Streaks.day(nowMs)
-    val perDay = remember(events) { events.groupingBy { Streaks.day(it.at) }.eachCount() }
-    val streak = remember(perDay, today) { Streaks.current(perDay.keys, today) }
-    val week = remember(perDay, today) { Streaks.lastDays(perDay, today, 7) }
 
     @Composable
     fun content(item: Item, m: Modifier) {
         val small = item.size == Size.S
         when (item.id) {
-            "evening" -> Box(m) { EveningCard(resumeTick, go) }
-            "siren" -> Box(m) { SirenCard(resumeTick) }
             "day" -> if (small) {
                 val st = remember(lessons, now) { ScheduleNow.at(lessons.orEmpty(), now) }
                 val l = st.current ?: st.next
@@ -128,12 +118,7 @@ fun HomeBoard(
             } else Box(m) { DayCard(lessons, tomorrow, now, hasGroup, onSchedule = onSchedule) }
             "plan" -> Box(m) { PlanCard(resumeTick) }
             "cards" -> CardsTile(m, due, go)
-            "streak" -> StreakTile(m, streak, week, go)
-            "alarm" -> AlarmTile(m, exam, resumeTick, promoteAlarm = !tablet, go = go)
-            "reminders" -> if (small) {
-                val open = reminders.count { !it.done }
-                HomeTile(m, R.drawable.ic_bell, open.toString(), "напоминаний", false, { go(MainActivity.SCREEN_REMINDERS) })
-            } else Box(m) { RemindersCard(go) }
+            "exam" -> ExamTile(m, exam, go)
             "grades" -> if (small) {
                 HomeTile(m, R.drawable.ic_chart, "Оценки", "успеваемость", false, { go(MainActivity.SCREEN_GRADES) })
             } else Box(m) { GradesCard(onOpen = { go(MainActivity.SCREEN_GRADES) }) }
@@ -143,7 +128,7 @@ fun HomeBoard(
     }
 
     val columns = HomeLayout.columns(tablet)
-    Column(Modifier.fillMaxWidth().animateContentSize(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+    Column(Modifier.fillMaxWidth().animateContentSize(spring(dampingRatio = 0.8f, stiffness = 450f)), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         // Правка — панель сверху, чтобы сразу было видно, что делать.
         if (editing) AddPanel(
             hidden = catalog.filter { w -> items.none { it.id == w.id } },

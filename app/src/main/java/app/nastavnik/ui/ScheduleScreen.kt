@@ -18,7 +18,9 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.material3.ripple
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -148,7 +150,7 @@ fun ScheduleScreen(onBack: (() -> Unit)?) {
             RoundIconButton(R.drawable.ic_tune, "Сменить группу") { picking = true }
         }
 
-        WeekStrip(day, week.orEmpty(), onPick = { day = it }, onShift = { day = day.plusWeeks(it.toLong()) })
+        WeekStrip(day, week.orEmpty(), onPick = { day = it }, onShift = { shift -> day = ScheduleText.monday(day).plusWeeks(shift.toLong()) })
 
         AnimatedVisibility(error != null) {
             StatusLine(error.orEmpty(), Tone.ERROR)
@@ -158,8 +160,8 @@ fun ScheduleScreen(onBack: (() -> Unit)?) {
             targetState = day,
             transitionSpec = {
                 val dir = if (targetState.isAfter(initialState)) 1 else -1
-                (slideInHorizontally(Motion.enter(340)) { it / 12 * dir } + fadeIn(Motion.enter(260)))
-                    .togetherWith(slideOutHorizontally(Motion.exit(160)) { -it / 16 * dir } + fadeOut(Motion.exit(120)))
+                (fadeIn(tween(240, easing = Motion.Decelerate)) + slideInHorizontally(tween(280, easing = Motion.Emphasized)) { (it * 0.18f * dir).toInt() })
+                    .togetherWith(fadeOut(tween(160, easing = Motion.Accelerate)) + slideOutHorizontally(tween(280, easing = Motion.Emphasized)) { (-it * 0.18f * dir).toInt() })
             },
             label = "day",
             modifier = Modifier.pointerInput(Unit) {
@@ -191,7 +193,7 @@ fun ScheduleScreen(onBack: (() -> Unit)?) {
         }
         Spacer(Modifier.height(8.dp))
         Text(
-            "Расписание — с сайта schedule.siriusuniversity.ru (на основе Lecturial 2). Неофициально; сверяйся с сайтом при сомнениях.",
+            "Расписание загружается с сайта Университета «Сириус». Приложение неофициальное.",
             style = MaterialTheme.typography.bodySmall, color = Brand.InkSoft,
         )
     }
@@ -230,8 +232,10 @@ private fun WeekStrip(day: LocalDate, lessons: List<Lesson>, onPick: (LocalDate)
                 val d = monday.plusDays(i.toLong())
                 val sel = d == day
                 val bg by androidx.compose.animation.animateColorAsState(if (sel) Brand.Accent else Brand.Glass, Motion.enter(220), label = "dayBg")
+                val scale by animateFloatAsState(if (sel) 1.05f else 1f, spring(dampingRatio = 0.65f, stiffness = 600f), label = "dayScale")
+                val src = remember(d) { MutableInteractionSource() }
                 Column(
-                    Modifier.weight(1f).clip(RoundedCornerShape(16.dp)).background(bg).clickable { onPick(d) }.padding(vertical = 8.dp),
+                    Modifier.weight(1f).graphicsLayer { scaleX = scale; scaleY = scale }.pressable(src).clip(RoundedCornerShape(16.dp)).background(bg).clickable(src, indication = ripple()) { onPick(d) }.padding(vertical = 8.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     val fg = if (sel) Brand.OnAccent else MaterialTheme.colorScheme.onSurface
@@ -292,7 +296,13 @@ fun LessonCard(l: Lesson, now: LocalDateTime, index: Int = 0, compact: Boolean =
     Column(
         Modifier
             .fillMaxWidth()
-            .graphicsLayer { alpha = appear; translationY = (1 - appear) * 10.dp.toPx() }
+            .graphicsLayer {
+                alpha = appear
+                translationY = (1 - appear) * 10.dp.toPx()
+                val s = 0.97f + 0.03f * appear
+                scaleX = s
+                scaleY = s
+            }
             .glass(RoundedCornerShape(24.dp))
             .padding(16.dp),
     ) {

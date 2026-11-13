@@ -69,9 +69,8 @@ class NotebookPages(private val dir: File?) {
     /** Где в «пролистывании» окажется кадр, совпавший со страницей [index] со сдвигом [dy]. */
     fun positionOf(index: Int, dy: Int): Pair<Long, Int> = list[index].let { it.chain to it.pos - dy }
 
-    /** Добавить страницу; если конспект полон — забываем самую старую по времени съёмки. */
+    /** Добавить страницу в запомненный конспект. */
     fun add(image: ByteArray, small: ByteArray, thumb: Thumb, chain: Long, pos: Int, at: Long): NotebookPage {
-        while (list.size >= MAX_PAGES) remove(list.minBy { it.at })
         val page = NotebookPage(nextId++, image, small, thumb, chain, pos, at)
         list += page
         save(page)
@@ -82,15 +81,15 @@ class NotebookPages(private val dir: File?) {
     fun replace(index: Int, image: ByteArray, small: ByteArray, thumb: Thumb, at: Long): NotebookPage {
         val old = list[index]
         remove(old)
-        val page = NotebookPage(nextId++, image, small, thumb, old.chain, old.pos, at)
+        val page = NotebookPage(old.id, image, small, thumb, old.chain, old.pos, at)
         list.add(index.coerceAtMost(list.size), page)
         save(page)
         return page
     }
 
     /** Снимки для вопроса наставнику: страницы по порядку конспекта, кроме той, что сейчас на экране. */
-    fun context(exclude: Long?, limit: Int): List<ByteArray> {
-        val ordered = pages.filter { it.id != exclude }
+    fun context(exclude: Long?, limit: Int, selected: Set<Long>? = null): List<ByteArray> {
+        val ordered = pages.filter { it.id != exclude && (selected == null || it.id in selected) }
         // Не влезают все — берём ближайшие по порядку к текущей странице.
         val cur = list.firstOrNull { it.id == exclude }
         val chosen = if (ordered.size <= limit || cur == null) {
@@ -162,9 +161,6 @@ class NotebookPages(private val dir: File?) {
     }
 
     companion object {
-        /** Сколько страниц помнить. */
-        const val MAX_PAGES = 16
-
         /** Сдвиг меньше этой доли высоты — та же страница. */
         const val SAME_SHIFT = 0.12f
 

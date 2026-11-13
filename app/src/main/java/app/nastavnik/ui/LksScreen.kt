@@ -39,6 +39,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.FileProvider
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
+import app.nastavnik.BuildConfig
 import app.nastavnik.R
 import app.nastavnik.app
 import app.nastavnik.grades.LksExtract
@@ -50,12 +51,12 @@ import kotlinx.serialization.json.jsonPrimitive
 const val LKS_URL = "https://lks.siriusuniversity.ru"
 
 /**
- * Встроенное окно ЛКС. Сайт пускает только с российских адресов, поэтому работает именно с телефона:
- * сам входит по логину и паролю из настроек, запоминает куки, по просьбе снимает таблицы со страницы.
+ * Встроенное окно ЛКС. Сайт пускает только с российских адресов, поэтому работает именно с телефона.
+ * Укреплённая песочница: без доступа к локальным файлам/контенту, защита от tapjacking (filterTouchesWhenObscured),
+ * внешняя навигация открывается в браузере, а данные сессии зачищаются сразу после извлечения cookie.
  */
-class LksWeb(private val context: android.content.Context, private val autoLogin: Boolean = false, private val onCapture: (String, String) -> Unit) {
+class LksWeb(private val context: android.content.Context, private val onCapture: (String, String) -> Unit) {
     var onPage: ((String) -> Unit)? = null
-    private var loginTries = 0
 
     @SuppressLint("SetJavaScriptEnabled")
     val view: WebView = WebView(context).apply {
@@ -63,6 +64,9 @@ class LksWeb(private val context: android.content.Context, private val autoLogin
         settings.domStorageEnabled = true
         settings.loadWithOverviewMode = true
         settings.useWideViewPort = true
+        settings.allowFileAccess = false
+        settings.allowContentAccess = false
+        filterTouchesWhenObscured = true
         CookieManager.getInstance().setAcceptCookie(true)
         CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
         addJavascriptInterface(object {
@@ -73,24 +77,63 @@ class LksWeb(private val context: android.content.Context, private val autoLogin
             runCatching { WebViewCompat.addDocumentStartJavaScript(this, LksExtract.CAPTURE_JS, setOf(LKS_URL)) }
         }
         webViewClient = object : WebViewClient() {
+            override fun shouldOverrideUrlLoading(view: WebView, request: android.webkit.WebResourceRequest): Boolean {
+                return handleNavigation(request.url.toString())
+            }
+
+            @Deprecated("Deprecated in Java")
+            override fun shouldOverrideUrlLoading(view: WebView, url: String): Boolean {
+                return handleNavigation(url)
+            }
+
+            private fun handleNavigation(url: String): Boolean {
+                val uri = android.net.Uri.parse(url)
+                val host = uri.host?.lowercase().orEmpty()
+                val isAllowed = (uri.scheme.equals("https", ignoreCase = true) || uri.scheme.equals("http", ignoreCase = true)) &&
+                    (host == "lks.siriusuniversity.ru" || host.endsWith(".siriusuniversity.ru") ||
+                     host.endsWith(".yandexcloud.net") || host.endsWith(".yandex.ru") || host.endsWith(".yandex.net"))
+                if (!isAllowed) {
+                    runCatching {
+                        val intent = Intent(Intent.ACTION_VIEW, uri).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        context.startActivity(intent)
+                    }
+                    return true
+                }
+                return false
+            }
+
             override fun onPageStarted(view: WebView, url: String?, favicon: android.graphics.Bitmap?) {
                 if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) view.evaluateJavascript(LksExtract.CAPTURE_JS, null)
+                url?.let { onPage?.invoke(it) }
+            }
+
+            override fun doUpdateVisitedHistory(view: WebView, url: String, isReload: Boolean) {
+                super.doUpdateVisitedHistory(view, url, isReload)
+                CookieManager.getInstance().flush()
+                onPage?.invoke(url)
             }
 
             override fun onPageFinished(view: WebView, url: String) {
                 CookieManager.getInstance().flush()
-                val app = context.app
-                if (autoLogin && url.contains("/login") && app.settings.lksPassword().isNotEmpty() && loginTries < 2) {
-                    loginTries++
-                    view.postDelayed({ view.evaluateJavascript(LksExtract.loginJs(app.settings.lksLogin(), app.settings.lksPassword()), null) }, 700)
-                    return
-                }
                 onPage?.invoke(url)
             }
         }
     }
 
-    fun load(url: String) { loginTries = 0; view.loadUrl(url) }
+    fun wipeData() {
+        runCatching {
+            CookieManager.getInstance().removeAllCookies(null)
+            CookieManager.getInstance().flush()
+            view.clearCache(true)
+            view.clearFormData()
+            view.clearHistory()
+            android.webkit.WebStorage.getInstance().deleteAllData()
+        }
+    }
+
+    fun load(url: String) { view.loadUrl(url) }
 
     /** Таблицы со страницы как JSON (или null). */
     fun extract(done: (String?) -> Unit) {
@@ -109,29 +152,54 @@ class LksWeb(private val context: android.content.Context, private val autoLogin
 fun LksScreen(onBack: () -> Unit, onDone: () -> Unit) {
     val context = LocalContext.current
     val app = context.app
+    val activity = context as? android.app.Activity
     val scope = rememberCoroutineScope()
     var status by remember { mutableStateOf("Войди как обычно: почта, пароль и «я не робот». Это нужно один раз.") }
     var done by remember { mutableStateOf(false) }
-    val web = remember { LksWeb(context, autoLogin = false) { _, _ -> } }
+    val web = remember { LksWeb(context) { _, _ -> } }
+
+    DisposableEffect(activity) {
+        val isRelease = !BuildConfig.DEBUG
+        if (isRelease && activity != null) {
+            activity.window.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
+        }
+        onDispose {
+            if (isRelease && activity != null) {
+                activity.window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
+            }
+        }
+    }
+
     DisposableEffect(Unit) {
-        web.onPage = { url ->
+        fun tryCaptureCookies(url: String) {
+            if (done) return
             val path = runCatching { java.net.URI(url).path.orEmpty() }.getOrDefault("")
-            if (path.startsWith("/login") || path.isEmpty()) {
+            if (path.startsWith("/login")) {
                 // «Запомнить меня» — чтобы сессия жила долго и входить приходилось редко.
                 web.view.evaluateJavascript("(function(){var r=document.querySelector(\"input[name='remember']\");if(r&&!r.checked){r.click();}})()", null)
-            } else if (!done && url.startsWith(LKS_URL)) {
-                done = true
+                return
+            }
+            if (url.startsWith(LKS_URL)) {
                 CookieManager.getInstance().flush()
                 val cookies = CookieManager.getInstance().getCookie(LKS_URL).orEmpty()
-                status = "Вошёл. Забираю оценки…"
-                scope.launch {
-                    app.grades.connectLksSession(cookies)
-                    onDone()
+                if (cookies.isNotBlank()) {
+                    done = true
+                    status = "Вошёл. Забираю оценки…"
+                    scope.launch {
+                        app.grades.connectLksSession(cookies)
+                        web.wipeData()
+                        onDone()
+                    }
                 }
             }
         }
+
+        web.onPage = { url -> tryCaptureCookies(url) }
         web.load("$LKS_URL/login")
-        onDispose { web.view.destroy() }
+        onDispose {
+            web.wipeData()
+            web.view.destroy()
+        }
     }
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
         Row(

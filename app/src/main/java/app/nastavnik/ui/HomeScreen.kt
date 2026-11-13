@@ -147,7 +147,7 @@ fun HomeScreen(resumeTick: Int, go: (String) -> Unit, openNotebook: (Long) -> Un
 
 /** Короткая плашка «нужно внимание» в одну строку. */
 @Composable
-private fun Banner(text: String, action: String, onAction: () -> Unit) {
+internal fun Banner(text: String, action: String, onAction: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()

@@ -35,6 +35,7 @@ import app.nastavnik.ai.Pricing
 import app.nastavnik.ai.UsageLog
 import app.nastavnik.app
 import app.nastavnik.data.Backup
+import app.nastavnik.data.TrustResult
 import app.nastavnik.data.UpdateInfo
 import app.nastavnik.data.Updater
 import app.nastavnik.study.Streaks
@@ -86,6 +87,31 @@ fun UsageSection(model: String) {
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+    }
+}
+
+/** Точность координат рамки и статистика промахов для оценки качества промтов. */
+@Composable
+fun CoordAccuracySection() {
+    val context = LocalContext.current
+    val statsRepo = context.app.coordStats
+    var summary by remember { mutableStateOf(statsRepo.summary()) }
+    SectionCard("Верификация координат") {
+        FieldLabel(
+            "Точность рамок: ${"%.1f".format(Locale.US, summary.hitPercent)}%",
+            "LineMap верифицирует координаты по сегментам чернил: при промахе подсвечивается строка целиком.",
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Stat("Проверок", summary.total.toString(), "всего рамок", Modifier.weight(1f))
+            Stat("В чернила", summary.hits.toString(), "точное попадание", Modifier.weight(1f))
+            Stat("Промахов", summary.totalMisses.toString(), "${summary.misses} авто + ${summary.userMisses} «не здесь»", Modifier.weight(1f))
+        }
+        if (summary.total > 0 || summary.userMisses > 0) {
+            SoftButton("Сбросить статистику", icon = R.drawable.ic_refresh) {
+                statsRepo.reset()
+                summary = statsRepo.summary()
+            }
+        }
     }
 }
 
@@ -187,9 +213,19 @@ fun UpdateSection() {
                 }
                 progress = 0f
                 scope.launch {
-                    runCatching { updater.download(f) { progress = it } }
-                        .onSuccess { updater.install(it); status = null }
-                        .onFailure { status = "Не удалось скачать: ${it.message}" to Tone.ERROR }
+                    runCatching {
+                        val apk = updater.download(f) { progress = it }
+                        val trust = updater.verify(apk, f.sha256)
+                        when (trust) {
+                            is TrustResult.Valid -> {
+                                updater.install(apk)
+                                status = null
+                            }
+                            is TrustResult.Rejected -> {
+                                status = trust.reason to Tone.ERROR
+                            }
+                        }
+                    }.onFailure { status = "Не удалось скачать: ${it.message}" to Tone.ERROR }
                     progress = -1f
                 }
             }

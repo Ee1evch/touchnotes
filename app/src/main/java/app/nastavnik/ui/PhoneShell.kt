@@ -15,6 +15,8 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -37,7 +39,9 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.mutableStateOf
@@ -60,7 +64,6 @@ import app.nastavnik.R
 import app.nastavnik.app
 import app.nastavnik.schedule.Lesson
 import app.nastavnik.schedule.ScheduleNow
-import app.nastavnik.study.Streaks
 import app.nastavnik.study.ruPlural
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -88,10 +91,10 @@ fun PhoneShell(tab: PhoneTab, onTab: (PhoneTab) -> Unit, resumeTick: Int, go: (S
         AnimatedContent(
             targetState = tab,
             transitionSpec = {
-                // Вкладки — мягкий сдвиг в сторону перехода с пружинкой и проявление.
+                // Вкладки — плавный сдвиг и мягкое проявление без скачков и пауз.
                 val dir = if (targetState.ordinal > initialState.ordinal) 1 else -1
-                (fadeIn(tween(240, delayMillis = 30)) + slideInHorizontally(spring(dampingRatio = 0.86f, stiffness = 420f)) { it / 12 * dir })
-                    .togetherWith(fadeOut(tween(140)) + slideOutHorizontally(tween(200)) { -it / 18 * dir })
+                (fadeIn(tween(260, easing = Motion.Decelerate)) + slideInHorizontally(tween(300, easing = Motion.Emphasized)) { (it * 0.18f * dir).toInt() })
+                    .togetherWith(fadeOut(tween(180, easing = Motion.Accelerate)) + slideOutHorizontally(tween(300, easing = Motion.Emphasized)) { (-it * 0.18f * dir).toInt() })
             },
             label = "tab",
             modifier = Modifier.fillMaxSize().navigationBarsPadding().padding(bottom = 80.dp),
@@ -125,17 +128,21 @@ private fun TabBar(tab: PhoneTab, onTab: (PhoneTab) -> Unit, modifier: Modifier)
 fun TabRowBar(items: List<Triple<String, Int, Boolean>>, onClick: (Int) -> Unit, modifier: Modifier) {
     Row(modifier.fillMaxWidth().background(Brand.Glass).navigationBarsPadding().height(80.dp)) {
         items.forEachIndexed { i, (title, icon, sel) ->
-            val fg by animateColorAsState(if (sel) Brand.Accent else Brand.InkSoft, tween(220), label = "tabColor")
-            val pill by animateColorAsState(if (sel) Brand.Accent.copy(alpha = 0.14f) else Color.Transparent, tween(220), label = "tabPill")
+            val fg by animateColorAsState(if (sel) Brand.Accent else Brand.InkSoft, tween(240, easing = Motion.Emphasized), label = "tabColor")
+            val pill by animateColorAsState(if (sel) Brand.Accent.copy(alpha = 0.14f) else Color.Transparent, tween(240, easing = Motion.Emphasized), label = "tabPill")
+            val iconScale by animateFloatAsState(if (sel) 1.08f else 1f, spring(dampingRatio = 0.88f, stiffness = 500f), label = "tabIconScale")
+            val pillWidth by animateDpAsState(if (sel) 56.dp else 44.dp, spring(dampingRatio = 0.88f, stiffness = 450f), label = "pillWidth")
+            val source = remember { MutableInteractionSource() }
             Column(
                 Modifier.weight(1f).fillMaxHeight()
-                    .clickable(remember { MutableInteractionSource() }, indication = null) { onClick(i) }
+                    .pressable(source)
+                    .clickable(source, indication = null) { onClick(i) }
                     .semantics { contentDescription = title; selected = sel },
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
             ) {
-                Box(Modifier.size(width = 56.dp, height = 30.dp).clip(RoundedCornerShape(15.dp)).background(pill), contentAlignment = Alignment.Center) {
-                    Icon(painterResource(icon), contentDescription = null, tint = fg, modifier = Modifier.size(22.dp))
+                Box(Modifier.size(width = pillWidth, height = 30.dp).clip(RoundedCornerShape(15.dp)).background(pill), contentAlignment = Alignment.Center) {
+                    Icon(painterResource(icon), contentDescription = null, tint = fg, modifier = Modifier.size(22.dp).graphicsLayer { scaleX = iconScale; scaleY = iconScale })
                 }
                 Text(title, style = MaterialTheme.typography.labelMedium, color = fg, maxLines = 1, modifier = Modifier.padding(top = 4.dp))
             }
@@ -153,6 +160,11 @@ private fun TodayTab(resumeTick: Int, go: (String) -> Unit, onTab: (PhoneTab) ->
     val lessons by produceState<List<Lesson>?>(null, version, resumeTick, now.toLocalDate()) { value = app.schedule.day(LocalDate.now()) }
     val sync by app.sync.status.collectAsStateWithLifecycle()
     val hasGroup = app.settings.scheduleGroup().isNotBlank()
+    val nowMs = remember(resumeTick) { System.currentTimeMillis() }
+    val dueCards by remember(nowMs) { app.db.cards().observeDueCount(nowMs) }.collectAsStateWithLifecycle(initialValue = 0)
+    val journal by app.grades.journal.collectAsStateWithLifecycle()
+    LaunchedEffect(Unit) { app.grades.refreshLks() }
+    val avgGrade = journal?.averageMark
     var editing by remember { mutableStateOf(false) }
 
     ScreenScaffold(title = "", onBack = null) {
@@ -161,6 +173,14 @@ private fun TodayTab(resumeTick: Int, go: (String) -> Unit, onTab: (PhoneTab) ->
             if (app.sync.configured) SyncDot(sync.running, sync.ok) { app.sync.soon(0) }
             RoundIconButton(R.drawable.ic_tune, "Настройки") { go(MainActivity.SCREEN_SETTINGS) }
         }
+        QuickActionsStrip(
+            onSchedule = { onTab(PhoneTab.SCHEDULE) },
+            onGrades = { onTab(PhoneTab.GRADES) },
+            onReview = { go(MainActivity.SCREEN_REVIEW) },
+            onNotebooks = { go(MainActivity.SCREEN_NOTEBOOKS) },
+            dueCards = dueCards,
+            avgGrade = avgGrade,
+        )
         HomeBoard(
             tablet = false,
             editing = editing,
@@ -168,6 +188,72 @@ private fun TodayTab(resumeTick: Int, go: (String) -> Unit, onTab: (PhoneTab) ->
             resumeTick = resumeTick,
             go = go,
             onSchedule = { onTab(PhoneTab.SCHEDULE) },
+        )
+    }
+}
+
+/** Быстрые действия на телефоне: расписание, средний балл, карточки и конспекты. */
+@Composable
+private fun QuickActionsStrip(
+    onSchedule: () -> Unit,
+    onGrades: () -> Unit,
+    onReview: () -> Unit,
+    onNotebooks: () -> Unit,
+    dueCards: Int,
+    avgGrade: Double?,
+) {
+    Row(
+        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        QuickChip(icon = R.drawable.ic_calendar, title = "Пары", onClick = onSchedule)
+        QuickChip(
+            icon = R.drawable.ic_chart,
+            title = if (avgGrade != null) "Балл %.2f".format(Locale.forLanguageTag("ru"), avgGrade) else "Оценки",
+            badgeColor = avgGrade?.let { markColor("%.1f".format(Locale.US, it)) },
+            onClick = onGrades,
+        )
+        QuickChip(
+            icon = R.drawable.ic_cards,
+            title = if (dueCards > 0) "Карточки ($dueCards)" else "Карточки",
+            accent = dueCards > 0,
+            onClick = onReview,
+        )
+        QuickChip(icon = R.drawable.ic_notebook, title = "Конспекты", onClick = onNotebooks)
+    }
+}
+
+@Composable
+private fun QuickChip(
+    icon: Int,
+    title: String,
+    badgeColor: Color? = null,
+    accent: Boolean = false,
+    onClick: () -> Unit,
+) {
+    val src = remember { MutableInteractionSource() }
+    Row(
+        Modifier
+            .pressable(src)
+            .clip(RoundedCornerShape(16.dp))
+            .glass(RoundedCornerShape(16.dp), 6.dp)
+            .clickable(src, indication = ripple(), onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 9.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(7.dp),
+    ) {
+        Icon(
+            painterResource(icon),
+            contentDescription = null,
+            tint = badgeColor ?: if (accent) Brand.Accent else Brand.Ink,
+            modifier = Modifier.size(16.dp),
+        )
+        Text(
+            title,
+            style = MaterialTheme.typography.labelLarge,
+            color = badgeColor ?: if (accent) Brand.Accent else MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
         )
     }
 }
@@ -216,10 +302,8 @@ private fun StudyTab(resumeTick: Int, go: (String) -> Unit) {
         // Сгруппированный список, как в настройках Android 16–17.
         Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             val rows = listOf(
-                Triple(R.drawable.ic_pen, "Домашка", "ДЗ до 100%: решаешь в тетради, наставник проверяет") to MainActivity.SCREEN_HOMEWORK,
                 Triple(R.drawable.ic_chart, "Успеваемость", "Оценки из личного кабинета") to MainActivity.SCREEN_GRADES,
-                Triple(R.drawable.ic_flame, "Прогресс", "Серия и темы с ошибками") to MainActivity.SCREEN_PROGRESS,
-                Triple(R.drawable.ic_bell, "Напоминания", "Дедлайны и дела на всех устройствах") to MainActivity.SCREEN_REMINDERS,
+                Triple(R.drawable.ic_chart, "Прогресс", "Активность и темы с ошибками") to MainActivity.SCREEN_PROGRESS,
                 Triple(R.drawable.ic_notebook, "Конспекты", "Тетради с планшета — посмотреть") to MainActivity.SCREEN_NOTEBOOKS,
                 Triple(R.drawable.ic_history, "Чистовики", "PDF аккуратных конспектов") to MainActivity.SCREEN_HISTORY,
             )

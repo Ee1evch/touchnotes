@@ -23,6 +23,18 @@ data class TextLine(
 /** Ссылка на место из ответа модели: строки, «под строкой» и/или рамка (в пикселях снимка без поля). */
 data class PlaceRef(val lines: IntRange? = null, val after: Int? = null, val box: IRect? = null)
 
+/** Результат верификации координат модели относительно сегментов чернил. */
+data class VerificationResult(
+    /** Результирующая рамка на снимке (null, если места нет или оно недопустимо велико). */
+    val rect: IRect?,
+    /** Передавала ли модель координаты рамки. */
+    val hasModelBox: Boolean,
+    /** Легла ли рамка модели на реальные сегменты чернил. */
+    val hitInk: Boolean,
+    /** Включена ли подсветка строки из-за промаха рамки мимо чернил. */
+    val lineFallback: Boolean = false,
+)
+
 /**
  * Строки записей, найденные на снимке. Приложение подписывает их номерами слева от снимка,
  * модель называет номер, а рамка ложится точно по чернилам — без угадывания координат.
@@ -46,30 +58,183 @@ class LineMap(
      * Где на снимке рисовать рамку. [hintLike] — подсказка следующего шага: если модель дала только рамку,
      * её не притягиваем к чернилам (подсказка указывает на пустое место).
      */
-    fun resolve(ref: PlaceRef, hintLike: Boolean = false): IRect? {
-        ref.lines?.let { range -> byLines(range, ref.box)?.let { return it } }
-        ref.after?.let { n -> line(n)?.let { return below(it) } }
-        val box = ref.box ?: return null
-        return if (hintLike) box.clampInto(IRect(0, 0, width, height)) else snap(box)
+    fun resolve(ref: PlaceRef, hintLike: Boolean = false): IRect? = resolveVerified(ref, hintLike).rect
+
+    /**
+     * Верификация рамки модели: проверяет, легла ли она на реальные сегменты чернил.
+     * Если рамка мимо чернил — включает подсветку строки ([lineFallback] = true, [hitInk] = false).
+     */
+    fun resolveVerified(ref: PlaceRef, hintLike: Boolean = false): VerificationResult {
+        val box = ref.box
+        val hasBox = box != null
+        if (ref.after != null) {
+            val l = line(ref.after) ?: return VerificationResult(null, hasBox, false)
+            return VerificationResult(localOnly(below(l), box), hasBox, true)
+        }
+        if (ref.lines != null) {
+            val ls = ref.lines.take(3).mapNotNull { line(it) }
+            if (ls.isEmpty()) return VerificationResult(null, hasBox, false)
+            val top = ls.minOf { it.top }
+            val bottom = ls.maxOf { it.bottom }
+            if (box != null) {
+                val slack = max(lineHeight / 2, box.width / 8)
+                val parts = ls.flatMap { it.segments }.filter { it.last >= box.left - slack && it.first <= box.right + slack }
+                if (parts.isNotEmpty()) {
+                    val left = parts.minOf { it.first }
+                    val right = parts.maxOf { it.last } + 1
+                    val r = localOnly(clampToPiece(left, top, right, bottom, box, pad), box)
+                    return VerificationResult(r, hasModelBox = true, hitInk = true, lineFallback = false)
+                } else {
+                    // Рамка модели не легла на чернила строк -> подсвечиваем строки целиком
+                    val allParts = ls.flatMap { it.segments }
+                    val left = if (allParts.isNotEmpty()) allParts.minOf { it.first } else ls.minOf { it.left }
+                    val right = if (allParts.isNotEmpty()) allParts.maxOf { it.last } + 1 else ls.maxOf { it.right }
+                    val r = localOnly(IRect(left - pad, top - pad, right + pad, bottom + pad).clampInto(IRect(0, 0, width, height)), box)
+                    return VerificationResult(r, hasModelBox = true, hitInk = false, lineFallback = true)
+                }
+            } else {
+                val allParts = ls.flatMap { it.segments }
+                val left = if (allParts.isNotEmpty()) allParts.minOf { it.first } else ls.minOf { it.left }
+                val right = if (allParts.isNotEmpty()) allParts.maxOf { it.last } + 1 else ls.maxOf { it.right }
+                val r = localOnly(IRect(left - pad, top - pad, right + pad, bottom + pad).clampInto(IRect(0, 0, width, height)), null)
+                return VerificationResult(r, hasModelBox = false, hitInk = true, lineFallback = false)
+            }
+        }
+        if (box != null) {
+            if (hintLike) {
+                val r = localOnly(box.clampInto(IRect(0, 0, width, height)), box)
+                return VerificationResult(r, hasModelBox = true, hitInk = true)
+            }
+            val hitAll = lines.filter { l ->
+                val overlap = min(l.bottom, box.bottom) - max(l.top, box.top)
+                overlap >= l.height * 0.3f || overlap >= box.height * 0.4f || (l.centerY in box.top..box.bottom)
+            }
+            if (hitAll.isEmpty()) {
+                val r = localOnly(box.clampInto(IRect(0, 0, width, height)), box)
+                return VerificationResult(r, hasModelBox = true, hitInk = false)
+            }
+            val hit = if (hitAll.size > 2) listOf(hitAll.minBy { abs(it.centerY - box.centerY) }) else hitAll
+            val slack = max(lineHeight / 2, box.width / 10)
+            val parts = hit.flatMap { it.segments }.filter { it.last >= box.left - slack && it.first <= box.right + slack }
+            if (parts.isEmpty()) {
+                val l = hit.first()
+                val r = localOnly(IRect(l.left - pad, l.top - pad, l.right + pad, l.bottom + pad).clampInto(IRect(0, 0, width, height)), box)
+                return VerificationResult(r, hasModelBox = true, hitInk = false, lineFallback = true)
+            }
+            val r = localOnly(clampToPiece(parts.minOf { it.first }, hit.minOf { it.top }, parts.maxOf { it.last } + 1, hit.maxOf { it.bottom }, box, pad), box)
+            return VerificationResult(r, hasModelBox = true, hitInk = true)
+        }
+        return VerificationResult(null, false, false)
+    }
+
+    /**
+     * Отметка — небольшое место (строка, формула, кусок рисунка), а не весь лист:
+     * не выше нескольких строк и не больше трети снимка по высоте.
+     */
+    fun isLocal(r: IRect): Boolean {
+        val maxH = min(max(lineHeight * 6, height / 8), (height * 0.35f).roundToInt())
+        val maxW = (width * 0.95f).roundToInt()
+        return r.width in 1..maxW && r.height in 1..maxH
+    }
+
+    /** Слишком большую рамку (весь экран, полстраницы) не рисуем: берём рамку модели, если она сама небольшая. */
+    private fun localOnly(r: IRect?, modelBox: IRect?): IRect? = when {
+        r == null -> null
+        isLocal(r) -> r
+        else -> modelBox?.clampInto(IRect(0, 0, width, height))?.takeIf(::isLocal)
+    }
+
+    /** Ошибка относится к одной строке. Широкую или двусмысленную рамку не рисуем. */
+    fun resolveError(ref: PlaceRef): IRect? = resolveErrorVerified(ref).rect
+
+    /**
+     * Верификация ошибки: если модель дала рамку, проверяем, легла ли она на чернила в строке.
+     * Если не легла — вместо искусственной обрезки включаем подсветку всей строки и отмечаем промах.
+     */
+    fun resolveErrorVerified(ref: PlaceRef): VerificationResult {
+        val box = ref.box
+        val hasBox = box != null
+        val candidates = ref.lines?.let { range -> lines.filter { it.number in range } } ?: lines
+        val target = when {
+            candidates.size == 1 && ref.lines != null -> candidates.first()
+            box == null -> return VerificationResult(null, false, false)
+            box.height > lineHeight * 2 -> return VerificationResult(null, true, false)
+            else -> candidates.filter { it.bottom > box.top && it.top < box.bottom }
+                .minByOrNull { abs(it.centerY - box.centerY) }
+        }
+        if (target == null) {
+            val r = box?.takeIf { it.width in 1..(width / 2) && it.height in 1..(lineHeight * 2) }
+                ?.clampInto(IRect(0, 0, width, height))
+            return VerificationResult(localOnly(r, box), hasModelBox = hasBox, hitInk = false)
+        }
+        val tightPad = max(2, (lineHeight * 0.1f).roundToInt())
+        if (box != null) {
+            val slack = max(4, lineHeight / 3)
+            val xParts = target.segments.filter { it.last >= box.left - slack && it.first <= box.right + slack }
+            if (xParts.isNotEmpty()) {
+                val rawLeft = xParts.minOf { it.first }
+                val rawRight = xParts.maxOf { it.last } + 1
+                val r = localOnly(clampToPiece(rawLeft, target.top, rawRight, target.bottom, box, tightPad), box)
+                return VerificationResult(r, hasModelBox = true, hitInk = true, lineFallback = false)
+            } else {
+                // Рамка модели не легла на чернила строки -> подсвечиваем строку целиком
+                val lineRect = localOnly(
+                    IRect(target.left - tightPad, target.top - tightPad, target.right + tightPad, target.bottom + tightPad)
+                        .clampInto(IRect(0, 0, width, height)),
+                    box,
+                )
+                return VerificationResult(lineRect, hasModelBox = true, hitInk = false, lineFallback = true)
+            }
+        } else {
+            val lineRect = localOnly(
+                IRect(target.left - tightPad, target.top - tightPad, target.right + tightPad, target.bottom + tightPad)
+                    .clampInto(IRect(0, 0, width, height)),
+                null,
+            )
+            return VerificationResult(lineRect, hasModelBox = false, hitInk = true, lineFallback = false)
+        }
     }
 
     private fun byLines(range: IntRange, box: IRect?): IRect? {
-        val ls = range.mapNotNull { line(it) }
+        // Отметка — это строка, а не блок: длинный диапазон от модели обрезаем до трёх строк.
+        val ls = range.take(3).mapNotNull { line(it) }
         if (ls.isEmpty()) return null
         val top = ls.minOf { it.top }
         val bottom = ls.maxOf { it.bottom }
-        var left = ls.minOf { it.left }
-        var right = ls.maxOf { it.right }
-        // Модель уточнила часть строки — берём только куски строк, которые попали в её рамку.
-        if (box != null) {
-            val slack = max(lineHeight, box.width / 6)
-            val parts = ls.flatMap { it.segments }.filter { it.last >= box.left - slack && it.first <= box.right + slack }
-            if (parts.isNotEmpty()) {
-                left = parts.minOf { it.first }
-                right = parts.maxOf { it.last } + 1
+        val slack = max(lineHeight / 2, (box?.width ?: 0) / 8)
+        var parts = if (box != null) {
+            ls.flatMap { it.segments }.filter { it.last >= box.left - slack && it.first <= box.right + slack }
+        } else emptyList()
+        if (parts.isEmpty()) {
+            parts = ls.flatMap { it.segments }
+        }
+        val left = parts.minOf { it.first }
+        val right = parts.maxOf { it.last } + 1
+        return clampToPiece(left, top, right, bottom, box, pad)
+    }
+
+    /**
+     * Если модель выделила конкретный кусок внутри длинной строки или высокого блока
+     * (например, одну формулу, слагаемое или слово), выделяем именно этот единый кусок,
+     * а не растягиваем выделение на всю строку или полстраницы.
+     */
+    private fun clampToPiece(left: Int, top: Int, right: Int, bottom: Int, box: IRect?, p: Int): IRect {
+        var l = left
+        var r = right
+        if (box != null && box.width > 0) {
+            val slack = max(lineHeight / 2, box.width / 8)
+            if (box.left - left > slack) {
+                l = box.left
+            }
+            if (right - box.right > slack) {
+                r = box.right
+            }
+            if (l >= r) {
+                l = left
+                r = right
             }
         }
-        return IRect(left - pad, top - pad, right + pad, bottom + pad).clampInto(IRect(0, 0, width, height))
+        return IRect(l - p, top - p, r + p, bottom + p).clampInto(IRect(0, 0, width, height))
     }
 
     /** Место под строкой: туда студент пишет следующий шаг. */
@@ -83,20 +248,24 @@ class LineMap(
 
     /** Рамка модели «на глаз» → по строкам, которые она задевает, и по чернилам внутри неё. */
     fun snap(box: IRect): IRect {
-        val hit = lines.filter { l ->
+        val hitAll = lines.filter { l ->
             val overlap = min(l.bottom, box.bottom) - max(l.top, box.top)
             overlap >= l.height * 0.3f || overlap >= box.height * 0.4f || (l.centerY in box.top..box.bottom)
         }
-        if (hit.isEmpty()) return box
+        if (hitAll.isEmpty()) return box.clampInto(IRect(0, 0, width, height))
+        // Одна отметка — одна строка: широкая рамка «на глаз» не должна захватывать полстраницы.
+        val hit = if (hitAll.size > 2) listOf(hitAll.minBy { abs(it.centerY - box.centerY) }) else hitAll
         val slack = max(lineHeight / 2, box.width / 10)
         val parts = hit.flatMap { it.segments }.filter { it.last >= box.left - slack && it.first <= box.right + slack }
-        if (parts.isEmpty()) return box
-        return IRect(
-            parts.minOf { it.first } - pad,
-            hit.minOf { it.top } - pad,
-            parts.maxOf { it.last } + 1 + pad,
-            hit.maxOf { it.bottom } + pad,
-        ).clampInto(IRect(0, 0, width, height))
+        if (parts.isEmpty()) return box.clampInto(IRect(0, 0, width, height))
+        return clampToPiece(
+            parts.minOf { it.first },
+            hit.minOf { it.top },
+            parts.maxOf { it.last } + 1,
+            hit.maxOf { it.bottom },
+            box,
+            pad,
+        )
     }
 
     companion object {
@@ -128,8 +297,8 @@ object InkLines {
         }
 
         // Полосы строк: подряд идущие строки пикселей с чернилами, маленькие разрывы склеиваем.
-        val minInk = max(2, w / 700)
-        val smallGap = max(2, h / 250)
+        val minInk = max(3, (w / 400).coerceAtLeast(2))
+        val smallGap = max(2, (h / 250).coerceAtLeast(2))
         val bands = mutableListOf<IntArray>() // [top, bottom)
         var y = 0
         while (y < h) {
@@ -150,16 +319,19 @@ object InkLines {
         if (bands.isEmpty()) return LineMap(emptyList(), w, h, bg)
 
         // Склеиваем индексы, степени, дробные черты и точки с соседней строкой.
+        // Ограничиваем предельную высоту склеенной строки, чтобы строки не объединялись в полстраницы.
         val mh = bands.map { it[1] - it[0] }.sorted()[bands.size / 2].coerceAtLeast(4)
+        val maxMergedH = max(mh * 2.2f, h * 0.10f).toInt()
         var merged = true
         while (merged && bands.size > 1) {
             merged = false
             for (i in 0 until bands.size - 1) {
                 val a = bands[i]
                 val b = bands[i + 1]
+                if (b[1] - a[0] > maxMergedH) continue
                 val gap = b[0] - a[1]
-                val small = min(a[1] - a[0], b[1] - b[0]) < mh * 0.45
-                if (gap < mh * 0.22 || (small && gap < mh * 0.6)) {
+                val small = min(a[1] - a[0], b[1] - b[0]) < mh * 0.5f
+                if (small && gap < mh * 0.6f) {
                     bands[i] = intArrayOf(a[0], b[1])
                     bands.removeAt(i + 1)
                     merged = true
@@ -169,7 +341,7 @@ object InkLines {
         }
 
         val lines = mutableListOf<TextLine>()
-        val split = max((mh * 2.5f).roundToInt(), w / 16)
+        val split = max((mh * 1.5f).roundToInt(), min(w / 20, 60))
         for (b in bands) {
             val cols = IntArray(w)
             for (yy in b[0] until b[1]) for (x in 0 until w) if (ink[yy * w + x]) cols[x]++

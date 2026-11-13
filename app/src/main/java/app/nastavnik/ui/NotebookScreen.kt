@@ -60,6 +60,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -146,8 +147,8 @@ fun NotebookScreen(notebookId: Long, onBack: () -> Unit, onCleanReady: () -> Uni
     val dark = Brand.dark
     val desk = Brand.Desk.toArgb()
     SideEffect { ctl.ink.setTheme(dark, desk) }
-    // Ответ пришёл, а панель скрыта — показываем её сами, чтобы подсказка не потерялась.
-    LaunchedEffect(state.answer?.seq) { if (state.answer != null && ctl.mentorOn) panel = true }
+    // Ответ на явный вопрос открывает панель; фоновая проверка не закрывает лист.
+    LaunchedEffect(state.answer?.seq) { if (state.answer != null && state.answer?.kind != app.nastavnik.session.AskKind.WATCH) panel = true }
 
     if (tips) EditorTips { tips = false; context.app.settings.setEditorTipsShown() }
     if (pagesOpen) PagesOverview(ctl, onAdd = { ctl.addPage(ctl.page?.paper ?: Paper.GRID) }) { pagesOpen = false }
@@ -189,8 +190,10 @@ fun NotebookScreen(notebookId: Long, onBack: () -> Unit, onCleanReady: () -> Uni
                                 .padding(horizontal = 14.dp, vertical = 8.dp),
                         )
                     }
+
                     // Страница задачи ДЗ — плашка с проверкой.
                     HomeworkBar(ctl, Modifier.align(Alignment.BottomCenter).padding(start = 72.dp, end = 16.dp, bottom = 56.dp))
+
                     // Инструменты — плашкой сбоку, цвета открываются по касанию.
                     EditorRail(ctl, maxHeight)
                     androidx.compose.animation.AnimatedVisibility(
@@ -201,9 +204,9 @@ fun NotebookScreen(notebookId: Long, onBack: () -> Unit, onCleanReady: () -> Uni
                 }
             }
             androidx.compose.animation.AnimatedVisibility(
-                visible = panel && wide && ctl.mentorOn,
-                enter = expandHorizontally(expandFrom = Alignment.Start, animationSpec = tween(360, easing = FastOutSlowInEasing)) + fadeIn(tween(280, delayMillis = 80)),
-                exit = shrinkHorizontally(shrinkTowards = Alignment.Start, animationSpec = tween(300, easing = FastOutSlowInEasing)) + fadeOut(tween(160)),
+                visible = panel && wide,
+                enter = expandHorizontally(expandFrom = Alignment.Start, animationSpec = spring(dampingRatio = 0.82f, stiffness = 420f)) + fadeIn(tween(240, delayMillis = 60)),
+                exit = shrinkHorizontally(shrinkTowards = Alignment.Start, animationSpec = spring(dampingRatio = 0.88f, stiffness = 480f)) + fadeOut(tween(160)),
             ) {
                 MentorPanel(
                     ctl, state.answer, onCleanReady = onCleanReady, onSettings = onSettings,
@@ -212,10 +215,10 @@ fun NotebookScreen(notebookId: Long, onBack: () -> Unit, onCleanReady: () -> Uni
             }
         }
         androidx.compose.animation.AnimatedVisibility(
-            visible = panel && !wide && ctl.mentorOn,
+            visible = panel && !wide,
             modifier = Modifier.align(Alignment.BottomCenter),
-            enter = slideInVertically(tween(340, easing = FastOutSlowInEasing)) { it } + fadeIn(),
-            exit = slideOutVertically(tween(280, easing = FastOutSlowInEasing)) { it } + fadeOut(),
+            enter = slideInVertically(spring(dampingRatio = 0.82f, stiffness = 420f)) { it } + fadeIn(),
+            exit = slideOutVertically(tween(240, easing = FastOutSlowInEasing)) { it } + fadeOut(),
         ) {
             MentorPanel(
                 ctl, state.answer, onCleanReady = onCleanReady, onSettings = onSettings,
@@ -315,16 +318,8 @@ private fun NotebookTopBar(
                 MenuItem("Страницы из PDF", R.drawable.ic_pdf) { addMenu = false; importers.pdf() }
             }
         }
-        // Тумблер наставника: выключен — ни панели, ни автопроверки, ни запросов к нейросети.
-        Row(
-            Modifier.glass(CircleShape, 4.dp, strong = true).padding(start = 12.dp, end = 6.dp, top = 2.dp, bottom = 2.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            Text("Наставник", style = MaterialTheme.typography.labelLarge)
-            AppSwitch(ctl.mentorOn) { ctl.setMentor(it); if (!it && panel) onTogglePanel() }
-        }
-        if (ctl.mentorOn) BarButton(R.drawable.ic_sparkle, if (panel) "Скрыть наставника" else "Показать наставника", active = panel, onClick = onTogglePanel)
+        val mentorAction = if (panel) "Скрыть наставника" else "Показать наставника"
+        BarButton(R.drawable.ic_sparkle, mentorAction, active = panel, onClick = onTogglePanel)
     }
     if (renaming && meta != null) {
         var text by remember { mutableStateOf(meta.title) }
@@ -521,6 +516,11 @@ private fun AnswerView(ctl: NotebookController, answer: AnswerUi, onBack: () -> 
             Icon(painterResource(R.drawable.ic_chevron_left), contentDescription = null, tint = Brand.Ink, modifier = Modifier.size(20.dp))
             Text("Вопросы", style = MaterialTheme.typography.labelLarge)
         }
+        if (answer.marks.any { it.box != null }) {
+            SoftButton(if (ctl.marksVisible) "Скрыть выделение" else "Показать выделение", icon = if (ctl.marksVisible) R.drawable.ic_eye_off else R.drawable.ic_eye) {
+                ctl.toggleMarks()
+            }
+        }
         Column(
             Modifier
                 .weight(1f)
@@ -537,7 +537,13 @@ private fun AnswerView(ctl: NotebookController, answer: AnswerUi, onBack: () -> 
                 else -> {
                     if (answer.streaming && answer.marks.isEmpty()) ThinkingRow(answer.seq, answer.status)
                     answer.marks.forEachIndexed { i, m ->
-                        NoteCard(i + 1, m, topic = ctl.meta?.title.orEmpty(), onLocate = { ctl.focusMark(i + 1) })
+                        NoteCard(
+                            i + 1,
+                            m,
+                            topic = ctl.meta?.title.orEmpty(),
+                            onLocate = { ctl.focusMark(i + 1) },
+                            onNotHere = { ctl.onMarkNotHere(i + 1) },
+                        )
                     }
                     if (answer.streaming && answer.marks.isNotEmpty()) ThinkingRow(answer.seq, "Дописываю…")
                 }
@@ -563,6 +569,7 @@ private fun AskView(
     var question by remember { mutableStateOf("") }
     var listening by remember { mutableStateOf(false) }
     var speechProblem by remember { mutableStateOf<String?>(null) }
+    var selectPages by remember { mutableStateOf(false) }
     val speech = remember {
         SpeechInput(context, object : SpeechInput.Callback {
             override fun onListening(active: Boolean) { listening = active }
@@ -630,6 +637,7 @@ private fun AskView(
                 }
             }
         }
+        SoftButton("Страницы для наставника", icon = R.drawable.ic_note) { selectPages = true }
         // Плитки вопросов: два столбца, понятные подписи.
         ASKS.chunked(2).forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -650,6 +658,33 @@ private fun AskView(
                 question = ""
             }
         }
+    }
+    if (selectPages) {
+        AlertDialog(
+            onDismissRequest = { selectPages = false },
+            title = { Text("Страницы для наставника") },
+            text = {
+                Column {
+                    Text("Текущая страница отправляется всегда.")
+                    Row {
+                        LinkText("Все", onClick = { ctl.selectAllContextPages() })
+                        Spacer(Modifier.width(24.dp))
+                        LinkText("Снять все", onClick = { ctl.selectNoContextPages() })
+                    }
+                    Column(Modifier.height(240.dp).verticalScroll(rememberScrollState())) {
+                        ctl.pages.forEachIndexed { i, p ->
+                            val current = i == ctl.index
+                            val checked = current || ctl.selectedContextPages?.contains(p.id) != false
+                            Row(Modifier.fillMaxWidth().clickable(enabled = !current) { ctl.selectContextPage(p.id, !checked) }, verticalAlignment = Alignment.CenterVertically) {
+                                Checkbox(checked = checked, enabled = !current, onCheckedChange = { ctl.selectContextPage(p.id, it) })
+                                Text("Страница ${i + 1}" + if (current) " · текущая" else "")
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = { LinkText("Готово", onClick = { selectPages = false }) },
+        )
     }
 }
 
@@ -735,11 +770,12 @@ private fun EmptyMentor() {
 
 /** Заметка наставника в панели: номер как на листе, вид, короткая подсказка и «Подробнее». */
 @Composable
-private fun NoteCard(number: Int, m: Mark, topic: String, onLocate: () -> Unit) {
+private fun NoteCard(number: Int, m: Mark, topic: String, onLocate: () -> Unit, onNotHere: (() -> Unit)? = null) {
     val context = LocalContext.current
     val speak: (String) -> Unit = context.app.speaker::speak
     val scope = rememberCoroutineScope()
     var expanded by rememberSaveable(number, m.text) { mutableStateOf(false) }
+    var notHereReported by rememberSaveable(number) { mutableStateOf(false) }
     // «В карточки»: null — не нажимали, иначе итог (добавлено или почему нет).
     var carded by remember(m.text) { mutableStateOf<String?>(null) }
     var carding by remember(m.text) { mutableStateOf(false) }
@@ -766,7 +802,26 @@ private fun NoteCard(number: Int, m: Mark, topic: String, onLocate: () -> Unit) 
             }
             Text(NoteColors.title(m.kind), style = MaterialTheme.typography.labelLarge, color = kindColor)
             Spacer(Modifier.weight(1f))
-            if (m.box != null) Text("показать ↗", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (m.box != null) {
+                if (notHereReported) {
+                    Text("✓ промах", style = MaterialTheme.typography.labelSmall, color = Brand.Ok)
+                } else if (onNotHere != null) {
+                    Text(
+                        "Не здесь",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Brand.Error,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Brand.ErrorSoft)
+                            .clickable {
+                                notHereReported = true
+                                onNotHere()
+                            }
+                            .padding(horizontal = 6.dp, vertical = 2.dp),
+                    )
+                }
+                Text("показать ↗", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
             Box(
                 Modifier
                     .size(32.dp)

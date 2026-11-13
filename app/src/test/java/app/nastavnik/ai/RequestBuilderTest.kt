@@ -131,4 +131,19 @@ class RequestBuilderTest {
         assertNull(normal["thinking"])
         assertEquals("medium", (normal["output_config"] as JsonObject)["effort"]!!.jsonPrimitive.content)
     }
+
+    @Test
+    fun promptCachingStructuresSystemPromptAndAddsBetaHeader() {
+        val req = request().copy(promptCache = true)
+        val body = RequestBuilder.build(req)
+        val sysArray = body["system"]!!.jsonArray
+        assertEquals(1, sysArray.size)
+        val sysObj = sysArray[0].jsonObject
+        assertEquals("text", sysObj["type"]!!.jsonPrimitive.content)
+        assertTrue(sysObj["text"]!!.jsonPrimitive.content.contains("Ты — наставник"))
+        assertEquals("ephemeral", (sysObj["cache_control"] as JsonObject)["type"]!!.jsonPrimitive.content)
+
+        val headers = RequestBuilder.headers("sk-test", req)
+        assertTrue(headers["anthropic-beta"]!!.contains(RequestBuilder.PROMPT_CACHE_BETA))
+    }
 }

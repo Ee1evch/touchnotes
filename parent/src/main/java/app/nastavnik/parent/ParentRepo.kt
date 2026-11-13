@@ -61,24 +61,37 @@ class ParentRepo private constructor(private val context: Context) {
         }
     }
 
-    val token: String get() = secure.getString("disk_token", "").orEmpty()
+    val vault: KeyStoreVault by lazy { KeyStoreVault(context) }
+
+    val token: String get() = (vault.getString("disk_token") ?: secure.getString("disk_token", "")).orEmpty()
+    val passphrase: String get() = (vault.getString("passphrase") ?: secure.getString("passphrase", "")).orEmpty()
     val recordBook: String get() = secure.getString("record_book", "").orEmpty()
     /** Группа вручную; пусто — как в «Наставнике» студента. */
     val groupOverride: String get() = secure.getString("group", "").orEmpty()
     /** Подключено: токен Диска (оценки, группа) и/или номер зачётки (посещаемость, группа). */
     val configured: Boolean get() = token.isNotBlank() || recordBook.isNotBlank()
 
-    fun save(token: String, recordBook: String, group: String) {
+    fun save(token: String, recordBook: String, group: String, passphrase: String = this.passphrase) {
         // Другая зачётка — отметки прежнего студента больше не нужны.
         if (recordBook.trim() != this.recordBook) {
             File(dir, "attendee.json").delete()
             File(dir, "attendance").deleteRecursively()
             _state.update { it.copy(attendee = null, attendance = emptyMap()) }
         }
-        secure.edit().putString("disk_token", token.trim()).putString("record_book", recordBook.trim()).putString("group", group.trim()).apply()
+        val cleanToken = token.trim()
+        val cleanPass = passphrase.trim()
+        vault.putString("disk_token", cleanToken)
+        vault.putString("passphrase", cleanPass)
+        secure.edit()
+            .putString("disk_token", cleanToken)
+            .putString("passphrase", cleanPass)
+            .putString("record_book", recordBook.trim())
+            .putString("group", group.trim())
+            .apply()
     }
 
     fun disconnect() {
+        vault.clear()
         secure.edit().clear().apply()
         dir.deleteRecursively()
         _state.value = State()
@@ -132,7 +145,7 @@ class ParentRepo private constructor(private val context: Context) {
         var student = _state.value.student
         if (token.isNotBlank()) try {
             student = withContext(Dispatchers.IO) {
-                val records = CloudReader(YandexDiskStore(token)).latest(ParentData.KEYS)
+                val records = CloudReader(YandexDiskStore(token), passphrase = { passphrase }).latest(ParentData.KEYS)
                 ParentData.student(records, System.currentTimeMillis()).also { write("student.json", json.encodeToString(Student.serializer(), it)) }
             }
             _state.update { it.copy(student = student) }

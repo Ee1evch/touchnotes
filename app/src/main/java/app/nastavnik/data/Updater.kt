@@ -31,7 +31,7 @@ class Updater(private val context: Context) {
         http.newCall(req).execute().use { resp ->
             if (resp.code == 404) return@withContext null
             if (!resp.isSuccessful) throw IOException("GitHub ответил ${resp.code}")
-            UpdateCheck.parse(resp.body?.string().orEmpty(), currentBuild, BuildConfig.APK_NAME)
+            UpdateCheck.parse(resp.body?.string().orEmpty(), currentBuild, BuildConfig.APK_NAME, versionName)
         }
     }
 
@@ -68,6 +68,11 @@ class Updater(private val context: Context) {
             Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${context.packageName}"))
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
         )
+    }
+
+    /** Проверка подписи, версии и контрольной суммы скачанного APK перед установкой. */
+    fun verify(apk: File, expectedSha256: String? = null): TrustResult {
+        return ApkTrust.verify(context, apk, expectedDigestSha256 = expectedSha256)
     }
 
     fun install(apk: File) {

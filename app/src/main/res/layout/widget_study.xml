@@ -31,12 +31,6 @@
             android:textSize="14sp"
             android:textStyle="bold" />
 
-        <TextView
-            android:id="@+id/widget_streak"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:textColor="#FF5E5D66"
-            android:textSize="12sp" />
     </LinearLayout>
 
     <TextView

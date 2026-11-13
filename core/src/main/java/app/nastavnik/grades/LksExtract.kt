@@ -111,24 +111,6 @@ object LksExtract {
 })()
 """
 
-    /** Вход: заполнить поля login/password (так, чтобы увидели React/Vue) и нажать «Войти». */
-    fun loginJs(login: String, password: String): String {
-        fun q(s: String) = kotlinx.serialization.json.JsonPrimitive(s).toString()
-        return """
-(function(){
-  var l=document.querySelector("input[name='login'],input[type='email'],input[name='email'],input[name='username']");
-  var p=document.querySelector("input[name='password'],input[type='password']");
-  if(!l||!p)return 'no-form';
-  function set(el,v){var d=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value');d.set.call(el,v);el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));}
-  set(l,${q(login)});set(p,${q(password)});
-  var b=document.querySelector("button[type='submit']")||Array.from(document.querySelectorAll('button')).find(function(x){return /войти/i.test(x.innerText);});
-  if(b){b.click();return 'submitted';}
-  var f=p.form; if(f){f.submit();return 'submitted';}
-  return 'no-button';
-})()
-"""
-    }
-
     /** Перехват ответов сайта (JSON) — для отчёта, по которому можно сделать точный разбор. */
     const val CAPTURE_JS = """
 (function(){

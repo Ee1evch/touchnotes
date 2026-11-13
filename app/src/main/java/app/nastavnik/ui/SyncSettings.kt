@@ -30,17 +30,13 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import app.nastavnik.R
 import app.nastavnik.app
 import app.nastavnik.schedule.Lesson
 import app.nastavnik.schedule.ScheduleText
 import app.nastavnik.study.Alarms
 import app.nastavnik.study.LessonQuiet
 import app.nastavnik.study.LiveNotifications
-import app.nastavnik.study.SleepPlan
-import app.nastavnik.study.StudyLock
-import app.nastavnik.study.WakeAlarm
-import app.nastavnik.study.WakePrefs
-import app.nastavnik.study.WakeGuard
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import app.nastavnik.sync.WebDavStore
 import app.nastavnik.sync.YandexDiskStore
@@ -66,14 +62,30 @@ fun SyncSection() {
     var password by remember { mutableStateOf("") }
     var checking by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    var passphrase by remember { mutableStateOf(app.settings.syncPassphrase()) }
+
+    var expanded by remember { mutableStateOf(false) }
 
     SectionCard("Синхронизация") {
         if (configured) {
+            val isLegacyYandex = app.settings.syncUrl() == WebDavStore.YANDEX || app.settings.syncUrl().contains("webdav.yandex.ru")
+            if (isLegacyYandex) {
+                Banner(
+                    text = "Используется полный доступ ко всему Яндекс Диску. Рекомендуется переподключить с доступом только к папке приложения.",
+                    action = "Переподключить",
+                    onAction = {
+                        app.sync.disconnect()
+                        configured = false
+                        yandex = true
+                        url = ""
+                    },
+                )
+            }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Column(Modifier.weight(1f)) {
                     Text(
                         when (app.settings.syncUrl()) {
-                            YandexDiskStore.MARKER -> "Яндекс Диск"
+                            YandexDiskStore.MARKER -> "Яндекс Диск (папка приложения)"
                             WebDavStore.YANDEX -> "Яндекс Диск по WebDAV · ${app.settings.syncLogin()}"
                             else -> app.settings.syncLogin()
                         },
@@ -96,18 +108,29 @@ fun SyncSection() {
                     )
                 }
             }
-            Text(
-                "Синхронизируются тетради, карточки, прогресс, чистовики, напоминания, группа и экзамены — сами, при открытии и закрытии приложения.",
-                style = MaterialTheme.typography.bodySmall, color = Brand.InkSoft,
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            FieldLabel("Сквозное шифрование (E2E)", "Данные и тетради шифруются AES-256-GCM перед загрузкой в облако.")
+            AppTextField(
+                passphrase, {
+                    passphrase = it
+                    app.settings.setSyncPassphrase(it)
+                },
+                label = "Парольная фраза (необязательно)",
+                visualTransformation = PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
             )
-            LinkText("Отключить облако") { app.sync.disconnect(); configured = false }
+            LinkText("Отключить облако") { app.sync.disconnect(); configured = false; expanded = false }
             return@SectionCard
         }
 
         FieldLabel(
-            "Тетради на планшете, карточки и напоминания на телефоне — одно и то же",
-            "Подключи одно облако на обоих устройствах (тот же аккаунт). Своего сервера нет: данные лежат в папке «Nastavnik» твоего диска.",
+            "Общие тетради, карточки и расписание",
+            "Яндекс Диск или WebDAV — данные хранятся на твоём диске в папке «Nastavnik».",
         )
+        if (!expanded) {
+            SoftButton("Подключить облако", icon = R.drawable.ic_cloud) { expanded = true }
+            return@SectionCard
+        }
         Segmented(listOf(true to "Яндекс Диск", false to "Другой WebDAV"), yandex) { yandex = it }
         AnimatedVisibility(!yandex, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
             AppTextField(url, { url = it }, label = "Адрес WebDAV", placeholder = "https://cloud.example.ru/remote.php/dav/files/имя/")
@@ -140,6 +163,11 @@ fun SyncSection() {
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
             )
         }
+        AppTextField(
+            passphrase, { passphrase = it }, label = "Парольная фраза E2E (необязательно)",
+            visualTransformation = PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+        )
         error?.let { StatusLine(it, Tone.ERROR) }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             InkButton("Подключить", enabled = !checking && password.isNotBlank() && (yandex || (login.isNotBlank() && url.startsWith("http")))) {
@@ -151,6 +179,7 @@ fun SyncSection() {
                     checking = false
                     ok.onSuccess {
                         app.settings.setSync(address, if (yandex) "Яндекс Диск" else login, password)
+                        app.settings.setSyncPassphrase(passphrase)
                         password = ""
                         configured = true
                         app.sync.now()
@@ -162,27 +191,15 @@ fun SyncSection() {
     }
 }
 
-/** Устройство: как вести себя и за сколько предупреждать о паре. */
+/** Уведомления и тихий режим на парах. */
 @Composable
-fun DeviceSection(tablet: Boolean, showRole: Boolean = true) {
+fun DeviceSection(tablet: Boolean = false, showRole: Boolean = false) {
     val context = LocalContext.current
     val repo = context.app.settings
-    var role by remember { mutableStateOf(repo.deviceRole()) }
     var alert by remember { mutableStateOf(repo.lessonAlertMin()) }
-    SectionCard("Это устройство") {
-        if (showRole) {
-            FieldLabel(
-                "Режим",
-                if (tablet) "Планшет: тетради для стилуса, наставник, чистовики — и всё остальное." else "Телефон: расписание, карта, карточки и напоминания — без тетрадей для стилуса.",
-            )
-            Segmented(listOf("auto" to "Сам", "phone" to "Телефон", "tablet" to "Планшет"), role) {
-                role = it
-                repo.setDeviceRole(it)
-            }
-            HorizontalDivider(Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant)
-        }
-        FieldLabel("Перед парой", "Живое уведомление: аудитория, отсчёт до начала, весь день полосой.")
-        Segmented(listOf(0 to "Не надо", 5 to "за 5 мин", 10 to "за 10", 15 to "за 15"), alert) {
+    SectionCard("Уведомления и пары") {
+        FieldLabel("Перед парой", "Живое уведомление: аудитория, отсчёт до конца пары или перемены.")
+        Segmented(listOf(0 to "Выкл.", 5 to "за 5 мин", 10 to "за 10", 15 to "за 15"), alert) {
             alert = it
             repo.setLessonAlertMin(it)
             Alarms.rescheduleAll(context)
@@ -197,12 +214,12 @@ fun DeviceSection(tablet: Boolean, showRole: Boolean = true) {
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                FieldLabel("Тихо на парах", "На время пары — «Не беспокоить», после — как было. Будильники и повторные звонки проходят.")
+                FieldLabel("Тихо на парах", "На время пары — «Не беспокоить», после — как было. Повторные звонки проходят.")
             }
             AppSwitch(quiet) {
                 quiet = it
                 repo.setQuietLessons(it)
-                if (it && !access) StudyLock.openSettings(context, LessonQuiet.accessIntent())
+                if (it && !access) context.startActivity(LessonQuiet.accessIntent())
                 Alarms.rescheduleAll(context)
             }
         }
@@ -212,7 +229,7 @@ fun DeviceSection(tablet: Boolean, showRole: Boolean = true) {
                     "Нужно разрешить «Наставнику» доступ к режиму «Не беспокоить».",
                     style = MaterialTheme.typography.bodySmall, color = Brand.InkSoft, modifier = Modifier.weight(1f),
                 )
-                LinkText("Разрешить") { StudyLock.openSettings(context, LessonQuiet.accessIntent()) }
+                LinkText("Разрешить") { context.startActivity(LessonQuiet.accessIntent()) }
             }
         }
     }
@@ -301,159 +318,6 @@ fun LanguageSection() {
             ChipButton("Все", selected = chosen.isBlank() || chosen == "*") { pick("*") }
             options.forEachIndexed { i, t ->
                 ChipButton("Группа ${i + 1} · ${Lesson.shortName(t)}", selected = t == chosen) { pick(t) }
-            }
-        }
-    }
-}
-
-/**
- * Будильник к первой паре: время подъёма считается от расписания, сборов и дороги; вечером — когда лечь,
- * чтобы проснуться в конце цикла сна. Здесь же — всё, что нужно, чтобы он точно сработал.
- */
-@Composable
-fun WakeSection() {
-    val context = LocalContext.current
-    val app = context.app
-    val st = app.settings
-    val w = remember { WakePrefs.of(context) }
-    val scope = rememberCoroutineScope()
-    val askNotifications = rememberAskNotifications()
-    var on by remember { mutableStateOf(w.on) }
-    var ready by remember { mutableStateOf(w.readyMin) }
-    var travel by remember { mutableStateOf(w.travelMin) }
-    var math by remember { mutableStateOf(w.math) }
-    var check by remember { mutableStateOf(w.check) }
-    var skip by remember { mutableStateOf(w.skipDay) }
-    var tick by remember { mutableStateOf(0) }
-    var fullScreen by remember { mutableStateOf(true) }
-    var battery by remember { mutableStateOf(true) }
-    var notifications by remember { mutableStateOf(true) }
-    var guardOn by remember { mutableStateOf(w.guardOn) }
-    var guardService by remember { mutableStateOf(WakeGuard.enabled(context)) }
-    LifecycleResumeEffect(Unit) {
-        guardService = WakeGuard.enabled(context)
-        val nm = context.getSystemService(android.app.NotificationManager::class.java)
-        fullScreen = android.os.Build.VERSION.SDK_INT < 34 || runCatching { nm.canUseFullScreenIntent() }.getOrDefault(true)
-        battery = context.getSystemService(android.os.PowerManager::class.java)?.isIgnoringBatteryOptimizations(context.packageName) ?: true
-        notifications = Permissions.notifications(context)
-        tick++
-        onPauseOrDispose { }
-    }
-    val plan by androidx.compose.runtime.produceState<WakeAlarm.Plan?>(null, on, ready, travel, skip, tick) { value = WakeAlarm.plan(context) }
-    fun changed() {
-        tick++
-        Alarms.rescheduleAll(context)
-    }
-    fun open(action: String) = StudyLock.openSettings(context, Intent(action, Uri.parse("package:${context.packageName}")))
-
-    SectionCard("Будильник к первой паре") {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                FieldLabel("Будить к первой паре", "Сам ставит будильник по расписанию: только в дни с парами, с учётом сборов, дороги и циклов сна.")
-            }
-            AppSwitch(on) {
-                on = it
-                w.on = it
-                if (it) askNotifications()
-                changed()
-            }
-        }
-        AnimatedVisibility(on, enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                // Ближайший будильник и когда лечь.
-                val p = plan
-                val today = java.time.LocalDate.now()
-                val dayName = p?.let {
-                    when (it.date) {
-                        today -> "Сегодня"
-                        today.plusDays(1) -> "Завтра"
-                        else -> it.date.format(java.time.format.DateTimeFormatter.ofPattern("EEEE", Locale.forLanguageTag("ru"))).replaceFirstChar { c -> c.titlecase(Locale.forLanguageTag("ru")) }
-                    }
-                }
-                if (p == null) {
-                    StatusLine(
-                        if (st.scheduleGroup().isBlank()) "Сначала выбери группу в «Расписании»" else "На неделе пар нет — будить не нужно",
-                        Tone.INFO,
-                    )
-                } else {
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("$dayName · подъём в ${WakeAlarm.hm(p.wake)}", style = MaterialTheme.typography.titleMedium)
-                        Text(
-                            "Пара в ${WakeAlarm.hm(p.lessonAt)}" + (p.label.takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""),
-                            style = MaterialTheme.typography.bodySmall, color = Brand.InkSoft,
-                        )
-                        Text(
-                            "Лечь, чтобы проснуться в конце цикла: " +
-                                SleepPlan.bedtimes(p.latest).joinToString(" · ") { (n, t) -> "${WakeAlarm.hm(t)} ($n)" } +
-                                ". Лучше — ${WakeAlarm.hm(p.bedtime)}: 5 циклов, 7 ч 30 мин.",
-                            style = MaterialTheme.typography.bodySmall, color = Brand.InkSoft,
-                        )
-                    }
-                }
-                if (skip.isNotEmpty()) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("${java.time.LocalDate.parse(skip).format(java.time.format.DateTimeFormatter.ofPattern("d.MM"))} не разбужу", style = MaterialTheme.typography.bodySmall, color = Brand.InkSoft, modifier = Modifier.weight(1f))
-                        LinkText("вернуть") { w.skipDay = ""; skip = ""; changed() }
-                    }
-                } else if (p != null) {
-                    LinkText("Не будить ${dayName?.lowercase()}") { w.skipDay = p.date.toString(); skip = p.date.toString(); changed() }
-                }
-
-                HorizontalDivider(Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant)
-                FieldLabel("Собираться", "Душ, завтрак, одеться.")
-                Segmented(listOf(20 to "20 мин", 30 to "30", 45 to "45", 60 to "60"), ready) { ready = it; w.readyMin = it; changed() }
-                FieldLabel("Дорога до пары", "Для онлайн-пар не учитывается.")
-                Segmented(listOf(5 to "5 мин", 15 to "15", 25 to "25", 40 to "40"), travel) { travel = it; w.travelMin = it; changed() }
-
-                HorizontalDivider(Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) { FieldLabel("Выключать примером", "Спящий нажмёт «стоп», а сложить числа — уже нет.") }
-                    AppSwitch(math) { math = it; w.math = it }
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) { FieldLabel("Проверить, что встал", "Через 3 минуты: «Ты встал?» Не ответил — звонит снова.") }
-                    AppSwitch(check) { check = it; w.check = it }
-                }
-
-                // Защита: пока звонит — нельзя выключить телефон и удалить приложение.
-                HorizontalDivider(Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        FieldLabel(
-                            "Не дать отключить",
-                            "Пока звонит: закрываю меню выключения телефона, удаление приложения и настройки. " +
-                                "Если телефон всё-таки перезагрузить кнопкой — после включения зазвоню снова.",
-                        )
-                    }
-                    AppSwitch(guardOn) { guardOn = it; w.guardOn = it }
-                }
-                if (guardOn && !guardService) Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Включи службу «Наставник: защита и учебный замок» в спец. возможностях", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.weight(1f))
-                        LinkText("Открыть") {
-                            StudyLock.openSettings(context, Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS))
-                        }
-                    }
-                    Text(
-                        "Если пункт серый: Настройки → Приложения → Наставник → ⋮ (сверху справа) → «Разрешить ограниченные настройки», потом снова сюда.",
-                        style = MaterialTheme.typography.bodySmall, color = Brand.InkSoft,
-                    )
-                }
-
-                // Что может помешать будильнику — с кнопками исправить.
-                if (!notifications) Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Уведомления выключены — экран будильника не покажется", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.weight(1f))
-                    LinkText("Включить") { askNotifications() }
-                }
-                if (!fullScreen) Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Разреши показ будильника на заблокированном экране", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.weight(1f))
-                    LinkText("Разрешить") { open("android.settings.MANAGE_APP_USE_FULL_SCREEN_INTENT") }
-                }
-                if (!battery) Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Сними ограничения батареи — тогда телефон точно не «усыпит» будильник", style = MaterialTheme.typography.bodySmall, color = Brand.InkSoft, modifier = Modifier.weight(1f))
-                    LinkText("Снять") { open(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS) }
-                }
-                SoftButton("Проверить звонок") { WakeAlarm.startRinging(context, test = true) }
             }
         }
     }

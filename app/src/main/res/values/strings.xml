@@ -1,10 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Наставник</string>
-    <string name="wake_guard_label">Наставник: защита и учебный замок</string>
-    <string name="wake_guard_description">Учебный замок: вечером, пока не сделана вечерняя учёба, закрывает все приложения, кроме выбранных при настройке (телефон, SMS и клавиатура открыты всегда). Будильник: пока звонит, закрывает меню выключения телефона, удаление приложения и настройки. Если замок включён, не даёт удалить «Наставник» и выключить эту службу. Смотрит только на то, какое приложение открыто; текст окон читает лишь у настроек, установщика и системного интерфейса.</string>
     <string name="shortcut_start">Запустить</string>
     <string name="shortcut_review">Повторение</string>
     <string name="shortcut_progress">Прогресс</string>
-    <string name="widget_description">Карточки на сегодня, серия и экзамен</string>
+    <string name="widget_description">Карточки на сегодня и экзамен</string>
 </resources>

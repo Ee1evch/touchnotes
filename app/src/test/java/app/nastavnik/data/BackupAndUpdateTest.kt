@@ -40,5 +40,19 @@ class BackupAndUpdateTest {
         val three = """{"tag_name":"build-82","assets":[{"name":"nastavnik.apk","browser_download_url":"https://github.com/Ee1evch/touchnotes/releases/download/build-82/nastavnik.apk"},""" +
             """{"name":"student.apk","browser_download_url":"https://github.com/Ee1evch/touchnotes/releases/download/build-82/student.apk"}]}"""
         assertEquals("https://github.com/Ee1evch/touchnotes/releases/download/build-82/student.apk", UpdateCheck.parse(three, 50, "student.apk")!!.apkUrl)
+
+        // Семантическая версия v1.1.11 корректно распознаётся новее старых сборок
+        val semverRelease = release("v1.1.11")
+        val semverUpdate = UpdateCheck.parse(semverRelease, currentBuild = 10110)!!
+        assertEquals(10111, semverUpdate.build)
+        assertNull(UpdateCheck.parse(semverRelease, currentBuild = 10111))
+        // Если версия совпадает со строкой текущей версии — баннер не показывается
+        assertNull(UpdateCheck.parse(semverRelease, currentBuild = 10110, currentVersionName = "1.1.11"))
+        assertNull(UpdateCheck.parse(semverRelease, currentBuild = 10110, currentVersionName = "v1.1.11"))
+
+        // Извлечение SHA-256 из тела релиза
+        val bodyWithSha = """{"tag_name":"v1.1.11","body":"Хеши:\n11223344556677889900aabbccddeeff11223344556677889900aabbccddeeff  nastavnik.apk\naabbccddeeff11223344556677889900aabbccddeeff11223344556677889900  student.apk","assets":[{"name":"nastavnik.apk","size":5,"browser_download_url":"https://github.com/Ee1evch/touchnotes/releases/download/v1.1.11/nastavnik.apk"}]}"""
+        val parsedWithSha = UpdateCheck.parse(bodyWithSha, currentBuild = 10110)!!
+        assertEquals("11223344556677889900aabbccddeeff11223344556677889900aabbccddeeff", parsedWithSha.sha256)
     }
 }

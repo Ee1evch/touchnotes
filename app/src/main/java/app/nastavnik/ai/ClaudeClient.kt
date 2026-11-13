@@ -5,7 +5,10 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
+import okhttp3.ConnectionPool
+import okhttp3.Interceptor
 import okhttp3.OkHttpClient
+import okhttp3.Protocol
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.IOException
@@ -49,6 +52,7 @@ class ClaudeClient(
         stream = stream,
         compat = compat,
         fast = fast,
+        promptCache = !compat,
     )
 
     /** Потоковый запрос. Каждое обновление уходит в [onUpdate] (в фоновом потоке). Возвращает stop_reason. */
@@ -202,7 +206,10 @@ class ClaudeClient(
             .ifBlank { DEFAULT_BASE_URL }
         const val API_VERSION = "2023-06-01"
 
-        fun defaultHttp(): OkHttpClient = OkHttpClient.Builder()
+        fun defaultHttp(interceptor: Interceptor? = null): OkHttpClient = OkHttpClient.Builder()
+            .apply { if (interceptor != null) addInterceptor(interceptor) }
+            .connectionPool(ConnectionPool(10, 5, TimeUnit.MINUTES))
+            .protocols(listOf(Protocol.HTTP_2, Protocol.HTTP_1_1))
             .connectTimeout(20, TimeUnit.SECONDS)
             .readTimeout(150, TimeUnit.SECONDS)
             .writeTimeout(60, TimeUnit.SECONDS)

@@ -256,39 +256,44 @@ fun ModelPicker(provider: AiProvider, presets: List<ModelPreset>, current: Strin
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     presets.forEach { m ->
-        RadioRow(current == m.id, "${m.label} — ${m.hint}", m.id) { onPick(m.id) }
+        RadioRow(current == m.id, m.label, m.hint) { onPick(m.id) }
     }
     val isCustom = presets.none { it.id == current }
+    var showCustom by remember(provider) { mutableStateOf(isCustom) }
     var custom by remember(provider) { mutableStateOf(if (isCustom) current else "") }
-    RadioRow(isCustom, "Своя модель", if (isCustom) current else null) { if (custom.isNotBlank()) onPick(custom) }
-    AppTextField(
-        value = custom,
-        onValueChange = {
-            custom = it.trim()
-            if (custom.isNotBlank()) onPick(custom)
-        },
-        label = "Название модели (id)",
-    )
     var loading by remember { mutableStateOf(false) }
     var error by remember(provider) { mutableStateOf<String?>(null) }
     var models by remember(provider) { mutableStateOf<List<String>?>(null) }
-    SoftButton(if (loading) "Загружаю…" else "Загрузить список моделей") {
-        if (loading) return@SoftButton
-        loading = true
-        error = null
-        scope.launch {
-            try {
-                val s = context.app.settings.load()
-                val list = context.app.ai(s).listModels(context.app.settings.apiKey(s.provider))
-                if (list.isEmpty()) error = "Сервис вернул пустой список моделей." else models = list
-            } catch (e: AiException) {
-                error = e.userMessage
-            } finally {
-                loading = false
+    if (!showCustom && !isCustom) {
+        LinkText("Другая модель…") { showCustom = true }
+    } else {
+        RadioRow(isCustom, "Своя модель", if (isCustom) current else null) { if (custom.isNotBlank()) onPick(custom) }
+        AppTextField(
+            value = custom,
+            onValueChange = {
+                custom = it.trim()
+                if (custom.isNotBlank()) onPick(custom)
+            },
+            label = "Название модели (id)",
+        )
+        SoftButton(if (loading) "Загружаю…" else "Загрузить список моделей") {
+            if (loading) return@SoftButton
+            loading = true
+            error = null
+            scope.launch {
+                try {
+                    val s = context.app.settings.load()
+                    val list = context.app.ai(s).listModels(context.app.settings.apiKey(s.provider))
+                    if (list.isEmpty()) error = "Сервис вернул пустой список моделей." else models = list
+                } catch (e: AiException) {
+                    error = e.userMessage
+                } finally {
+                    loading = false
+                }
             }
         }
+        error?.let { StatusLine(it, Tone.ERROR) }
     }
-    error?.let { StatusLine(it, Tone.ERROR) }
 
     models?.let { list ->
         ModelListDialog(list, onDismiss = { models = null }) { picked ->

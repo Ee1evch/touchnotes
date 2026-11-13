@@ -19,15 +19,18 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.view.isVisible
+import app.nastavnik.NastavnikApp
 import app.nastavnik.R
 import app.nastavnik.ai.Mark
 import app.nastavnik.ai.MarkKind
+import app.nastavnik.ai.NBox
 import app.nastavnik.geom.CalloutPlacer
 import app.nastavnik.geom.IRect
 import app.nastavnik.geom.Placement
 import app.nastavnik.geom.Side
 import app.nastavnik.notes.WebViews
 import app.nastavnik.session.AnswerUi
+import app.nastavnik.session.ShotGeometry
 import kotlinx.serialization.json.JsonPrimitive
 import kotlin.math.abs
 
@@ -65,6 +68,8 @@ class AnswerOverlay(baseContext: Context, private val wm: WindowManager, private
     private var offY = 0
     private var captureHidden = false
     private var marksSuspended = false
+    private var currentQuestion: String? = null
+    private var currentGeometry: ShotGeometry? = null
 
     /** Прозрачность заметки, когда к ней подносят стилус. */
     var fadeAlpha = 0.35f
@@ -92,6 +97,8 @@ class AnswerOverlay(baseContext: Context, private val wm: WindowManager, private
     // ---------------- отрисовка ответа ----------------
 
     fun render(a: AnswerUi?) {
+        currentQuestion = a?.question
+        currentGeometry = a?.geometry
         if (a == null || a.marks.isEmpty()) {
             clear()
             return
@@ -121,7 +128,7 @@ class AnswerOverlay(baseContext: Context, private val wm: WindowManager, private
         val e = Entry(m, anchor)
         val area = contentArea()
         if (shifted != null) {
-            val mv = MarkView(ctx, m.kind)
+            val mv = MarkView(ctx, m.kind, m.drawing)
             val p = OverlayWindows.absParams(
                 shifted.left - mv.pad, shifted.top - mv.pad, shifted.width + 2 * mv.pad, shifted.height + 2 * mv.pad,
                 WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
@@ -235,6 +242,49 @@ class AnswerOverlay(baseContext: Context, private val wm: WindowManager, private
         return e.userHidden
     }
 
+    private fun onNotHere(e: Entry) {
+        val app = ctx.applicationContext as? NastavnikApp
+        val model = app?.settings?.load()?.model.orEmpty()
+        app?.coordStats?.recordUserMiss(
+            model = model,
+            line = e.mark.lines?.first,
+            box = e.anchor0?.let { "[${it.left},${it.top},${it.right},${it.bottom}]" },
+            question = currentQuestion,
+        )
+        // Если у отметки был номер строки, переключаем подсветку на всю строку:
+        val geom = currentGeometry
+        val lineAnchor = if (geom != null) {
+            e.mark.lines?.firstOrNull()?.let { lineNum ->
+                geom.lines?.line(lineNum)?.let { l ->
+                    geom.toScreen(
+                        NBox(
+                            l.left.toFloat() / geom.imageW,
+                            l.top.toFloat() / geom.imageH,
+                            l.right.toFloat() / geom.imageW,
+                            l.bottom.toFloat() / geom.imageH,
+                        ),
+                    )
+                }
+            }
+        } else null
+        if (lineAnchor != null) {
+            e.anchor0 = lineAnchor
+            val mv = e.markView
+            val p = e.markParams
+            if (mv != null && p != null) {
+                p.x = lineAnchor.left - mv.pad
+                p.y = lineAnchor.top - mv.pad
+                p.width = lineAnchor.width + 2 * mv.pad
+                p.height = lineAnchor.height + 2 * mv.pad
+                runCatching { wm.updateViewLayout(mv, p) }
+            }
+        } else {
+            e.userHidden = true
+            applyMarkVisibility(e)
+        }
+        publish()
+    }
+
     /** Экран повернули или поменялся его размер — заметки возвращаем в его пределы. */
     fun onScreenChanged() {
         entries.forEach { it.note.follow(0, 0) }
@@ -305,6 +355,7 @@ class AnswerOverlay(baseContext: Context, private val wm: WindowManager, private
             gravity = Gravity.CENTER_VERTICAL
         }
         private val eye = ImageView(ctx)
+        private val notHere = TextView(ctx)
         private val primary = pill("", primary = true)
         private val secondary = pill("", primary = false)
         private val more = TextView(ctx)
@@ -401,6 +452,28 @@ class AnswerOverlay(baseContext: Context, private val wm: WindowManager, private
             }
             header.addView(card, LinearLayout.LayoutParams(dp(32f), dp(32f)))
             header.addView(speak, LinearLayout.LayoutParams(dp(32f), dp(32f)))
+            notHere.apply {
+                text = "Не здесь"
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+                typeface = Fonts.semibold(ctx)
+                setTextColor(0xFFD93A3A.toInt())
+                background = GradientDrawable().apply {
+                    cornerRadius = dp(10f).toFloat()
+                    setColor(0x18D93A3A.toInt())
+                    setStroke(dp(0.8f), 0x44D93A3A.toInt())
+                }
+                setPadding(dp(7f), dp(2f), dp(7f), dp(2f))
+                contentDescription = "Не здесь — отметить неточную рамку"
+                visibility = View.GONE
+                setOnClickListener {
+                    val entry = entries.firstOrNull { it.note === this@NoteWindow } ?: return@setOnClickListener
+                    onNotHere(entry)
+                    text = "✓ учтено"
+                    isEnabled = false
+                    alpha = 0.55f
+                }
+            }
+            header.addView(notHere, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(24f)).apply { marginEnd = dp(4f) })
             header.addView(eye, LinearLayout.LayoutParams(dp(32f), dp(32f)))
             header.addView(GripView(ctx), LinearLayout.LayoutParams(dp(20f), dp(32f)))
             val close = ImageView(ctx).apply {
@@ -472,8 +545,9 @@ class AnswerOverlay(baseContext: Context, private val wm: WindowManager, private
             compactW = width
             wideW = wide
             this.anchor = anchor
-            // «Глазик» нужен, только если на записи есть выделение.
+            // «Глазик» и кнопка «Не здесь» нужны, только если на записи есть выделение.
             eye.isVisible = anchor != null
+            notHere.isVisible = anchor != null
             side = if (anchor == null) Side.NONE else p.side
             bg.side = side
             val lp = OverlayWindows.absParams(

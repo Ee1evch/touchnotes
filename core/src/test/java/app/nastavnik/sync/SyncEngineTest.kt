@@ -25,7 +25,7 @@ class SyncEngineTest {
     }
 
     /** Устройство: записи «заметок» (текст) и «тетрадей» (с файлом). */
-    class Device(val name: String, val store: SyncStore, var clock: Long = 1000) {
+    class Device(val name: String, val store: SyncStore, var clock: Long = 1000, var pass: String = "") {
         val dir: File = Files.createTempDirectory("sync-$name").toFile()
         val notes = LinkedHashMap<String, String>()
         val books = LinkedHashMap<String, File>()
@@ -41,7 +41,7 @@ class SyncEngineTest {
             }
             override suspend fun delete(kind: String, id: String) { if (kind == "note") notes.remove(id) else books.remove(id) }
         }
-        fun engine() = SyncEngine(store, source, name, name, "phone", File(dir, "tmp").apply { mkdirs() }) { clock }
+        fun engine() = SyncEngine(store, source, name, name, "phone", File(dir, "tmp").apply { mkdirs() }, passphrase = { pass }) { clock }
         fun sync(): SyncReport = runBlocking { val (s, r) = engine().run(state); state = s; r }
     }
 
@@ -132,5 +132,40 @@ class SyncEngineTest {
     @Test fun recordHashIsStable() {
         val d = buildJsonObject { put("t", JsonPrimitive(1)) }
         assertEquals(SyncEngine.recordHash(d, mapOf("a" to "1", "b" to "2")), SyncEngine.recordHash(d, mapOf("b" to "2", "a" to "1")))
+    }
+
+    @Test fun encryptedSyncAndCloudReader() {
+        val cloud = MemoryStore()
+        val passphrase = "SecretPassword123!"
+        val tablet = Device("tablet", cloud, pass = passphrase)
+        val phone = Device("phone", cloud, pass = passphrase)
+
+        tablet.notes["secret_note"] = "секретные данные"
+        tablet.books["secret_book"] = File(tablet.dir, "s.ink").apply { writeText("тайные чернила") }
+        tablet.sync()
+
+        // Проверяем, что в облаке снимки и блобы зашифрованы
+        val snapBytes = cloud.files["Nastavnik/devices/tablet.json.gz"]!!
+        assertTrue(SyncCrypto.isEncrypted(snapBytes))
+
+        val blobKey = cloud.files.keys.first { it.startsWith("Nastavnik/blobs/") }
+        val blobBytes = cloud.files[blobKey]!!
+        assertTrue(SyncCrypto.isEncrypted(blobBytes))
+
+        // Телефон с тем же паролем успешно расшифровывает
+        val r = phone.sync()
+        assertEquals(2, r.received)
+        assertEquals("секретные данные", phone.notes["secret_note"])
+        assertEquals("тайные чернила", phone.books["secret_book"]!!.readText())
+
+        // CloudReader с паролем читает
+        val readerGot = runBlocking { CloudReader(cloud, passphrase = { passphrase }).latest(setOf("note/secret_note")) }
+        assertEquals("секретные данные", readerGot.getValue("note/secret_note").data!!.jsonObject["text"]!!.jsonPrimitive.content)
+
+        // CloudReader с неверным паролем бросает понятную ошибку, а не тишину
+        try {
+            runBlocking { CloudReader(cloud, passphrase = { "wrong" }).latest(setOf("note/secret_note")) }
+            org.junit.Assert.fail("Ожидалось исключение BadPassphraseException при неверном пароле")
+        } catch (_: BadPassphraseException) {}
     }
 }

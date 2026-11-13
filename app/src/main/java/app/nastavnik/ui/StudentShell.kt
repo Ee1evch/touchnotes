@@ -2,8 +2,14 @@ package app.nastavnik.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -25,7 +31,7 @@ import app.nastavnik.app
 
 /**
  * «Наставник · Студент» — лёгкая версия: только расписание и оценки из ЛКС; в настройках — оформление, живое
- * уведомление, «Тихо на парах», группа английского и вход в ЛКС. Без наставника, тетрадей, ДЗ, замка и сирены.
+ * уведомление, «Тихо на парах», группа английского и вход в ЛКС. Без наставника, тетрадей и ДЗ.
  */
 @Composable
 fun StudentShell() {
@@ -39,7 +45,14 @@ fun StudentShell() {
         }
         if (screen.isEmpty() && tab != PhoneTab.SCHEDULE) tab = PhoneTab.SCHEDULE
     }
-    AnimatedContent(screen, transitionSpec = { fadeIn(Motion.enter(260)) togetherWith fadeOut(Motion.exit(120)) }, label = "student") { s ->
+    AnimatedContent(
+        screen,
+        transitionSpec = {
+            (fadeIn(tween(260, easing = Motion.Decelerate)) + scaleIn(spring(dampingRatio = 0.82f, stiffness = 450f), initialScale = 0.96f))
+                .togetherWith(fadeOut(tween(160, easing = Motion.Accelerate)) + scaleOut(tween(160, easing = Motion.Accelerate), targetScale = 1.02f))
+        },
+        label = "student",
+    ) { s ->
         when (s) {
             MainActivity.SCREEN_SETTINGS -> StudentSettings(
                 onBack = { screen = "" },
@@ -49,8 +62,17 @@ fun StudentShell() {
             MainActivity.SCREEN_APPEARANCE -> AppearanceScreen(onBack = { screen = MainActivity.SCREEN_SETTINGS })
             MainActivity.SCREEN_LKS -> LksScreen(onBack = { screen = ""; tab = PhoneTab.GRADES }, onDone = { screen = ""; tab = PhoneTab.GRADES })
             else -> Box(Modifier.fillMaxSize().paperBackdrop()) {
-                Box(Modifier.fillMaxSize().navigationBarsPadding().padding(bottom = 80.dp)) {
-                    when (tab) {
+                AnimatedContent(
+                    targetState = tab,
+                    transitionSpec = {
+                        val dir = if (targetState.ordinal > initialState.ordinal) 1 else -1
+                        (fadeIn(tween(260, easing = Motion.Decelerate)) + slideInHorizontally(tween(300, easing = Motion.Emphasized)) { (it * 0.18f * dir).toInt() })
+                            .togetherWith(fadeOut(tween(180, easing = Motion.Accelerate)) + slideOutHorizontally(tween(300, easing = Motion.Emphasized)) { (-it * 0.18f * dir).toInt() })
+                    },
+                    label = "studentTab",
+                    modifier = Modifier.fillMaxSize().navigationBarsPadding().padding(bottom = 80.dp),
+                ) { t ->
+                    when (t) {
                         PhoneTab.GRADES -> GradesScreen(onBack = null, onSettings = { screen = MainActivity.SCREEN_SETTINGS }, onLks = { screen = MainActivity.SCREEN_LKS })
                         else -> ScheduleScreen(onBack = null)
                     }

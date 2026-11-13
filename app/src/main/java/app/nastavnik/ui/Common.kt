@@ -1,6 +1,7 @@
 package app.nastavnik.ui
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -134,6 +135,10 @@ object Motion {
     fun <T> spatial() = spring<T>(dampingRatio = 0.9f, stiffness = 500f)
     /** Мелочи: цвет, прозрачность. */
     fun <T> effects() = spring<T>(dampingRatio = 1f, stiffness = 1600f)
+    /** Плавная сочная физика для переходов и карточек. */
+    fun <T> smooth() = spring<T>(dampingRatio = 0.8f, stiffness = 420f)
+    /** Лёгкий пружинящий отскок для выбора и нажатия. */
+    fun <T> bounce() = spring<T>(dampingRatio = 0.65f, stiffness = 520f)
 }
 
 /** Счётчик появлений на экране: каждая следующая карточка появляется чуть позже — каскадом. */
@@ -156,6 +161,9 @@ fun Modifier.enter(): Modifier {
         val p = progress.value
         alpha = p
         translationY = (1f - p) * 12.dp.toPx()
+        val s = 0.97f + 0.03f * p
+        scaleX = s
+        scaleY = s
     }
 }
 
@@ -163,8 +171,13 @@ fun Modifier.enter(): Modifier {
 @Composable
 fun Modifier.pressable(source: MutableInteractionSource): Modifier {
     val pressed by source.collectIsPressedAsState()
-    val k by animateFloatAsState(if (pressed) 0.97f else 1f, spring(dampingRatio = 0.8f, stiffness = 1200f), label = "press")
-    return this.graphicsLayer { scaleX = k; scaleY = k }
+    val k by animateFloatAsState(if (pressed) 0.96f else 1f, spring(dampingRatio = 0.72f, stiffness = 550f), label = "pressScale")
+    val a by animateFloatAsState(if (pressed) 0.92f else 1f, spring(dampingRatio = 0.8f, stiffness = 600f), label = "pressAlpha")
+    return this.graphicsLayer {
+        scaleX = k
+        scaleY = k
+        alpha = a
+    }
 }
 
 @Composable
@@ -205,11 +218,13 @@ fun ScreenScaffold(
 /** Круглая белая кнопка-значок (назад, настройки). */
 @Composable
 fun RoundIconButton(icon: Int, description: String, onClick: () -> Unit) {
+    val source = remember { MutableInteractionSource() }
     Box(
         Modifier
             .size(44.dp)
+            .pressable(source)
             .glass(CircleShape, 6.dp, strong = true)
-            .clickable(onClick = onClick),
+            .clickable(interactionSource = source, indication = ripple(bounded = false, radius = 22.dp), onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Icon(painterResource(icon), contentDescription = description, tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(22.dp))
@@ -362,15 +377,16 @@ fun <T> Segmented(options: List<Pair<T, String>>, selected: T, onSelect: (T) -> 
     ) {
         options.forEach { (value, label) ->
             val on = value == selected
-            val fg by animateColorAsState(if (on) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant, label = "seg")
+            val fg by animateColorAsState(if (on) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant, tween(180), label = "segFg")
+            val bg by animateColorAsState(if (on) Brand.Glass else Color.Transparent, spring(dampingRatio = 0.85f, stiffness = 550f), label = "segBg")
+            val scale by animateFloatAsState(if (on) 1f else 0.98f, spring(dampingRatio = 0.75f, stiffness = 600f), label = "segScale")
             Box(
                 Modifier
                     .weight(1f)
                     .height(42.dp)
-                    .then(
-                        if (on) Modifier.glass(RoundedCornerShape(12.dp), 3.dp, strong = true)
-                        else Modifier.clip(RoundedCornerShape(12.dp)),
-                    )
+                    .graphicsLayer { scaleX = scale; scaleY = scale }
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(bg)
                     .selectable(selected = on, role = Role.RadioButton) { onSelect(value) },
                 contentAlignment = Alignment.Center,
             ) {
@@ -383,6 +399,21 @@ fun <T> Segmented(options: List<Pair<T, String>>, selected: T, onSelect: (T) -> 
 /** Выбор одного варианта из списка: своё круглое «радио» в фирменном цвете. */
 @Composable
 fun RadioRow(selected: Boolean, label: String, hint: String? = null, onClick: () -> Unit) {
+    val ringColor by animateColorAsState(
+        if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+        tween(200),
+        label = "radioColor",
+    )
+    val borderWidth by animateDpAsState(
+        if (selected) 7.dp else 2.dp,
+        spring(dampingRatio = 0.72f, stiffness = 550f),
+        label = "radioWidth",
+    )
+    val scale by animateFloatAsState(
+        if (selected) 1.05f else 1f,
+        spring(dampingRatio = 0.65f, stiffness = 600f),
+        label = "radioScale",
+    )
     Row(
         Modifier
             .fillMaxWidth()
@@ -392,12 +423,12 @@ fun RadioRow(selected: Boolean, label: String, hint: String? = null, onClick: ()
             .padding(vertical = 6.dp, horizontal = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        val ring = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
         Box(
             Modifier
                 .size(22.dp)
+                .graphicsLayer { scaleX = scale; scaleY = scale }
                 .clip(CircleShape)
-                .border(if (selected) 7.dp else 2.dp, ring, CircleShape),
+                .border(borderWidth, ringColor, CircleShape),
         )
         Column(Modifier.padding(start = 14.dp)) {
             Text(label, style = MaterialTheme.typography.bodyLarge)
@@ -452,10 +483,12 @@ fun ChipButton(text: String, selected: Boolean = false, enabled: Boolean = true,
         tween(220),
         label = "chipFg",
     )
+    val scale by animateFloatAsState(if (selected) 1.04f else 1f, spring(dampingRatio = 0.65f, stiffness = 600f), label = "chipScale")
     val source = remember { MutableInteractionSource() }
     Box(
         Modifier
             .pressable(source)
+            .graphicsLayer { scaleX = scale; scaleY = scale }
             .heightIn(min = 40.dp)
             .clip(CircleShape)
             .background(bg)

@@ -29,6 +29,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.nastavnik.R
+import app.nastavnik.theme.ThemeSpec
+import app.nastavnik.theme.ThemeTokens
 
 /**
  * Палитра темы: фон-«бумага», три цветных пятна под стеклом, текст, акцент (кнопки, переключатели,
@@ -51,14 +53,32 @@ data class Palette(
     val blobC: Color,
 )
 
-/** Готовые темы: шесть светлых и четыре тёмные. */
+fun ThemeSpec.toPalette(): Palette = Palette(
+    id = id,
+    name = name,
+    dark = dark,
+    paper = Color(surface),
+    ink = Color(ink),
+    inkSoft = Color(inkSoft),
+    accent = Color(accent),
+    onAccent = Color(onAccent),
+    glass = Color(card),
+    line = Color(line),
+    blobA = Color(blobA),
+    blobB = Color(blobB),
+    blobC = Color(blobC),
+)
+
+/** Готовые темы: шесть курируемых базовых и дополнительные варианты. */
 object Palettes {
-    // «Светлая» и «Тёмная» — как в приложении для родителя: ровный серо-голубой фон, белые карточки, синий акцент.
-    val PAPER = Palette(
-        "paper", "Светлая", false, Color(0xFFF4F5F8), Color(0xFF16161A), Color(0xFF6B6F7A),
-        Color(0xFF2563EB), Color.White, Color.White, Color(0xFFE2E4EA),
-        Color(0xFFD5E2F3), Color(0xFFF5DECD), Color(0xFFD5ECE1),
-    )
+    // 6 курируемых тем из ThemeTokens:
+    val PAPER = ThemeTokens.AS_IS.toPalette()
+    val GRAPHITE = ThemeTokens.GRAPHITE.toPalette()
+    val WARM_PAPER = ThemeTokens.WARM_PAPER.toPalette()
+    val NORDIC = ThemeTokens.NORDIC.toPalette()
+    val SAGE = ThemeTokens.SAGE.toPalette()
+    val CYBERPUNK = ThemeTokens.CYBERPUNK.toPalette()
+
     val OCEAN = Palette(
         "ocean", "Океан", false, Color(0xFFEEF3F9), Color(0xFF0F1B2D), Color(0xFF52617A),
         Color(0xFF2563EB), Color.White, Color.White, Color(0x1A0F1B2D),
@@ -84,11 +104,6 @@ object Palettes {
         Color(0xFFD6457A), Color.White, Color.White, Color(0x1A2B1520),
         Color(0xFFF8D0DF), Color(0xFFFBE2D0), Color(0xFFE6D9F6),
     )
-    val GRAPHITE = Palette(
-        "graphite", "Тёмная", true, Color(0xFF111216), Color(0xFFF2F3F5), Color(0xFFA3A7B1),
-        Color(0xFF8AB4FF), Color(0xFF0B1B3A), Color(0xFF1B1C21), Color(0xFF33353C),
-        Color(0xFF1C2A3D), Color(0xFF3A2A20), Color(0xFF183028),
-    )
     val MIDNIGHT = Palette(
         "midnight", "Полночь", true, Color(0xFF0B1020), Color(0xFFE8ECF8), Color(0xFF9AA4C0),
         Color(0xFF5EB3FF), Color(0xFF07101F), Color(0xFF1A2342), Color(0x26FFFFFF),
@@ -111,8 +126,8 @@ object Palettes {
     var wallpaperDark: Palette? = null
         private set
 
-    val light get() = listOfNotNull(wallpaperLight) + listOf(PAPER, OCEAN, MINT, SUNSET, LAVENDER, SAKURA)
-    val dark get() = listOfNotNull(wallpaperDark) + listOf(GRAPHITE, MIDNIGHT, FOREST, ESPRESSO)
+    val light get() = listOfNotNull(wallpaperLight) + listOf(PAPER, OCEAN, WARM_PAPER, NORDIC, SAGE, MINT, SUNSET, LAVENDER, SAKURA)
+    val dark get() = listOfNotNull(wallpaperDark) + listOf(GRAPHITE, MIDNIGHT, CYBERPUNK, FOREST, ESPRESSO)
     val all get() = light + dark
 
     /** Палитры «Обои» из системных динамических цветов — как у приложений Android 12–17. */
@@ -186,6 +201,7 @@ object Brand {
     /** Фаза «живого» фона, 0…1 по кругу. */
     var phase by mutableFloatStateOf(0f)
 
+    val spec: ThemeSpec get() = ThemeTokens.byId(current.id)
     val dark: Boolean get() = current.dark
     val Ink get() = current.ink
     val InkSoft get() = current.inkSoft

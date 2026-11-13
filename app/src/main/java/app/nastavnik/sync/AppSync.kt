@@ -208,6 +208,7 @@ class SyncManager(private val app: NastavnikApp) {
                     store, AppSyncSource(app), st.deviceId(), Build.MODEL ?: "Устройство",
                     if (app.isTablet()) "tablet" else "phone",
                     File(app.cacheDir, "sync-tmp").apply { mkdirs() },
+                    passphrase = { st.syncPassphrase() },
                 )
                 val state = runCatching { json.decodeFromString(SyncState.serializer(), stateFile.readText()) }.getOrDefault(SyncState())
                 val (next, report) = engine.run(state)

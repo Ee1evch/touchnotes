@@ -18,7 +18,6 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
 import okhttp3.Cookie
 import okhttp3.CookieJar
-import okhttp3.FormBody
 import okhttp3.HttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -49,10 +48,32 @@ data class LksLesson(
     val rating: String? = null,
     val absences: Int = 0,
     val entries: List<LksEntry> = emptyList(),
-)
+) {
+    /** Реальный средний балл: если ЛКС прислал avgMark — берём его, иначе честно усредняем оценки из entries. */
+    val calculatedAvg: Double? get() {
+        avgMark?.replace(',', '.')?.toDoubleOrNull()?.let { return it }
+        val marks = entries.flatMap { it.marks }.mapNotNull { LksExtract.numeric(it.value) }
+        return marks.takeIf { it.isNotEmpty() }?.average()
+    }
+
+    /** Текстовое представление среднего балла (например, "4.75"). */
+    val displayAvg: String? get() {
+        if (!avgMark.isNullOrBlank() && avgMark != "-") return avgMark
+        return calculatedAvg?.let { String.format(java.util.Locale.US, "%.2f", it) }
+    }
+}
 
 @Serializable
-data class LksJournal(val lessons: List<LksLesson>, val period: String = "", val loadedAt: Long = 0)
+data class LksJournal(val lessons: List<LksLesson>, val period: String = "", val loadedAt: Long = 0) {
+    /**
+     * Плоское среднее арифметическое всех числовых оценок из entries всех предметов,
+     * каждая оценка учитывается ровно один раз. Предметы без оценок в entries не учитываются.
+     */
+    val averageMark: Double? get() {
+        val allMarks = lessons.flatMap { it.entries }.flatMap { it.marks }.mapNotNull { LksExtract.numeric(it.value) }
+        return allMarks.takeIf { it.isNotEmpty() }?.average()
+    }
+}
 
 /**
  * ЛКС Сириуса (lks.siriusuniversity.ru, платформа «Тандем» на Laravel). Вход — обычная форма `/login`
@@ -86,24 +107,6 @@ class LksClient(
             if (it.code == 418 || it.code == 403) throw GradesException("ЛКС не пускает с этого адреса — нужен российский интернет")
             if (!it.isSuccessful) throw GradesException("ЛКС ответил ошибкой ${it.code}")
             return it.request.url.encodedPath to it.body?.string().orEmpty()
-        }
-    }
-
-    /** Вход по почте и паролю. После него куки сессии лежат в [cookies]. */
-    suspend fun login(email: String, password: String) = withContext(Dispatchers.IO) {
-        val (_, page) = get("/login")
-        val token = tokenRe.find(page)?.groupValues?.get(1) ?: metaRe.find(page)?.groupValues?.get(1)
-            ?: throw GradesException("Не нашёл форму входа ЛКС")
-        val body = FormBody.Builder().add("_token", token).add("login", email.trim()).add("password", password).add("remember", "on").build()
-        val r = runCatching { http.newCall(Request.Builder().url("$base/login").post(body).header("Referer", "$base/login").build()).execute() }
-            .getOrElse { throw GradesException("ЛКС не отвечает. Проверь интернет.") }
-        r.use {
-            if (it.code == 419) throw GradesException("ЛКС сбросил сессию — попробуй ещё раз")
-            val path = it.request.url.encodedPath
-            val text = it.body?.string().orEmpty()
-            if (path.startsWith("/login") || text.contains("name=\"password\"")) {
-                throw LoginException(if (text.contains("throttle", true) || text.contains("Слишком много", true)) "Слишком много попыток входа — подожди минуту" else "ЛКС не принял почту или пароль")
-            }
         }
     }
 
@@ -141,7 +144,6 @@ class LksClient(
     companion object {
         const val BASE = "https://lks.siriusuniversity.ru"
         private val shared by lazy { OkHttpClient.Builder().connectTimeout(20, TimeUnit.SECONDS).readTimeout(60, TimeUnit.SECONDS).build() }
-        private val tokenRe = Regex("""name="_token"\s+value="([^"]+)"""")
         private val metaRe = Regex("""<meta name="csrf-token" content="([^"]+)"""")
 
         private fun JsonElement?.text(): String? = when (this) {

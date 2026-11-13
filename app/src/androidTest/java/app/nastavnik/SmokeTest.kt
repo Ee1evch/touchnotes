@@ -159,7 +159,7 @@ class SmokeTest {
         val progress = ActivityScenario.launch<MainActivity>(
             Intent(ctx, MainActivity::class.java).putExtra(MainActivity.EXTRA_SCREEN, MainActivity.SCREEN_PROGRESS),
         )
-        assertNotNull("нет серии", device.wait(Until.findObject(By.textContains("подряд")), 6000))
+        assertNotNull("нет экрана «Прогресс»", device.wait(Until.findObject(By.text("Прогресс")), 6000))
         SystemClock.sleep(1500)
         screenshot("screen_progress")
         progress.close()

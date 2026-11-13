@@ -128,7 +128,6 @@ object Homeworks {
     fun save(c: Context, hw: Homework) {
         write(File(dir(c), "${hw.id}.json"), json.encodeToString(Homework.serializer(), hw))
         _version.value++
-        runCatching { HomeworkReminder.schedule(c) }
     }
 
     fun delete(c: Context, hw: Homework) {
@@ -211,7 +210,7 @@ object Homeworks {
             val page = renderPage(file, c.page, width) ?: return@mapNotNull null
             val top = (c.top.coerceIn(0f, 1f) * page.height).toInt()
             val bottom = (c.bottom.coerceIn(0f, 1f) * page.height).toInt().coerceAtLeast(top + 20).coerceAtMost(page.height)
-            Bitmap.createBitmap(page, 0, top, page.width, bottom - top).also { if (it != page) page.recycle() }
+            Bitmap.createBitmap(page, 0, top, page.width, bottom - top)
         }
         if (pieces.isEmpty()) return null
         val out = Bitmap.createBitmap(width, pieces.sumOf { it.height }, Bitmap.Config.ARGB_8888)
@@ -492,7 +491,6 @@ object Homeworks {
             update(c, hwId, taskId) { it.copy(status = status, comment = comment, failed = if (status == Status.DONE) it.failed else it.failed + 1) }
         } ?: return Result.failure(IllegalStateException("ДЗ не найдено"))
         if (status == Status.DONE) c.app.study.record(Learning.KIND_TASK, "${hw.subject} · ДЗ ${t.label}", 0)
-        afterChange(c)
         return Result.success(Verdict(status, comment, nw))
     }
 
@@ -502,25 +500,7 @@ object Homeworks {
         val t = hw.tasks.firstOrNull { it.id == taskId } ?: return false
         if (!HomeworkRules.canDispute(t.status, t.failed, hw.statuses)) return false
         update(c, hwId, taskId) { it.copy(status = Status.DISPUTED) }
-        afterChange(c)
         return true
-    }
-
-    /** ДЗ изменилось — пересчитать замок и сирену. */
-    private fun afterChange(c: Context) {
-        val app = c.applicationContext as? NastavnikApp ?: return
-        app.appScope.launch {
-            runCatching { StudyLock.status(app) }
-            runCatching { Siren.check(app) }
-            // ДЗ закрыто на 100%, а задача дня уже решена — сирена замолкает сразу.
-            runCatching {
-                val date = StudyLockRules.sessionDate(java.time.LocalDateTime.now())
-                if (SirenService.ringing && SirenPrefs.of(app).solved(date) > 0 && openFor(app, date).isEmpty()) {
-                    app.stopService(android.content.Intent(app, SirenService::class.java))
-                }
-            }
-            runCatching { HomeworkReminder.schedule(app) }
-        }
     }
 
     // ---------------- карточки ----------------

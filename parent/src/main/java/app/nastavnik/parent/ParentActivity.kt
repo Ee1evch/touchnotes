@@ -421,7 +421,7 @@ private fun GradesTab(state: ParentRepo.State) {
         }
         return
     }
-    val subjects = journal.lessons.sortedWith(compareBy({ it.avgMark == null && it.entries.none { e -> e.marks.isNotEmpty() } }, { it.title }))
+    val subjects = journal.lessons.sortedWith(compareBy({ it.displayAvg == null && it.entries.none { e -> e.marks.isNotEmpty() } }, { it.title }))
     LazyColumn(contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item { GradesSummary(journal) }
         items(subjects) { SubjectCard(it) }
@@ -430,8 +430,7 @@ private fun GradesTab(state: ParentRepo.State) {
 
 @Composable
 private fun GradesSummary(j: app.nastavnik.grades.LksJournal) {
-    val avgs = j.lessons.mapNotNull { it.avgMark?.replace(',', '.')?.toDoubleOrNull() }
-    val avg = avgs.takeIf { it.isNotEmpty() }?.average()
+    val avg = j.averageMark
     val (missed, valid) = ParentData.absences(j)
     Card {
         Row(Modifier.padding(20.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -470,7 +469,7 @@ private fun SubjectCard(s: LksLesson) {
                     ).joinToString(" · ")
                     Text(sub, style = MaterialTheme.typography.bodySmall, color = when { unexcused > 0 -> Tone.Bad; missed > 0 -> Tone.Warn; else -> MaterialTheme.colorScheme.onSurfaceVariant })
                 }
-                val avg = s.avgMark?.takeIf { it.isNotBlank() }
+                val avg = s.displayAvg?.takeIf { it.isNotBlank() }
                 if (avg != null) Text(avg, style = MaterialTheme.typography.headlineMedium.copy(fontSize = 28.sp), color = Tone.mark(avg))
             }
             if (marks.isNotEmpty()) LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) { items(marks.takeLast(20).reversed()) { (_, v) -> MarkChip(v) } }
@@ -495,9 +494,11 @@ private fun EntryRow(e: LksEntry) {
 @Composable
 private fun SettingsScreen(repo: ParentRepo, first: Boolean, onDone: () -> Unit, onBack: (() -> Unit)?, onDisconnect: () -> Unit) {
     var token by rememberSaveable { mutableStateOf(repo.token) }
+    var passphrase by rememberSaveable { mutableStateOf(repo.passphrase) }
     var book by rememberSaveable { mutableStateOf(repo.recordBook) }
     var group by rememberSaveable { mutableStateOf(repo.groupOverride) }
     var show by remember { mutableStateOf(false) }
+    var showPass by remember { mutableStateOf(false) }
     Column(
         Modifier.fillMaxSize().statusBarsPadding().imePadding()
             .verticalScroll(rememberScrollState()).padding(20.dp),
@@ -533,6 +534,25 @@ private fun SettingsScreen(repo: ParentRepo, first: Boolean, onDone: () -> Unit,
         }
         Card {
             Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("Парольная фраза сквозного шифрования (E2E)", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    "Если студент включил E2E-шифрование в «Наставнике» (Настройки → Синхронизация), введи его парольную фразу. Без неё данные студента не расшифруются. Парольная фраза хранится в защищённом KeyStore.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                OutlinedTextField(
+                    passphrase, { passphrase = it }, Modifier.fillMaxWidth().semantics { contentDescription = "Парольная фраза E2E" },
+                    singleLine = true, placeholder = { Text("парольная фраза студента") },
+                    visualTransformation = if (showPass) VisualTransformation.None else PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    trailingIcon = {
+                        Icon(painterResource(if (showPass) R.drawable.ic_eye_off else R.drawable.ic_eye), if (showPass) "Скрыть" else "Показать",
+                            Modifier.size(22.dp).clickable { showPass = !showPass })
+                    },
+                )
+            }
+        }
+        Card {
+            Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("Номер зачётной книжки", style = MaterialTheme.typography.titleSmall)
                 Text("Посещаемость, которую отмечает староста (itattendance.ru): был, опоздал, болезнь, прогул — у каждой пары. Хватит и одного номера — тогда без оценок.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 OutlinedTextField(book, { book = it }, Modifier.fillMaxWidth().semantics { contentDescription = "Номер зачётки" }, singleLine = true,
@@ -551,7 +571,7 @@ private fun SettingsScreen(repo: ParentRepo, first: Boolean, onDone: () -> Unit,
         }
         BackdropCard()
         Button(
-            onClick = { repo.save(token, book, group); onDone() },
+            onClick = { repo.save(token, book, group, passphrase); onDone() },
             enabled = token.isNotBlank() || book.isNotBlank(),
             modifier = Modifier.fillMaxWidth().height(52.dp),
             shape = RoundedCornerShape(18.dp),

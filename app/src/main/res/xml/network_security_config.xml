@@ -1,14 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--
-  Прокси вроде Claudex/CLIProxyAPI обычно запущены на компьютере в домашней сети по http://,
-  поэтому обычный http разрешён. Сертификаты, установленные пользователем, тоже принимаются —
-  на случай своего прокси с самоподписанным https.
--->
 <network-security-config>
-    <base-config cleartextTrafficPermitted="true">
+    <!-- Запрет незашифрованного HTTP-трафика по умолчанию и доверие только системным CA -->
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+
+    <!-- Разрешение локального трафика для домашних прокси (только loopback и приватные подсети) -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">localhost</domain>
+        <domain includeSubdomains="true">127.0.0.1</domain>
+        <domain includeSubdomains="true">10.in-addr.arpa</domain>
+        <domain includeSubdomains="true">local</domain>
+    </domain-config>
+
+    <!-- Пользовательские сертификаты (например, для отладочных proxy вроде Charles/Mitmproxy) разрешены строго в debug-сборках -->
+    <debug-overrides>
         <trust-anchors>
             <certificates src="system" />
             <certificates src="user" />
         </trust-anchors>
-    </base-config>
+    </debug-overrides>
 </network-security-config>

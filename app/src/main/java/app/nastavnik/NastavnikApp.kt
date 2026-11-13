@@ -14,12 +14,14 @@ import app.nastavnik.ai.OpenAiClient
 import app.nastavnik.data.AppDatabase
 import app.nastavnik.data.AppSettings
 import app.nastavnik.data.AppUsage
+import app.nastavnik.data.CoordStats
 import app.nastavnik.data.SettingsRepo
+import app.nastavnik.data.Updater
+import app.nastavnik.data.UpdateInfo
+import app.nastavnik.network.NetworkPolicy
 import app.nastavnik.ink.Notebooks
 import app.nastavnik.session.CleanSession
-import app.nastavnik.study.Reminders
 import app.nastavnik.study.Alarms
-import app.nastavnik.study.WakePrefs
 import app.nastavnik.ui.Palettes
 import app.nastavnik.schedule.ScheduleRepo
 import app.nastavnik.sync.SyncManager
@@ -30,11 +32,27 @@ import app.nastavnik.study.StudyRepo
 import app.nastavnik.study.Trainer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 
 class NastavnikApp : Application() {
     val settings: SettingsRepo by lazy { SettingsRepo(this) }
     val db: AppDatabase by lazy { AppDatabase.create(this) }
-    private val http by lazy { ClaudeClient.defaultHttp() }
+    private val networkPolicy by lazy {
+        NetworkPolicy(
+            allowInsecureLocal = { BuildConfig.DEBUG || settings.allowInsecureLocalProxy() },
+            trustedProxyHosts = {
+                setOfNotNull(
+                    settings.load().openAiBaseUrl.let { runCatching { java.net.URI(it).host }.getOrNull() },
+                    settings.load().anthropicCompatBaseUrl.let { runCatching { java.net.URI(it).host }.getOrNull() },
+                    if (BuildConfig.DEBUG) settings.debugBaseUrl()?.let { runCatching { java.net.URI(it).host }.getOrNull() } else null,
+                    "127.0.0.1",
+                    "localhost",
+                )
+            },
+        )
+    }
+    private val http by lazy { ClaudeClient.defaultHttp(networkPolicy) }
 
     val claude: ClaudeClient by lazy {
         ClaudeClient(http).apply {
@@ -55,6 +73,9 @@ class NastavnikApp : Application() {
     /** Карточки повторения и учебные события для «Прогресса». */
     val study: StudyRepo by lazy { StudyRepo(this) }
 
+    /** Статистика точности координат модели и разметка промахов. */
+    val coordStats: CoordStats by lazy { CoordStats(this) }
+
     /** Тренировочные варианты, мини-тесты и карточки из подсказок. */
     val trainer: Trainer by lazy { Trainer(this) }
 
@@ -70,6 +91,19 @@ class NastavnikApp : Application() {
 
     /** Синхронизация с другими устройствами через облако. */
     val sync: SyncManager by lazy { SyncManager(this) }
+
+    /** Обновление приложения прямо из интерфейса. */
+    val updater: Updater by lazy { Updater(this) }
+    val availableUpdate = MutableStateFlow<UpdateInfo?>(null)
+
+    fun checkUpdateInBackground() {
+        appScope.launch {
+            runCatching {
+                val info = updater.check()
+                availableUpdate.value = info
+            }
+        }
+    }
 
     /**
      * Планшет — тетради для стилуса и наставник поверх записей; телефон — расписание, карта, карточки, напоминания.
@@ -97,9 +131,8 @@ class NastavnikApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        // До первой разблокировки после перезагрузки обычные настройки и база недоступны —
-        // запускается только будильник (его состояние в отдельном хранилище). Остальное — после разблокировки.
-        if (!WakePrefs.unlocked(this)) {
+        // Обычные настройки и база доступны после первой разблокировки.
+        if (getSystemService(android.os.UserManager::class.java)?.isUserUnlocked == false) {
             createChannels()
             androidx.core.content.ContextCompat.registerReceiver(
                 this,
@@ -125,10 +158,10 @@ class NastavnikApp : Application() {
         settings.forgetLksPassword()
         settings.migrateToParentDesign()
         Palettes.installWallpaper(this)
-        // Лёгкая версия: без своих напоминаний (только расписание, оценки, живое уведомление).
-        if (!BuildConfig.STUDENT) Reminders.schedule(this)
+        if (!BuildConfig.STUDENT) Alarms.cancelRemovedReminders(this)
         Alarms.rescheduleAll(this)
         GradesJob.schedule(this)
+        checkUpdateInBackground()
     }
 
     private fun createChannels() {
@@ -142,38 +175,10 @@ class NastavnikApp : Application() {
             setShowBadge(false)
         }
         nm.createNotificationChannel(channel)
-        nm.createNotificationChannel(
-            NotificationChannel(CHANNEL_REMINDERS, "Повторение карточек", NotificationManager.IMPORTANCE_DEFAULT).apply {
-                description = "Раз в день вечером, если есть карточки к повторению и ты ещё не занимался"
-            },
-        )
-        nm.createNotificationChannel(
-            NotificationChannel(CHANNEL_PERSONAL, "Мои напоминания", NotificationManager.IMPORTANCE_HIGH).apply {
-                description = "Напоминания, которые ты создал сам — на любом из своих устройств"
-            },
-        )
+        listOf("wake", "sleep", "reminders", "personal", "lock").forEach(nm::deleteNotificationChannel)
         nm.createNotificationChannel(
             NotificationChannel(CHANNEL_GRADES, "Новые оценки", NotificationManager.IMPORTANCE_DEFAULT).apply {
                 description = "Когда в личном кабинете появляется новая оценка"
-            },
-        )
-        nm.createNotificationChannel(
-            NotificationChannel(CHANNEL_WAKE, "Будильник", NotificationManager.IMPORTANCE_HIGH).apply {
-                description = "Будильник к первой паре и проверка «Ты встал?». Звук играет сам будильник"
-                setSound(null, null)
-                enableVibration(false)
-                lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
-                setBypassDnd(true)
-            },
-        )
-        nm.createNotificationChannel(
-            NotificationChannel(CHANNEL_LOCK, "Вечерняя учёба", NotificationManager.IMPORTANCE_HIGH).apply {
-                description = "Предупреждение за 30 минут и замок приложений до вечерней учёбы"
-            },
-        )
-        nm.createNotificationChannel(
-            NotificationChannel(CHANNEL_SLEEP, "Сон", NotificationManager.IMPORTANCE_DEFAULT).apply {
-                description = "Вечером: когда лечь, чтобы проснуться в конце цикла сна"
             },
         )
         nm.createNotificationChannel(
@@ -185,13 +190,8 @@ class NastavnikApp : Application() {
 
     companion object {
         const val CHANNEL_SERVICE = "service"
-        const val CHANNEL_REMINDERS = "reminders"
-        const val CHANNEL_PERSONAL = "personal"
         const val CHANNEL_LESSONS = "lessons"
         const val CHANNEL_GRADES = "grades"
-        const val CHANNEL_WAKE = "wake"
-        const val CHANNEL_SLEEP = "sleep"
-        const val CHANNEL_LOCK = "study_lock"
     }
 }
 

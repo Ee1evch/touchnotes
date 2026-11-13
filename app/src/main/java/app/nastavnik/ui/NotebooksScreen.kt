@@ -6,6 +6,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,6 +27,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -156,11 +158,13 @@ fun NotebooksScreen(resumeTick: Int, onBack: () -> Unit, onOpen: (Long) -> Unit,
 /** Выбор бумаги: маленький листок с настоящей разлиновкой. */
 @Composable
 private fun PaperChoice(p: Paper, onClick: () -> Unit) {
+    val src = remember { MutableInteractionSource() }
     Column(
         Modifier
             .width(112.dp)
+            .pressable(src)
             .clip(RoundedCornerShape(16.dp))
-            .clickable(onClick = onClick)
+            .clickable(interactionSource = src, indication = ripple(), onClick = onClick)
             .padding(4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -214,6 +218,7 @@ private fun NotebookCard(m: NotebookMeta, onOpen: () -> Unit, onChanged: () -> U
     val context = LocalContext.current
     val nbs = context.app.notebooks
     val scope = rememberCoroutineScope()
+    val src = remember { MutableInteractionSource() }
     var menu by remember { mutableStateOf(false) }
     var confirm by remember { mutableStateOf(false) }
     var renaming by remember { mutableStateOf(false) }
@@ -228,8 +233,10 @@ private fun NotebookCard(m: NotebookMeta, onOpen: () -> Unit, onChanged: () -> U
     Column(
         Modifier
             .width(if (readOnly) 158.dp else 210.dp)
+            .enter()
+            .pressable(src)
             .glass(RoundedCornerShape(22.dp), 8.dp)
-            .clickable(onClick = onOpen)
+            .clickable(interactionSource = src, indication = ripple(), onClick = onOpen)
             .padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {

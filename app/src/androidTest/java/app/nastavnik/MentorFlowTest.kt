@@ -244,7 +244,8 @@ class MentorFlowTest {
         assertEquals("image", (lastContent[0].jsonObject["type"] as JsonPrimitive).content)
         // Размер снимка всегда в тексте; если запомнены другие страницы конспекта — с пояснением про них.
         assertTrue(bodies.first().contains("[Снимок экрана:") || bodies.first().contains("Последний снимок — текущий экран"))
-        val system = (first["system"] as JsonPrimitive).content
+        val system = (first["system"] as? JsonPrimitive)?.content
+            ?: (first["system"] as? JsonArray)?.joinToString("\n") { (it.jsonObject["text"] as? JsonPrimitive)?.content.orEmpty() }.orEmpty()
         assertTrue(system.contains("Ты — наставник"))
         assertTrue(system.contains("в пикселях"))
         // Тема из ответа становится названием задачи в истории.
@@ -662,34 +663,33 @@ class MentorFlowTest {
     }
 
     /** Редактор: все инструменты и жесты пером, как у человека. */
-    /** Тумблер «Наставник» в тетради: выключил — нет кнопки и панели наставника; включил — снова есть. */
+    /** Кнопка «Наставник» всегда доступна и открывает панель по нажатию. */
     @Test
-    fun notebookMentorToggle() {
+    fun notebookMentorButton() {
         val nbs = ctx.app.notebooks
-        val (meta, _) = nbs.store.create("Тумблер", app.nastavnik.ink.Paper.GRID)
+        val (meta, _) = nbs.store.create("Кнопка", app.nastavnik.ink.Paper.GRID)
         ctx.app.settings.setEditorTipsShown()
-        ctx.app.settings.setNotebookMentorOn(true)
         val sc = ActivityScenario.launch<MainActivity>(
             Intent(ctx, MainActivity::class.java)
                 .putExtra(MainActivity.EXTRA_SCREEN, MainActivity.SCREEN_NOTEBOOK)
                 .putExtra(MainActivity.EXTRA_NOTEBOOK, meta.id),
         )
         try {
-            assertNotNull("нет тумблера", device.wait(Until.findObject(By.text("Наставник")), 10000))
-            // На планшете панель открыта сразу — кнопка «Скрыть наставника»; на узком — «Показать».
-            val mentorButton = By.desc(java.util.regex.Pattern.compile("(Показать|Скрыть) наставника"))
-            assertNotNull("нет кнопки наставника", device.wait(Until.findObject(mentorButton), 5000))
-            device.findObject(By.checkable(true).checked(true))!!.click()
-            assertTrue("кнопка наставника осталась", device.wait(Until.gone(mentorButton), 5000))
-            assertFalse(ctx.app.settings.notebookMentorOn())
-            SystemClock.sleep(600)
-            screenshot("notebook_mentor_off")
-            device.findObject(By.checkable(true).checked(false))!!.click()
-            assertNotNull("кнопка не вернулась", device.wait(Until.findObject(mentorButton), 5000))
-            assertTrue(ctx.app.settings.notebookMentorOn())
+            val showBtn = device.wait(Until.findObject(By.desc("Показать наставника")), 4000)
+            if (showBtn != null) {
+                showBtn.click()
+                assertNotNull("панель не открылась", device.wait(Until.findObject(By.desc("Скрыть наставника")), 5000))
+                device.findObject(By.desc("Скрыть наставника"))?.click()
+                assertNotNull("кнопка пропала", device.wait(Until.findObject(By.desc("Показать наставника")), 5000))
+            } else {
+                val hideBtn = device.wait(Until.findObject(By.desc("Скрыть наставника")), 4000)
+                hideBtn?.click()
+                assertNotNull("панель не закрылась", device.wait(Until.findObject(By.desc("Показать наставника")), 5000))
+                device.findObject(By.desc("Показать наставника"))?.click()
+                assertNotNull("панель не открылась", device.wait(Until.findObject(By.desc("Скрыть наставника")), 5000))
+            }
         } finally {
             sc.close()
-            ctx.app.settings.setNotebookMentorOn(true)
             nbs.store.delete(meta.id)
         }
     }
@@ -799,10 +799,18 @@ class MentorFlowTest {
         device.findObject(By.desc("Ручка"))!!.click()
         penStroke((0..40).map { k -> (x0 + k * 10f) to (y0 + 560f) })
         device.findObject(By.desc("Ластик"))!!.click()
-        SystemClock.sleep(300)
-        device.findObject(By.desc("Настройки инструмента"))!!.click()
-        device.wait(Until.findObject(By.text("Часть линии")), 5000)!!.click()
-        SystemClock.sleep(400)
+        SystemClock.sleep(600)
+        val opt = device.wait(Until.findObject(By.desc("Настройки инструмента")), 5000)
+        opt?.click()
+        SystemClock.sleep(500)
+        var part = device.wait(Until.findObject(By.text("Часть линии")), 5000)
+        if (part == null) {
+            opt?.click()
+            SystemClock.sleep(500)
+            part = device.wait(Until.findObject(By.text("Часть линии")), 5000)
+        }
+        part?.click()
+        SystemClock.sleep(600)
         penStroke((0..10).map { k -> (x0 + 200f) to (y0 + 520f + k * 8f) })
         assertEquals("частичный ластик не разрезал линию", 3, page().strokes.size)
 
@@ -830,7 +838,7 @@ class MentorFlowTest {
         val st = ctx.app.settings
         try {
             var sc = ActivityScenario.launch<MainActivity>(Intent(ctx, MainActivity::class.java).putExtra(MainActivity.EXTRA_SCREEN, MainActivity.SCREEN_APPEARANCE))
-            assertNotNull("нет экрана оформления", device.wait(Until.findObject(By.desc("Тема Океан")), 8000))
+            assertNotNull("нет экрана оформления", findScrolling(By.desc("Тема Океан"), 10000))
             SystemClock.sleep(800)
             screenshot("appearance_light")
             device.findObject(By.desc("Тема Океан"))!!.click()

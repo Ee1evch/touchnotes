@@ -95,10 +95,112 @@ class InkLinesTest {
     }
 
     @Test
+    fun errorBoxStaysOnOneDetectedLine() {
+        val map = InkLines.detect(page(listOf(Triple(60, 40, 700), Triple(140, 40, 900))), w, h)
+        val wholePage = map.resolveError(PlaceRef(lines = 2..2, box = IRect(0, 0, w, h)))!!
+        assertTrue("широкая рамка должна стать строкой: $wholePage", wholePage.top > 100 && wholePage.bottom < 190)
+        assertTrue("высота строки: $wholePage", wholePage.height < 65)
+        assertEquals(null, map.resolveError(PlaceRef(box = IRect(0, 0, w, h))))
+        assertEquals(null, map.resolveError(PlaceRef(lines = 1..2)))
+    }
+
+    @Test
+    fun errorBoxSelectsOneOfSeveralLines() {
+        val map = InkLines.detect(page(listOf(Triple(60, 40, 700), Triple(140, 40, 900))), w, h)
+        val mark = map.resolveError(PlaceRef(lines = 1..2, box = IRect(35, 138, 950, 166)))!!
+        assertTrue("ошибка во второй строке: $mark", mark.top > 100 && mark.bottom < 190)
+    }
+
+    @Test
     fun emptyPageHasNoLines() {
         val map = InkLines.detect(IntArray(w * h) { 250 }, w, h)
         assertTrue(map.lines.isEmpty())
         val box = IRect(10, 10, 100, 100)
         assertEquals(box, map.resolve(PlaceRef(box = box)))
+    }
+
+    @Test
+    fun wholeScreenBoxIsNotHighlighted() {
+        val map = InkLines.detect(page(listOf(Triple(60, 40, 700), Triple(140, 40, 900))), w, h)
+        // Модель обвела весь экран — подсветки нет, заметка просто без места.
+        assertEquals(null, map.resolve(PlaceRef(box = IRect(0, 0, w, h)), hintLike = true))
+        assertEquals(null, map.resolve(PlaceRef(box = IRect(0, 300, w, h))))
+        // А небольшая рамка остаётся.
+        assertNotNull(map.resolve(PlaceRef(box = IRect(100, 400, 400, 450)), hintLike = true))
+    }
+
+    @Test
+    fun giantDetectedLineFallsBackToModelBox() {
+        // Фото или PDF под записью: «строка» на весь лист.
+        val px = IntArray(w * h) { 250 }
+        for (yy in 20 until h - 20) for (xx in 40 until 1100) if ((xx * 7 + yy * 3) % 5 == 0) px[yy * w + xx] = 30
+        val map = InkLines.detect(px, w, h)
+        assertEquals(null, map.resolve(PlaceRef(lines = 1..1)))
+        val box = IRect(300, 300, 600, 340)
+        val resolved = map.resolve(PlaceRef(lines = 1..1, box = box))!!
+        assertTrue("выделен только кусок: $resolved", resolved.left >= 285 && resolved.right <= 615 && resolved.height <= 65)
+    }
+
+    @Test
+    fun subPieceInsideSingleContinuousLineIsNotStretchedToFullLine() {
+        val map = InkLines.detect(page(listOf(Triple(140, 40, 960))), w, h)
+        assertEquals(1, map.lines.size)
+        // Даже если вся строка — один сегмент 40..960, рамка вокруг одного слагаемого выделяет именно этот кусок.
+        val piece = IRect(380, 132, 520, 174)
+        val byLineAndBox = map.resolve(PlaceRef(lines = 1..1, box = piece))!!
+        assertTrue("не растянулось на всю строку: $byLineAndBox", byLineAndBox.left >= 365 && byLineAndBox.right <= 535)
+        val byError = map.resolveError(PlaceRef(lines = 1..1, box = piece))!!
+        assertTrue("ошибка выделяет только кусок: $byError", byError.left >= 370 && byError.right <= 530)
+        val bySnap = map.resolve(PlaceRef(box = piece))!!
+        assertTrue("snap выделяет только кусок: $bySnap", bySnap.left >= 365 && bySnap.right <= 535)
+    }
+
+    @Test
+    fun denseConsecutiveLinesDoNotMergeIntoMegaBand() {
+        // 6 плотно идущих строк с небольшими разрывами между ними
+        val spec = (0 until 6).map { Triple(50 + it * 45, 50, 950) }
+        val map = InkLines.detect(page(spec), w, h)
+        assertTrue("строки не должны сливаться в 1-2 мега-строки: ${map.lines.size}", map.lines.size >= 4)
+        map.lines.forEach { line ->
+            assertTrue("высота строки не должна быть на полстраницы: ${line.height}", line.height < 65)
+        }
+    }
+
+    @Test
+    fun pieceCoordinatesResolveToUnifiedPieceNotWholePage() {
+        val spec = listOf(Triple(60, 40, 700), Triple(140, 40, 900), Triple(230, 80, 500))
+        val map = InkLines.detect(page(spec), w, h)
+        // Модель выделила слагаемое в строке 2 (например, 200..320)
+        val pieceBox = IRect(200, 135, 320, 170)
+        val resolved = map.resolve(PlaceRef(lines = 2..2, box = pieceBox))!!
+        assertTrue("выделение ограничено куском по горизонтали: $resolved", resolved.left in 190..210 && resolved.right in 315..335)
+        assertTrue("выделение ограничено одной строкой: $resolved", resolved.height in 20..60)
+    }
+
+    @Test
+    fun verificationDetectsMissAndFallsBackToLineHighlight() {
+        val spec = listOf(Triple(60, 40, 700), Triple(140, 40, 900), Triple(230, 80, 500))
+        val map = InkLines.detect(page(spec), w, h)
+        // Строка 2 заканчивается на x=900. Модель дала координаты рамки в пустом поле справа (1050..1150)
+        val missBox = IRect(1050, 135, 1150, 170)
+        val v = map.resolveErrorVerified(PlaceRef(lines = 2..2, box = missBox))
+        // Рамка не легла на чернила -> зафиксирован промах, включена подсветка всей строки 2
+        assertTrue("должен быть зафиксирован промах мимо чернил", !v.hitInk)
+        assertTrue("должен включиться откат на подсветку всей строки", v.lineFallback)
+        assertNotNull(v.rect)
+        assertTrue("подсветка строки 2 охватывает чернила строки: ${v.rect}", v.rect!!.left in 25..45 && v.rect!!.right in 895..925)
+    }
+
+    @Test
+    fun verificationConfirmsHitWhenBoxLiesOnInk() {
+        val spec = listOf(Triple(60, 40, 700), Triple(140, 40, 900), Triple(230, 80, 500))
+        val map = InkLines.detect(page(spec), w, h)
+        // Рамка попала на чернила в строке 2 (например 300..450)
+        val hitBox = IRect(300, 135, 450, 170)
+        val v = map.resolveErrorVerified(PlaceRef(lines = 2..2, box = hitBox))
+        assertTrue("должно быть подтверждено попадание в чернила", v.hitInk)
+        assertTrue("не должно быть отката на всю строку", !v.lineFallback)
+        assertNotNull(v.rect)
+        assertTrue("выделен компактный кусок: ${v.rect}", v.rect!!.left in 290..315 && v.rect!!.right in 440..465)
     }
 }

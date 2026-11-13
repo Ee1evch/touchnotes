@@ -6,8 +6,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class HomeLayoutTest {
-    private val known = setOf("day", "plan", "cards", "streak", "alarm", "reminders")
-    private val default = listOf(Item("day", Size.L), Item("cards", Size.S), Item("streak", Size.S), Item("alarm", Size.S))
+    private val known = setOf("day", "plan", "cards", "streak", "exam", "reminders")
+    private val default = listOf(Item("day", Size.L), Item("cards", Size.S), Item("streak", Size.S), Item("exam", Size.S))
 
     @Test
     fun spansOnPhoneAndTablet() {
@@ -18,13 +18,13 @@ class HomeLayoutTest {
     @Test
     fun rowsPackInOrder() {
         val items = listOf(
-            Item("day", Size.L), Item("cards", Size.S), Item("streak", Size.S), Item("alarm", Size.S),
+            Item("day", Size.L), Item("cards", Size.S), Item("streak", Size.S), Item("exam", Size.S),
             Item("plan", Size.M), Item("reminders", Size.S), Item("x", Size.M),
         )
         // Телефон: L | S S S | M S (5 из 6) | M
-        assertEquals(listOf(listOf("day"), listOf("cards", "streak", "alarm"), listOf("plan", "reminders"), listOf("x")), HomeLayout.rows(items, 6).map { r -> r.map { it.id } })
+        assertEquals(listOf(listOf("day"), listOf("cards", "streak", "exam"), listOf("plan", "reminders"), listOf("x")), HomeLayout.rows(items, 6).map { r -> r.map { it.id } })
         // Планшет: L | S S S (9 из 12, M уже не влезает) | M S (9 из 12) | M
-        assertEquals(listOf(listOf("day"), listOf("cards", "streak", "alarm"), listOf("plan", "reminders"), listOf("x")), HomeLayout.rows(items, 12).map { r -> r.map { it.id } })
+        assertEquals(listOf(listOf("day"), listOf("cards", "streak", "exam"), listOf("plan", "reminders"), listOf("x")), HomeLayout.rows(items, 12).map { r -> r.map { it.id } })
     }
 
     @Test
@@ -46,7 +46,7 @@ class HomeLayoutTest {
         assertEquals(items, HomeLayout.move(items, 0, -1))
         assertEquals(Size.L, HomeLayout.resize(items, 1, Size.L)[1].size)
         assertEquals(listOf("day", "plan"), HomeLayout.remove(items, 1).map { it.id })
-        assertEquals(listOf("day", "cards", "plan", "alarm"), HomeLayout.add(items, "alarm", Size.S).map { it.id })
+        assertEquals(listOf("day", "cards", "plan", "exam"), HomeLayout.add(items, "exam", Size.S).map { it.id })
         assertEquals(items, HomeLayout.add(items, "day", Size.S))
     }
 }

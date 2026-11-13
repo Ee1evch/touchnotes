@@ -26,6 +26,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -119,34 +120,25 @@ class MainActivity : ComponentActivity() {
                     // Телефон — только просмотр: пишут стилусом на планшете.
                     go(if (tablet) SCREEN_NOTEBOOK else SCREEN_VIEWER)
                 }
-                BackHandler(enabled = screen != SCREEN_HOME || (!tablet && phoneTab != PhoneTab.TODAY)) {
-                    when (screen) {
-                        SCREEN_HOME -> phoneTab = PhoneTab.TODAY
-                        SCREEN_CLEAN_TEST -> go(SCREEN_CLEAN)
-                        SCREEN_APPEARANCE -> go(SCREEN_SETTINGS)
-                        SCREEN_VIEWER -> go(SCREEN_NOTEBOOKS)
-                        SCREEN_LKS -> go(SCREEN_GRADES)
-                        else -> home()
+                BackHandler(enabled = true) {
+                    when {
+                        screen != SCREEN_HOME -> {
+                            when (screen) {
+                                SCREEN_CLEAN_TEST -> go(SCREEN_CLEAN)
+                                SCREEN_APPEARANCE -> go(SCREEN_SETTINGS)
+                                SCREEN_VIEWER -> go(SCREEN_NOTEBOOKS)
+                                SCREEN_NOTEBOOK -> go(SCREEN_NOTEBOOKS)
+                                SCREEN_LKS -> go(SCREEN_GRADES)
+                                else -> home()
+                            }
+                        }
+                        !tablet && phoneTab != PhoneTab.TODAY -> phoneTab = PhoneTab.TODAY
+                        else -> {
+                            if (fromOverlay) moveTaskToBack(true) else finish()
+                        }
                     }
                 }
-                askShared?.let { uris ->
-                    androidx.compose.material3.AlertDialog(
-                        onDismissRequest = { askShared = null },
-                        title = { Text("Что это за файл?") },
-                        text = { Text("Домашку наставник разберёт на задачи и будет проверять, пока не сделаешь на 100%. В тетрадь — просто писать поверх.") },
-                        confirmButton = {
-                            androidx.compose.material3.TextButton(onClick = {
-                                askShared = null
-                                sharedHomework = uris.first()
-                                fromOverlay = false
-                                screen = SCREEN_HOMEWORK
-                            }) { Text("Это домашка") }
-                        },
-                        dismissButton = {
-                            androidx.compose.material3.TextButton(onClick = { askShared = null; importShared(uris, "pdf") }) { Text("В тетрадь") }
-                        },
-                    )
-                }
+
                 // «Наставник · Студент»: только расписание, оценки и настройки.
                 if (BuildConfig.STUDENT) {
                     StudentShell()
@@ -160,9 +152,9 @@ class MainActivity : ComponentActivity() {
                 AnimatedContent(
                     targetState = screen,
                     transitionSpec = {
-                        // «Сквозное проявление» Material 3: старый экран быстро гаснет, новый проявляется с лёгким приближением.
-                        (fadeIn(Motion.enter(300, delay = 60)) + scaleIn(Motion.enter(300, delay = 60), initialScale = 0.96f))
-                            .togetherWith(fadeOut(Motion.exit(90)))
+                        // «Сквозное проявление» Material 3: старый экран мягко гаснет, новый проявляется с лёгким приближением.
+                        (fadeIn(tween(260, easing = Motion.Decelerate)) + scaleIn(spring(dampingRatio = 0.88f, stiffness = 450f), initialScale = 0.97f))
+                            .togetherWith(fadeOut(tween(160, easing = Motion.Accelerate)))
                     },
                     label = "screen",
                 ) { target ->
@@ -170,7 +162,6 @@ class MainActivity : ComponentActivity() {
                         SCREEN_NOTEBOOKS -> NotebooksScreen(resumeTick, onBack = home, onOpen = openNotebook, readOnly = !tablet)
                         SCREEN_VIEWER -> NotebookViewer(notebookId, onBack = { go(SCREEN_NOTEBOOKS) })
                         SCREEN_SCHEDULE -> ScheduleScreen(onBack = home)
-                        SCREEN_REMINDERS -> RemindersScreen(onBack = home)
                         SCREEN_GRADES -> GradesScreen(onBack = home, onSettings = { go(SCREEN_SETTINGS) }, onLks = { go(SCREEN_LKS) })
                         SCREEN_LKS -> LksScreen(onBack = { go(SCREEN_GRADES) }, onDone = { go(SCREEN_GRADES) })
                         SCREEN_NOTEBOOK -> if (notebookId != 0L) {
@@ -192,12 +183,10 @@ class MainActivity : ComponentActivity() {
                         )
                         SCREEN_ONBOARDING -> OnboardingScreen(resumeTick, onDone = { screen = SCREEN_HOME; moveTaskToBack(true) }, onSkip = { screen = SCREEN_HOME })
                         SCREEN_SETTINGS -> SettingsScreen(onBack = home, onAppearance = { go(SCREEN_APPEARANCE) }, onOnboarding = { go(SCREEN_ONBOARDING) }, onLks = { go(SCREEN_LKS) }, go = go)
-                        SCREEN_EVENING -> EveningScreen(resumeTick, onBack = home, go = go)
                         SCREEN_HOMEWORK -> HomeworkScreen(
                             resumeTick, onBack = home, openNotebook = openNotebook,
                             sharedFile = sharedHomework, onSharedUsed = { sharedHomework = null },
                         )
-                        SCREEN_LOCK_SETUP -> StudyLockSetupScreen(onBack = { go(SCREEN_SETTINGS) }, onDone = { go(SCREEN_EVENING) })
                         SCREEN_APPEARANCE -> AppearanceScreen(onBack = { go(SCREEN_SETTINGS) })
                         SCREEN_HISTORY -> HistoryScreen(onBack = home, onCleanReady = { go(SCREEN_CLEAN) })
                         SCREEN_SEARCH -> SearchScreen(
@@ -238,15 +227,17 @@ class MainActivity : ComponentActivity() {
         if (uris.isEmpty()) return
         val type = intent.type ?: uris.firstOrNull()?.let { contentResolver.getType(it) }.orEmpty()
         // PDF — может быть домашкой: спросим.
-        if (type.contains("pdf")) { askShared = uris; return }
+        if (type.contains("pdf")) { importShared(uris, "pdf"); return }
         importShared(uris, type)
     }
 
     private fun importShared(uris: List<Uri>, type: String) {
         importing = true
         lifecycleScope.launch {
-            val nbs = app.notebooks
-            val meta = if (type.contains("pdf")) nbs.importPdf(uris.first()) else nbs.importImages(uris)
+            val meta = runCatching {
+                val nbs = app.notebooks
+                if (type.contains("pdf")) nbs.importPdf(uris.first()) else nbs.importImages(uris)
+            }.getOrNull()
             importing = false
             if (meta != null) {
                 fromOverlay = false
@@ -310,6 +301,18 @@ class MainActivity : ComponentActivity() {
         outState.putString(KEY_TAB, phoneTab.name)
     }
 
+    override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
+        if (event.keyCode == android.view.KeyEvent.KEYCODE_BACK) {
+            val fromStylus = event.isFromSource(android.view.InputDevice.SOURCE_STYLUS) ||
+                (event.source and android.view.InputDevice.SOURCE_BLUETOOTH_STYLUS != 0)
+            if (fromStylus) {
+                // Нажатие кнопки пера / жест стилуса не должны закрывать тетрадь или выходить из приложения.
+                return true
+            }
+        }
+        return super.dispatchKeyEvent(event)
+    }
+
     companion object {
         const val EXTRA_SCREEN = "screen"
         const val SCREEN_HOME = "home"
@@ -327,13 +330,10 @@ class MainActivity : ComponentActivity() {
         const val SCREEN_EXAMS = "exams"
         const val SCREEN_NOTEBOOK = "notebook"
         const val SCREEN_SCHEDULE = "schedule"
-        const val SCREEN_REMINDERS = "reminders"
         const val SCREEN_VIEWER = "viewer"
         const val SCREEN_GRADES = "grades"
         const val SCREEN_LKS = "lks"
-        const val SCREEN_EVENING = "evening"
         const val SCREEN_HOMEWORK = "homework"
-        const val SCREEN_LOCK_SETUP = "lock_setup"
         const val EXTRA_NOTEBOOK = "notebook_id"
         const val EXTRA_FROM_OVERLAY = "from_overlay"
 
@@ -356,7 +356,7 @@ private fun ImportingScreen() {
     }
 }
 
-/** Оформление из настроек — одно для всех экранов (и для будильника: иначе он перекрашивал приложение в светлое). */
+/** Оформление из настроек — одно для всех экранов. */
 internal fun appearanceOf(st: AppSettings) = Appearance(
     mode = runCatching { ThemeMode.valueOf(st.themeMode) }.getOrDefault(ThemeMode.LIGHT),
     light = st.lightTheme,

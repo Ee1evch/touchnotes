@@ -1,10 +1,14 @@
 package app.nastavnik.session
 
+import android.os.SystemClock
+import android.util.Log
+import app.nastavnik.BuildConfig
 import app.nastavnik.NastavnikApp
 import app.nastavnik.ai.AiErrors
 import app.nastavnik.ai.AiException
 import app.nastavnik.ai.ChatRequest
 import app.nastavnik.ai.ChatTurn
+import app.nastavnik.ai.DrawingKind
 import app.nastavnik.ai.ImagePart
 import app.nastavnik.ai.Mark
 import app.nastavnik.ai.MarkKind
@@ -62,6 +66,9 @@ data class ShotGeometry(
         /** Последний снимок для наставника — по нему тесты узнают номера строк. */
         @Volatile
         var last: ShotGeometry? = null
+
+        /** Овал-рисунок выше этой доли снимка — уже не «вокруг места», а вокруг всего листа. */
+        private const val MAX_ELLIPSE = 0.3f
     }
 
     /** Ширина всего снимка, который видит модель (с полем). */
@@ -72,6 +79,15 @@ data class ShotGeometry(
      * рамку «на глаз» притягиваем к строкам, которые она задевает.
      */
     fun place(m: Mark): Mark {
+        if (m.drawing != null) {
+            val b = m.box ?: return m
+            val left = ((b.left * sentW - gutter) / imageW).coerceIn(0f, 1f)
+            val right = ((b.right * sentW - gutter) / imageW).coerceIn(0f, 1f)
+            val box = NBox(left, b.top, right, b.bottom)
+            // Овал вокруг всего экрана ничего не показывает — такой рисунок не рисуем.
+            val tooBig = m.drawing.kind == DrawingKind.ELLIPSE && (box.height > MAX_ELLIPSE || box.width * box.height > MAX_ELLIPSE * MAX_ELLIPSE * 2)
+            return m.copy(box = box.takeIf { it.width > 0f && it.height > 0f && !tooBig }, rawModelBox = m.box)
+        }
         val map = lines ?: LineMap(emptyList(), imageW, imageH)
         val px = m.box?.let {
             IRect(
@@ -79,15 +95,23 @@ data class ShotGeometry(
                 (it.right * sentW).toInt() - gutter, (it.bottom * imageH).toInt(),
             )
         }
-        val r = map.resolve(PlaceRef(m.lines, m.after, px), hintLike = m.kind == MarkKind.HINT)
-            ?: return m.copy(box = null, lines = null, after = null)
+        val ref = PlaceRef(m.lines, m.after, px)
+        val v = if (m.kind == MarkKind.ERROR) map.resolveErrorVerified(ref)
+            else map.resolveVerified(ref, hintLike = m.kind == MarkKind.HINT)
+        val r = v.rect ?: return m.copy(box = null, lines = m.lines, after = null, rawModelBox = m.box, coordMiss = v.hasModelBox && !v.hitInk)
         val w = imageW.toFloat()
         val h = imageH.toFloat()
         val box = NBox(
             (r.left / w).coerceIn(0f, 1f), (r.top / h).coerceIn(0f, 1f),
             (r.right / w).coerceIn(0f, 1f), (r.bottom / h).coerceIn(0f, 1f),
         )
-        return m.copy(box = box.takeIf { it.width > 0f && it.height > 0f }, lines = null, after = null)
+        return m.copy(
+            box = box.takeIf { it.width > 0f && it.height > 0f },
+            lines = m.lines,
+            after = null,
+            rawModelBox = m.box,
+            coordMiss = v.hasModelBox && !v.hitInk,
+        )
     }
 
     fun toScreen(b: NBox): IRect = IRect(
@@ -224,6 +248,7 @@ class MentorSession(
             fun set(a: AnswerUi?) = _state.update { it.copy(answer = a) }
             // Тихая проверка не трогает то, что уже на экране, пока не найдёт ошибку.
             if (kind != AskKind.WATCH) set(AnswerUi(id, kind, question, status = "Смотрю на экран…"))
+            val startedAt = SystemClock.elapsedRealtime()
             val r = try {
                 shot()
             } catch (e: CancellationException) {
@@ -244,11 +269,12 @@ class MentorSession(
             }
             val base = AnswerUi(id, kind, question, status = "Думаю…", geometry = ok.geometry, thumb = ok.thumb)
             if (kind != AskKind.WATCH) set(base)
-            run(base, ok)
+            if (BuildConfig.DEBUG) Log.d("MentorTiming", "capture_ms=${SystemClock.elapsedRealtime() - startedAt}")
+            run(base, ok, startedAt)
         }
     }
 
-    private suspend fun run(base: AnswerUi, shot: ShotResult.Ok) {
+    private suspend fun run(base: AnswerUi, shot: ShotResult.Ok, startedAt: Long) {
         val settings = app.settings.load()
         val silent = base.kind == AskKind.WATCH
         val now = System.currentTimeMillis()
@@ -283,12 +309,21 @@ class MentorSession(
                 turns = turns,
                 // Сначала страницы всего конспекта, последним — текущий экран с номерами строк.
                 images = shot.context.map { ImagePart(it) } + ImagePart(shot.jpeg),
-                maxTokens = MAX_TOKENS,
-                fast = settings.fastAnswers,
+                maxTokens = if (settings.fastAnswers && base.kind != AskKind.USER) FAST_MAX_TOKENS else MAX_TOKENS,
+                fast = settings.fastAnswers || base.kind == AskKind.WATCH || base.kind == AskKind.QUICK,
             )
+            val requestAt = SystemClock.elapsedRealtime()
+            var firstTokenAt = 0L
             val stop = app.ai(settings).stream(app.settings.apiKey(settings.provider), request) { update ->
                 when (update) {
                     is StreamUpdate.Text -> {
+                        if (firstTokenAt == 0L && update.delta.isNotEmpty()) {
+                            firstTokenAt = SystemClock.elapsedRealtime()
+                            val ttft = firstTokenAt - requestAt
+                            if (BuildConfig.DEBUG) {
+                                Log.d("MentorTiming", "запрос→первый токен: ${ttft}мс (first_text_ms=${firstTokenAt - startedAt} network_ms=$ttft)")
+                            }
+                        }
                         raw.append(update.delta)
                         val t = System.currentTimeMillis()
                         if (t - lastEmit > 80) {
@@ -302,6 +337,14 @@ class MentorSession(
                     }
                     else -> Unit
                 }
+            }
+            val completedAt = SystemClock.elapsedRealtime()
+            val totalMs = completedAt - startedAt
+            val totalNetworkMs = completedAt - requestAt
+            val firstTokenMs = if (firstTokenAt > 0L) firstTokenAt - requestAt else totalNetworkMs
+            if (BuildConfig.DEBUG) {
+                Log.d("MentorTiming", "запрос→первый токен→полный ответ: ${firstTokenMs}мс → ${totalNetworkMs}мс (всего=${totalMs}мс, fast=${request.fast}, model=${settings.model})")
+                Log.d("MentorTiming", "complete_ms=$totalMs")
             }
             var final = parse(false)
             if (final.marks.isEmpty() && !final.allGood) throw AiErrors.badResponse("пустой ответ")
@@ -339,12 +382,31 @@ class MentorSession(
                 val at = System.currentTimeMillis()
                 val list = MistakeMemory.add(MistakeMemory.decode(app.settings.mistakesJson()), found.map { Mistake(it.text, topic, at) })
                 app.settings.setMistakesJson(MistakeMemory.encode(list))
+                try {
+                    app.study.saveMistakes(found.map { Mistake(it.detail ?: it.text, topic, at) })
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    // Запись в дневник не должна скрыть готовый ответ наставника.
+                }
             }
             app.study.record(
                 if (silent) Progress.KIND_WATCH else Progress.KIND_ASK,
                 topic,
                 final.marks.count { it.kind == MarkKind.ERROR },
             )
+            // Статистика качества координат модели: фиксируем попадания и промахи
+            final.marks.forEach { mark ->
+                if (mark.rawModelBox != null) {
+                    app.coordStats.record(
+                        hit = !mark.coordMiss,
+                        model = settings.model,
+                        line = mark.lines?.first,
+                        box = mark.rawModelBox.let { "[${it.left}, ${it.top}, ${it.right}, ${it.bottom}]" },
+                        question = base.question,
+                    )
+                }
+            }
             _state.update {
                 it.copy(answer = base.copy(marks = final.marks, streaming = false, status = null, done = final.done, allGood = final.allGood))
             }
@@ -406,6 +468,7 @@ class MentorSession(
     companion object {
         /** С запасом: adaptive thinking тоже тратит max_tokens, а сам ответ короткий. */
         const val MAX_TOKENS = 16000
+        private const val FAST_MAX_TOKENS = 4096
         private const val MAX_HISTORY = 12
         private const val NEW_TASK_AFTER_MS = 40 * 60 * 1000L
         private const val GENERIC_TITLE = "Задача · "

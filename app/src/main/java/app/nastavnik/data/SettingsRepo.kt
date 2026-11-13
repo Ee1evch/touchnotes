@@ -69,7 +69,7 @@ data class AppSettings(
  */
 class SettingsRepo(private val context: Context) {
     private val prefs: SharedPreferences = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-    private val secure: SharedPreferences? by lazy { openSecure() }
+    private val vault: KeyStoreVault by lazy { KeyStoreVault(context).also { migrateToVault(it) } }
 
     fun provider(): AiProvider = AiProvider.byName(prefs.getString(K_PROVIDER, null))
 
@@ -195,9 +195,6 @@ class SettingsRepo(private val context: Context) {
     fun setExamsJson(json: String) = prefs.edit { putString(K_EXAMS, json) }
 
     fun notebookAutoCheck(): Boolean = prefs.getBoolean(K_NB_AUTO, false)
-    /** Наставник в тетради: выключен — ни панели, ни автопроверки, ни обращений к нейросети из тетради. */
-    fun notebookMentorOn(): Boolean = prefs.getBoolean(K_NB_MENTOR, true)
-    fun setNotebookMentorOn(on: Boolean) = prefs.edit { putBoolean(K_NB_MENTOR, on) }
     fun setNotebookAutoCheck(on: Boolean) = prefs.edit { putBoolean(K_NB_AUTO, on) }
 
     /** Подставить настройки, вставленные из прокси (Claudex и т.п.). */
@@ -208,6 +205,9 @@ class SettingsRepo(private val context: Context) {
                 AiProvider.OPENAI_COMPAT -> setOpenAiBaseUrl(it)
                 AiProvider.ANTHROPIC_COMPAT -> setAnthropicCompatBaseUrl(it)
                 else -> Unit
+            }
+            if (it.startsWith("http://", ignoreCase = true)) {
+                setAllowInsecureLocalProxy(true)
             }
         }
         c.authMode?.let(::setAuthMode)
@@ -247,6 +247,9 @@ class SettingsRepo(private val context: Context) {
     fun setProjectionExplained(v: Boolean) = prefs.edit { putBoolean(K_PROJ_EXPLAINED, v) }
     fun setActiveConversation(id: Long) = prefs.edit { putLong(K_ACTIVE_CONV, id) }
 
+    fun allowInsecureLocalProxy(): Boolean = prefs.getBoolean(K_ALLOW_INSECURE_LOCAL, false)
+    fun setAllowInsecureLocalProxy(on: Boolean) = prefs.edit { putBoolean(K_ALLOW_INSECURE_LOCAL, on) }
+
     /** Только для отладочной сборки: адрес мок-сервера вместо api.anthropic.com (используют тесты). */
     fun debugBaseUrl(): String? = prefs.getString(K_DEBUG_BASE_URL, null)?.takeIf { it.isNotBlank() }
     fun setDebugBaseUrl(url: String?) = prefs.edit { putString(K_DEBUG_BASE_URL, url) }
@@ -254,28 +257,28 @@ class SettingsRepo(private val context: Context) {
     // --- API-ключ ---
 
     /** false, если зашифрованное хранилище не открылось (тогда ключ живёт только до перезапуска). */
-    val secureStorageOk: Boolean get() = secure != null
+    val secureStorageOk: Boolean get() = vault.isAvailable()
 
-    /** Ключи на случай, если зашифрованное хранилище не открылось. */
+    /** Ключи на случай, если аппаратное хранилище не открылось. */
     private val memoryKeys = java.util.concurrent.ConcurrentHashMap<AiProvider, String>()
     @Volatile private var memorySyncPassword: String? = null
+    @Volatile private var memorySyncPassphrase: String? = null
 
     private fun keyName(p: AiProvider) = "${K_API_KEY}_${p.name}"
 
     /** Ключ провайдера [p] (по умолчанию — выбранного сейчас). */
     fun apiKey(p: AiProvider = provider()): String {
-        val s = secure
-        val stored = s?.getString(keyName(p), null)
+        val stored = vault.getString(keyName(p))
             // Ключ Anthropic из первой версии хранился без суффикса.
-            ?: (if (p == AiProvider.ANTHROPIC) s?.getString(K_API_KEY, null) else null)
+            ?: (if (p == AiProvider.ANTHROPIC) vault.getString(K_API_KEY) else null)
             ?: memoryKeys[p]
         return stored.orEmpty().trim()
     }
 
     fun setApiKey(key: String, p: AiProvider = provider()) {
         val clean = key.trim()
-        val s = secure
-        if (s != null) s.edit { putString(keyName(p), clean) } else memoryKeys[p] = clean
+        vault.putString(keyName(p), clean)
+        memoryKeys[p] = clean
         // Дёргаем обычные настройки, чтобы подписчики flow() узнали об изменении.
         prefs.edit { putLong(K_KEY_STAMP, System.currentTimeMillis()) }
     }
@@ -311,41 +314,43 @@ class SettingsRepo(private val context: Context) {
     // ---------- успеваемость (ЛКС) ----------
     fun gradesUrl(): String = prefs.getString(K_GRADES_URL, "").orEmpty()
     fun gradesLogin(): String = prefs.getString(K_GRADES_LOGIN, "").orEmpty()
-    /** Пароль ЛКС и выданный сайтом токен — только в зашифрованных настройках. */
-    fun gradesPassword(): String = secure?.getString(K_GRADES_PASSWORD, null).orEmpty()
-    fun gradesToken(): String = secure?.getString(K_GRADES_TOKEN, null).orEmpty()
+    /** Пароль ЛКС и выданный сайтом токен — только в аппаратном хранилище KeyStore. */
+    fun gradesPassword(): String = vault.getString(K_GRADES_PASSWORD).orEmpty()
+    fun gradesToken(): String = vault.getString(K_GRADES_TOKEN).orEmpty()
     fun setGrades(url: String, login: String, password: String, token: String) {
         prefs.edit { putString(K_GRADES_URL, url.trim()); putString(K_GRADES_LOGIN, login.trim()) }
-        secure?.edit { putString(K_GRADES_PASSWORD, password); putString(K_GRADES_TOKEN, token) }
+        vault.putString(K_GRADES_PASSWORD, password)
+        vault.putString(K_GRADES_TOKEN, token)
     }
-    fun setGradesToken(token: String) { secure?.edit { putString(K_GRADES_TOKEN, token) } }
+    fun setGradesToken(token: String) { vault.putString(K_GRADES_TOKEN, token) }
     fun clearGrades() {
         prefs.edit { remove(K_GRADES_URL); remove(K_GRADES_LOGIN) }
-        secure?.edit { remove(K_GRADES_PASSWORD); remove(K_GRADES_TOKEN) }
+        vault.remove(K_GRADES_PASSWORD)
+        vault.remove(K_GRADES_TOKEN)
     }
     val gradesConfigured: Boolean get() = gradesUrl().isNotEmpty() && gradesToken().isNotEmpty()
 
     /** ЛКС Сириуса: вход на сайт во встроенном окне (он пускает только с российских адресов — то есть с телефона). */
     fun lksLogin(): String = prefs.getString(K_LKS_LOGIN, "").orEmpty()
-    fun lksPassword(): String = secure?.getString(K_LKS_PASSWORD, null).orEmpty()
+    fun lksPassword(): String = ""
     /** Адрес страницы успеваемости, которую человек показал один раз. */
     fun lksPage(): String = prefs.getString(K_LKS_PAGE, "").orEmpty()
     fun setLks(login: String, password: String) {
         prefs.edit { putString(K_LKS_LOGIN, login.trim()) }
-        secure?.edit { putString(K_LKS_PASSWORD, password) }
     }
     fun setLksPage(url: String) = prefs.edit { putString(K_LKS_PAGE, url) }
-    /** Куки сессии ЛКС (зашифрованно) — чтобы не входить при каждом открытии. */
-    fun lksCookies(): String = secure?.getString(K_LKS_COOKIES, null).orEmpty()
-    fun setLksCookies(v: String) { secure?.edit { putString(K_LKS_COOKIES, v) } }
+    /** Куки сессии ЛКС (зашифрованно в KeyStore) — чтобы не входить при каждом открытии. */
+    fun lksCookies(): String = vault.getString(K_LKS_COOKIES).orEmpty()
+    fun setLksCookies(v: String) { vault.putString(K_LKS_COOKIES, v) }
     fun clearLks() {
         prefs.edit { remove(K_LKS_LOGIN); remove(K_LKS_PAGE) }
-        secure?.edit { remove(K_LKS_PASSWORD); remove(K_LKS_COOKIES) }
+        vault.remove(K_LKS_PASSWORD)
+        vault.remove(K_LKS_COOKIES)
     }
     /** ЛКС подключён, если есть сессия (вход делает человек в окне сайта — там капча). */
     val lksConfigured: Boolean get() = lksCookies().isNotEmpty()
     /** Пароль ЛКС больше не храним: стереть, если остался от старой версии. */
-    fun forgetLksPassword() { if (secure?.contains(K_LKS_PASSWORD) == true) secure?.edit { remove(K_LKS_PASSWORD) } }
+    fun forgetLksPassword() { vault.remove(K_LKS_PASSWORD) }
 
 
     // ---------- устройство ----------
@@ -358,18 +363,29 @@ class SettingsRepo(private val context: Context) {
     // ---------- синхронизация ----------
     fun syncUrl(): String = prefs.getString(K_SYNC_URL, "").orEmpty()
     fun syncLogin(): String = prefs.getString(K_SYNC_LOGIN, "").orEmpty()
-    /** Пароль облака — только в зашифрованных настройках, как и ключ API. */
-    fun syncPassword(): String = (secure?.getString(K_SYNC_PASSWORD, null) ?: memorySyncPassword).orEmpty()
+    /** Пароль облака — только в KeyStore, как и ключ API. */
+    fun syncPassword(): String = (vault.getString(K_SYNC_PASSWORD) ?: memorySyncPassword).orEmpty()
     fun setSync(url: String, login: String, password: String) {
         prefs.edit { putString(K_SYNC_URL, url.trim()); putString(K_SYNC_LOGIN, login.trim()) }
-        val s = secure
-        if (s != null) s.edit { putString(K_SYNC_PASSWORD, password) } else memorySyncPassword = password
+        vault.putString(K_SYNC_PASSWORD, password)
+        memorySyncPassword = password
     }
     fun clearSync() {
         prefs.edit { remove(K_SYNC_URL); remove(K_SYNC_LOGIN); remove(K_SYNC_STATUS) }
-        secure?.edit { remove(K_SYNC_PASSWORD) }
+        vault.remove(K_SYNC_PASSWORD)
+        vault.remove(K_SYNC_PASSPHRASE)
         memorySyncPassword = null
+        memorySyncPassphrase = null
     }
+
+    /** Сквозное шифрование (E2E) облака: секретная фраза для SyncCrypto. */
+    fun syncPassphrase(): String = (vault.getString(K_SYNC_PASSPHRASE) ?: memorySyncPassphrase).orEmpty()
+    fun setSyncPassphrase(phrase: String) {
+        val clean = phrase.trim()
+        vault.putString(K_SYNC_PASSPHRASE, clean)
+        memorySyncPassphrase = clean
+    }
+
     val syncConfigured: Boolean get() = syncUrl().isNotEmpty() && syncLogin().isNotEmpty() && syncPassword().isNotEmpty()
     /** Последний итог синхронизации для показа: «время|ok|текст». */
     fun syncStatus(): String = prefs.getString(K_SYNC_STATUS, "").orEmpty()
@@ -378,7 +394,38 @@ class SettingsRepo(private val context: Context) {
     fun studyStamp(): Long = prefs.getLong(K_STUDY_STAMP, 0L)
     fun touchStudy() = prefs.edit { putLong(K_STUDY_STAMP, System.currentTimeMillis()) }
 
-    private fun openSecure(): SharedPreferences? {
+    private fun migrateToVault(vault: KeyStoreVault) {
+        runCatching {
+            val legacy = openLegacySecure()
+            if (legacy != null) {
+                val all = legacy.all
+                if (all.isNotEmpty()) {
+                    val editor = legacy.edit()
+                    for ((k, v) in all) {
+                        if (v is String && !vault.contains(k)) {
+                            vault.putString(k, v)
+                        }
+                        editor.remove(k)
+                    }
+                    editor.apply()
+                }
+            }
+        }
+        val secretKeys = listOf(
+            K_GRADES_PASSWORD, K_GRADES_TOKEN, K_LKS_PASSWORD,
+            K_LKS_COOKIES, K_SYNC_PASSWORD, K_SYNC_PASSPHRASE, K_API_KEY
+        )
+        for (k in secretKeys) {
+            val plain = prefs.getString(k, null)
+            if (plain != null) {
+                if (!vault.contains(k)) vault.putString(k, plain)
+                prefs.edit { remove(k) }
+            }
+        }
+        vault.remove(K_LKS_PASSWORD)
+    }
+
+    private fun openLegacySecure(): SharedPreferences? {
         fun create(): SharedPreferences {
             val master = MasterKey.Builder(context).setKeyScheme(MasterKey.KeyScheme.AES256_GCM).build()
             return EncryptedSharedPreferences.create(
@@ -392,11 +439,7 @@ class SettingsRepo(private val context: Context) {
         return try {
             create()
         } catch (_: Exception) {
-            // Повреждённое хранилище (например, после восстановления из бэкапа) — пересоздаём.
-            runCatching {
-                context.deleteSharedPreferences(SECURE_PREFS)
-                create()
-            }.getOrNull()
+            null
         }
     }
 
@@ -423,7 +466,6 @@ class SettingsRepo(private val context: Context) {
         private const val K_LANG_TEACHER = "language_teacher"
         private const val K_LESSON_ALERT = "lesson_alert_min"
         private const val K_QUIET = "quiet_lessons"
-        private const val K_NB_MENTOR = "notebook_mentor_on"
         private const val K_TEACHER_PHOTOS = "teacher_photos"
         private const val K_QUIET_RULE = "quiet_rule_id"
         private const val K_ROLE = "device_role"
@@ -431,6 +473,7 @@ class SettingsRepo(private val context: Context) {
         private const val K_SYNC_URL = "sync_url"
         private const val K_SYNC_LOGIN = "sync_login"
         private const val K_SYNC_PASSWORD = "sync_password"
+        private const val K_SYNC_PASSPHRASE = "sync_passphrase"
         private const val K_SYNC_STATUS = "sync_status"
         private const val K_STUDY_STAMP = "study_stamp"
         private const val K_USAGE = "usage_log"
@@ -475,5 +518,6 @@ class SettingsRepo(private val context: Context) {
         private const val K_API_KEY = "api_key"
         private const val K_KEY_STAMP = "api_key_stamp"
         private const val K_DEBUG_BASE_URL = "debug_base_url"
+        private const val K_ALLOW_INSECURE_LOCAL = "allow_insecure_local"
     }
 }

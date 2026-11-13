@@ -31,7 +31,7 @@ object ImageUtils {
         val padded = Bitmap.createBitmap(paddedWidth, image.height, Bitmap.Config.ARGB_8888)
         padded.copyPixelsFromBuffer(buffer)
         if (paddedWidth == image.width) return padded
-        val exact = Bitmap.createBitmap(padded, 0, 0, image.width, image.height)
+        val exact = Bitmap.createBitmap(padded, 0, 0, image.width, image.height).copy(Bitmap.Config.ARGB_8888, false)
         padded.recycle()
         return exact
     }
