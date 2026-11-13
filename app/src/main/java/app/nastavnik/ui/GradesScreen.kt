@@ -15,7 +15,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -442,7 +444,15 @@ private fun LksLessonCard(l: app.nastavnik.grades.LksLesson) {
 @Composable
 private fun MarkChip(value: String) {
     val c = markColor(value)
-    Box(Modifier.size(30.dp).clip(RoundedCornerShape(10.dp)).background(c.copy(alpha = 0.14f)), contentAlignment = Alignment.Center) {
+    Box(
+        Modifier
+            .height(30.dp)
+            .defaultMinSize(minWidth = 30.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(c.copy(alpha = 0.14f))
+            .padding(horizontal = 6.dp),
+        contentAlignment = Alignment.Center,
+    ) {
         Text(value, style = MaterialTheme.typography.labelLarge, color = c, maxLines = 1)
     }
 }

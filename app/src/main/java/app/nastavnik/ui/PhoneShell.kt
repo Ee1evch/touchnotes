@@ -136,7 +136,7 @@ fun TabRowBar(items: List<Triple<String, Int, Boolean>>, onClick: (Int) -> Unit,
             Column(
                 Modifier.weight(1f).fillMaxHeight()
                     .pressable(source)
-                    .clickable(source, indication = ripple(bounded = false, radius = 32.dp)) { onClick(i) }
+                    .clickable(source, indication = null) { onClick(i) }
                     .semantics { contentDescription = title; selected = sel },
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,

@@ -112,4 +112,65 @@ class LksClientTest {
         assertTrue("https://x".toHttpUrl().host == "x")
         s.shutdown()
     }
+
+    @Test fun emptyJournalReturnsNullAverage() {
+        val j = LksJournal(emptyList())
+        org.junit.Assert.assertNull(j.averageMark)
+    }
+
+    @Test fun subjectWithoutMarksIsIgnoredInFlatAverage() {
+        // Предмет только с серверным avgMark без записей не учитывается в общем среднем балле
+        val l1 = LksLesson(
+            title = "Философия",
+            avgMark = "4.0",
+            entries = emptyList(),
+        )
+        val l2 = LksLesson(
+            title = "Математика",
+            avgMark = "5.0",
+            entries = listOf(
+                LksEntry(date = "2026-10-01", marks = listOf(LksMark("5"))),
+                LksEntry(date = "2026-10-02", marks = listOf(LksMark("5"))),
+            ),
+        )
+        val j = LksJournal(listOf(l1, l2))
+        // Плоское среднее берется только из entries: (5 + 5) / 2 = 5.0 (не (4.0 + 5.0)/2 = 4.5)
+        assertEquals(5.0, j.averageMark!!, 0.001)
+    }
+
+    @Test fun dashesAndDuplicateMarksHandledCorrectly() {
+        val l = LksLesson(
+            title = "Информатика",
+            entries = listOf(
+                LksEntry(date = "2026-10-01", marks = listOf(LksMark("5"), LksMark("-"))),
+                LksEntry(date = "2026-10-02", marks = listOf(LksMark("5"))), // повторная 5
+                LksEntry(date = "2026-10-03", marks = listOf(LksMark("4"), LksMark("зачтено"))),
+            ),
+        )
+        val j = LksJournal(listOf(l))
+        // Числовые оценки: 5, 5, 4. Каждая учитывается ровно один раз. Нечисловые «-» и «зачтено» игнорируются.
+        assertEquals((5.0 + 5.0 + 4.0) / 3.0, j.averageMark!!, 0.001)
+    }
+
+    @Test fun flatAverageDiffersFromAverageOfAverages() {
+        // Предмет 1: 10 оценок «5». Средний балл предмета = 5.0
+        val entries1 = (1..10).map { day ->
+            LksEntry(date = "2026-10-%02d".format(day), marks = listOf(LksMark("5")))
+        }
+        val l1 = LksLesson(title = "Матанализ", avgMark = "5.0", entries = entries1)
+
+        // Предмет 2: 1 оценка «3». Средний балл предмета = 3.0
+        val l2 = LksLesson(
+            title = "История",
+            avgMark = "3.0",
+            entries = listOf(LksEntry(date = "2026-10-15", marks = listOf(LksMark("3")))),
+        )
+
+        val j = LksJournal(listOf(l1, l2))
+        val flatAverage = (10 * 5.0 + 3.0) / 11.0 // 53 / 11 ≈ 4.818
+        val oldAverageOfAverages = (5.0 + 3.0) / 2.0 // 4.0
+
+        assertEquals(flatAverage, j.averageMark!!, 0.0001)
+        assertTrue(kotlin.math.abs(j.averageMark!! - oldAverageOfAverages) > 0.8)
+    }
 }

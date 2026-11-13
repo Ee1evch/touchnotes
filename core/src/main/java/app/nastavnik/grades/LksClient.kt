@@ -67,12 +67,10 @@ data class LksLesson(
 @Serializable
 data class LksJournal(val lessons: List<LksLesson>, val period: String = "", val loadedAt: Long = 0) {
     /**
-     * Реальный средний балл по всему журналу: среднее по средним баллам всех предметов с оценками,
-     * либо среднее по всем полученным оценкам.
+     * Плоское среднее арифметическое всех числовых оценок из entries всех предметов,
+     * каждая оценка учитывается ровно один раз. Предметы без оценок в entries не учитываются.
      */
     val averageMark: Double? get() {
-        val subjectAvgs = lessons.mapNotNull { it.calculatedAvg }
-        if (subjectAvgs.isNotEmpty()) return subjectAvgs.average()
         val allMarks = lessons.flatMap { it.entries }.flatMap { it.marks }.mapNotNull { LksExtract.numeric(it.value) }
         return allMarks.takeIf { it.isNotEmpty() }?.average()
     }
