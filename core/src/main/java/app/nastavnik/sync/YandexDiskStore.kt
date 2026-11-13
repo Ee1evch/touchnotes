@@ -33,7 +33,13 @@ class YandexDiskStore(
     private val json = Json { ignoreUnknownKeys = true }
     private val known = HashSet<String>()
 
-    private fun disk(path: String) = "disk:/" + path.trim('/')
+    private fun disk(path: String): String {
+        val clean = path.trim('/')
+        return when {
+            clean.startsWith("app:/") || clean.startsWith("disk:/") -> clean
+            else -> "app:/$clean"
+        }
+    }
 
     private fun call(method: String, endpoint: String, path: String, extra: Map<String, String> = emptyMap(), body: RequestBody? = null): okhttp3.Response {
         val url = (api.trimEnd('/') + endpoint).toHttpUrl().newBuilder().addQueryParameter("path", disk(path))

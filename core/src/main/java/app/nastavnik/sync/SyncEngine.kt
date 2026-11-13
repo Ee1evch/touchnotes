@@ -100,6 +100,7 @@ class SyncEngine(
     private val deviceType: String,
     /** Папка для скачанных файлов, пока запись не применена. */
     private val tempDir: File,
+    private val passphrase: () -> String = { "" },
     private val now: () -> Long = System::currentTimeMillis,
 ) {
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = false }
@@ -142,7 +143,7 @@ class SyncEngine(
         store.ensureDir("$ROOT/blobs")
         val snapshots = store.list("$ROOT/devices")
             .filter { it.endsWith(".json.gz") && it.removeSuffix(".json.gz") != device }
-            .mapNotNull { name -> runCatching { decode(store.read("$ROOT/devices/$name")!!) }.getOrNull() }
+            .mapNotNull { name -> runCatching { decode(store.read("$ROOT/devices/$name")!!, passphrase()) }.getOrNull() }
 
         // 3. Слияние: по каждой записи — самая свежая версия.
         val merged = HashMap<String, SyncRecord>(local)
@@ -167,7 +168,15 @@ class SyncEngine(
                 val have = localFiles[sha]
                 if (have != null && have.exists()) { files[name] = have; continue }
                 val f = File(tempDir, sha)
-                if (!f.exists() && !store.download("$ROOT/blobs/$sha", f)) { ok = false; break }
+                if (!f.exists()) {
+                    val downloaded = store.read("$ROOT/blobs/$sha")
+                    if (downloaded == null) { ok = false; break }
+                    val pass = passphrase()
+                    val plain = if (SyncCrypto.isEncrypted(downloaded)) {
+                        runCatching { SyncCrypto.decrypt(downloaded, pass) }.getOrNull() ?: run { ok = false; break }
+                    } else downloaded
+                    f.writeBytes(plain)
+                }
                 files[name] = f
             }
             if (!ok) {
@@ -186,7 +195,10 @@ class SyncEngine(
         for (r in merged.values) for (sha in r.blobs.values) {
             if (sha in remote) continue
             val f = localFiles[sha] ?: continue
-            store.upload("$ROOT/blobs/$sha", f)
+            val pass = passphrase()
+            val raw = f.readBytes()
+            val payload = if (pass.isNotBlank()) SyncCrypto.encrypt(raw, pass) else raw
+            store.write("$ROOT/blobs/$sha", payload)
             remote += sha
             sent++
         }
@@ -229,7 +241,9 @@ class SyncEngine(
     private fun encode(s: DeviceSnapshot): ByteArray {
         val out = ByteArrayOutputStream()
         GZIPOutputStream(out).use { it.write(json.encodeToString(DeviceSnapshot.serializer(), s).toByteArray()) }
-        return out.toByteArray()
+        val raw = out.toByteArray()
+        val pass = passphrase()
+        return if (pass.isNotBlank()) SyncCrypto.encrypt(raw, pass) else raw
     }
 
     companion object {
@@ -238,8 +252,10 @@ class SyncEngine(
         private val reader = Json { ignoreUnknownKeys = true }
 
         /** Снимок устройства из `devices/<id>.json.gz`. */
-        fun decode(b: ByteArray): DeviceSnapshot =
-            reader.decodeFromString(DeviceSnapshot.serializer(), GZIPInputStream(ByteArrayInputStream(b)).readBytes().decodeToString())
+        fun decode(b: ByteArray, passphrase: String = ""): DeviceSnapshot {
+            val raw = if (SyncCrypto.isEncrypted(b)) SyncCrypto.decrypt(b, passphrase) else b
+            return reader.decodeFromString(DeviceSnapshot.serializer(), GZIPInputStream(ByteArrayInputStream(raw)).readBytes().decodeToString())
+        }
 
         /** Какая версия записи свежее (при равенстве — удаление, потом по устройству — одинаково везде). */
         fun newer(a: SyncRecord, b: SyncRecord): Boolean = when {

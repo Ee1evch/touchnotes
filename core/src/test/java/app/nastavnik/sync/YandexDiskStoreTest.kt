@@ -21,7 +21,8 @@ class YandexDiskStoreTest {
         val auth = ArrayList<String?>()
         override fun dispatch(request: RecordedRequest): MockResponse {
             val url = request.requestUrl!!
-            val path = url.queryParameter("path")?.removePrefix("disk:/")
+            val rawPath = url.queryParameter("path").orEmpty()
+            val path = rawPath.removePrefix("app:/").removePrefix("disk:/")
             return when {
                 url.encodedPath == "/v1/disk/resources" && request.method == "PUT" -> {
                     auth += request.getHeader("Authorization")
@@ -69,6 +70,19 @@ class YandexDiskStoreTest {
         assertEquals("интеграл", b.notes["x"])
         assertEquals("страница", b.books["k"]!!.readText())
         assertTrue(disk.files.keys.any { it.startsWith("Nastavnik/devices/") })
+        server.shutdown()
+    }
+
+    @Test fun usesAppFolderScopeByDefault() = runBlocking {
+        val server = MockWebServer()
+        val disk = FakeDisk()
+        server.dispatcher = disk
+        server.start()
+        disk.base = server.url("/").toString()
+        val store = YandexDiskStore("test-token", server.url("/").toString(), OkHttpClient())
+        store.ensureDir("Nastavnik/devices")
+        val req = server.takeRequest()
+        assertTrue(req.requestUrl!!.queryParameter("path")!!.startsWith("app:/"))
         server.shutdown()
     }
 }

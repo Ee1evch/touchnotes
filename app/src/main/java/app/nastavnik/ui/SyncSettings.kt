@@ -62,6 +62,7 @@ fun SyncSection() {
     var password by remember { mutableStateOf("") }
     var checking by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    var passphrase by remember { mutableStateOf(app.settings.syncPassphrase()) }
 
     var expanded by remember { mutableStateOf(false) }
 
@@ -71,7 +72,7 @@ fun SyncSection() {
                 Column(Modifier.weight(1f)) {
                     Text(
                         when (app.settings.syncUrl()) {
-                            YandexDiskStore.MARKER -> "Яндекс Диск"
+                            YandexDiskStore.MARKER -> "Яндекс Диск (папка приложения)"
                             WebDavStore.YANDEX -> "Яндекс Диск по WebDAV · ${app.settings.syncLogin()}"
                             else -> app.settings.syncLogin()
                         },
@@ -94,6 +95,17 @@ fun SyncSection() {
                     )
                 }
             }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            FieldLabel("Сквозное шифрование (E2E)", "Данные и тетради шифруются AES-256-GCM перед загрузкой в облако.")
+            AppTextField(
+                passphrase, {
+                    passphrase = it
+                    app.settings.setSyncPassphrase(it)
+                },
+                label = "Парольная фраза (необязательно)",
+                visualTransformation = PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            )
             LinkText("Отключить облако") { app.sync.disconnect(); configured = false; expanded = false }
             return@SectionCard
         }
@@ -138,6 +150,11 @@ fun SyncSection() {
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
             )
         }
+        AppTextField(
+            passphrase, { passphrase = it }, label = "Парольная фраза E2E (необязательно)",
+            visualTransformation = PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+        )
         error?.let { StatusLine(it, Tone.ERROR) }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             InkButton("Подключить", enabled = !checking && password.isNotBlank() && (yandex || (login.isNotBlank() && url.startsWith("http")))) {
@@ -149,6 +166,7 @@ fun SyncSection() {
                     checking = false
                     ok.onSuccess {
                         app.settings.setSync(address, if (yandex) "Яндекс Диск" else login, password)
+                        app.settings.setSyncPassphrase(passphrase)
                         password = ""
                         configured = true
                         app.sync.now()
